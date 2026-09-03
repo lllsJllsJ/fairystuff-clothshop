@@ -492,6 +492,7 @@ npm run db:seed          # seed the 13 Thai product types
 npm run catalog:prepare  # build/refresh the review manifest (no DB writes)
 npm run catalog:verify   # validate all entries and cached image hashes
 npm run catalog:import   # dry run; apply requires explicit replacement guards
+npm run catalog:repair-images # restore catalogue objects without changing DB rows
 npm run create-owner     # create the (only) owner account
 npm test                 # catalogue parser/enrichment/image policy tests
 ```

@@ -1395,6 +1395,11 @@ Failure: any read, decode, resize, or upload failure deletes every object
 already staged by this run and leaves all database rows and old images
 untouched.
 
+For a local database whose catalogue rows exist but whose MinIO volume is
+empty, `npm run catalog:repair-images` re-renders the reviewed source images
+to the existing database keys. It writes objects only and never changes
+products, variants, images, or orders.
+
 ## Catalogue Apply — Transactional Replacement
 
 Runs only after storage staging succeeds completely.
@@ -1603,3 +1608,6 @@ survive in `product_variants`/`product_images` — a manual check worth
 re-running after any change to `createProduct`/`updateProduct`/
 `importProducts`/`createOrder`/`updateOrder`/`renameProductType`/
 `reorderProductTypes`.
+On laptop/desktop breakpoints, the 4:5 gallery width is clamped from the
+viewport height (360–560px wide). This keeps the main photo and thumbnail rail
+inside a typical laptop viewport; mobile retains the full-width gallery.

@@ -40,7 +40,7 @@ export function ProductGallery({
 
   if (displayImages.length === 0) {
     return (
-      <div className="flex aspect-[4/5] w-full flex-col items-center justify-center gap-2 bg-muted text-muted-foreground">
+      <div className="flex aspect-[4/5] w-full flex-col items-center justify-center gap-2 bg-muted text-muted-foreground lg:w-[clamp(360px,calc(80vh-9.6rem),560px)] lg:justify-self-center">
         <ImageOff className="size-10" aria-hidden />
         <p className="text-body">{t("shop.noImage")}</p>
       </div>
@@ -83,7 +83,7 @@ function GalleryViewer({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="w-full space-y-3 lg:w-[clamp(360px,calc(80vh-9.6rem),560px)] lg:justify-self-center">
       <div
         ref={scrollerRef}
         onScroll={handleScroll}

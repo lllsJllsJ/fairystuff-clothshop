@@ -15,6 +15,7 @@
     "catalog:prepare": "tsx --env-file-if-exists=.env.local scripts/catalog-prepare.ts",
     "catalog:verify": "tsx --env-file-if-exists=.env.local scripts/catalog-verify.ts",
     "catalog:import": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/catalog-import.ts",
+    "catalog:repair-images": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/catalog-repair-images.ts",
     "create-owner": "tsx --env-file-if-exists=.env.local scripts/create-owner.ts",
     "smoke": "./scripts/smoke.sh",
     "test": "tsx --test src/lib/catalog/*.test.ts src/lib/*.test.ts"
