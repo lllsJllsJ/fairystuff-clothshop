@@ -1,0 +1,243 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-noto-tc), var(--font-noto-thai), system-ui,
+    -apple-system, sans-serif;
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-noto-tc), var(--font-noto-thai), system-ui,
+    -apple-system, sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-link: var(--link);
+  --color-link-hover: var(--link-hover);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  /*
+   * Radius scale — DESIGN.md §5. 0px is the DEFAULT for buttons, inputs,
+   * cards, and navigation (the base-nova primitives all derive their corners
+   * from --radius-sm/md/lg/xl/2xl/3xl/4xl, so each is pinned to 0 here rather
+   * than carstockpro's multiplier formula, which would collapse --radius-sm
+   * to 0 too and make it useless for badges). The named tokens below
+   * (--radius-badge-sm / --radius-promo / --radius-pill / --radius-full) are
+   * the deliberate exceptions and are opted into per-component, never the
+   * default.
+   */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-4xl: 0px;
+
+  /*
+   * Type scale — DESIGN.md §3. Declared as Tailwind v4 --text-* theme keys
+   * so `text-h1` … `text-link` are real utilities (paired line-height via
+   * the --text-*--line-height convention). Weight is applied separately
+   * with the standard `font-normal` / `font-bold` utilities.
+   */
+  --text-h1: 32px;
+  --text-h1--line-height: 45.7px;
+  --text-h2: 28px;
+  --text-h2--line-height: 40px;
+  --text-h3: 24px;
+  --text-h3--line-height: 34.3px;
+  --text-h4: 20px;
+  --text-h4--line-height: 28.6px;
+  --text-subtitle: 16px;
+  --text-subtitle--line-height: 22.9px;
+  --text-body: 14px;
+  --text-body--line-height: 20px;
+  --text-small: 12px;
+  --text-small--line-height: 17.1px;
+  --text-link: 16px;
+  --text-link--line-height: 22.9px;
+}
+
+/*
+ * clothshop design tokens — Sanrio Gift Gate system (see DESIGN.md).
+ * Supersedes plan §8 ("Editorial Atelier") in full: this is the
+ * authoritative palette, typography, and radius for every surface.
+ *
+ * Light theme only — no .dark block. The @theme inline -> var(--x)
+ * indirection above is kept so a dark theme could be layered on later
+ * without touching component classes.
+ */
+:root {
+  /* Radius base. 0px = default sharp aesthetic (buttons/inputs/cards/nav).
+     Non-default exceptions are separate named tokens, applied explicitly. */
+  --radius: 0px;
+  --radius-badge-sm: 4px; /* small badges / alerts */
+  --radius-promo: 12px; /* promotional cards */
+  --radius-pill: 16px; /* category pill badges */
+  --radius-full: 50%; /* circular elements (avatars) */
+
+  /* Surfaces */
+  --background: #ffffff;
+  --foreground: #333333;
+  --card: #ffffff;
+  --card-foreground: #333333;
+  --popover: #ffffff;
+  --popover-foreground: #333333;
+  --surface-subtle: #fafafa;
+
+  /* Brand primary — fuchsia */
+  --primary: #ef4c7f;
+  --primary-hover: #ec2f7a;
+  --primary-active: #d93f6b;
+  --primary-foreground: #ffffff;
+
+  /* Secondary / link — sky blue */
+  --secondary: #337ab7;
+  --secondary-foreground: #ffffff;
+  --link: #337ab7;
+  --link-hover: #1a5c8c;
+
+  /* Muted + accent (dropdown hover, subtle fills) */
+  --muted: #fafafa;
+  --muted-foreground: #a1a1a1;
+  --accent: #fafafa;
+  --accent-foreground: #333333;
+
+  /* Feedback */
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --warning: #fdc500;
+  --warning-foreground: #333333;
+
+  /* Borders + form controls */
+  --border: #cccccc;
+  --border-lighter: #dddddd;
+  --input: #cccccc;
+  --ring: #337ab7;
+
+  /* Sanrio-system accent colors, available for category/promo surfaces */
+  --accent-sky: #3493fb;
+  --soft-mint: #aadddd;
+  --pastel-green: #aabbaa;
+  --warm-brown: #765d57;
+
+  /* Charts — drawn from the accent palette */
+  --chart-1: #ef4c7f;
+  --chart-2: #337ab7;
+  --chart-3: #3493fb;
+  --chart-4: #aadddd;
+  --chart-5: #765d57;
+
+  /* Admin sidebar / nav — fuchsia bar per DESIGN §4 Main Navigation Bar */
+  --sidebar: #ef4c7f;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #ffffff;
+  --sidebar-primary-foreground: #ef4c7f;
+  --sidebar-accent: rgba(255, 255, 255, 0.1);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #ec2f7a;
+  --sidebar-ring: #ffffff;
+
+  /* Spacing scale — DESIGN.md §5, base unit 4px */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 68px;
+  --space-9: 84px;
+  --space-10: 120px;
+  --space-11: 140px;
+
+  /* Shadow / elevation levels — DESIGN.md §6 */
+  --shadow-base: none;
+  --shadow-raised-xs: rgba(0, 0, 0, 0.06) 0px 2px 6px 0px;
+  --shadow-raised-sm: rgba(0, 0, 0, 0.1) 3px 4px 6px -1px,
+    rgba(0, 0, 0, 0.06) 0px 2px 4px -1px, rgba(0, 0, 0, 0.06) -1px -2px 4px -1px;
+  --shadow-raised-md: rgba(0, 0, 0, 0.03) 8px 8px 8px 0px,
+    rgba(0, 0, 0, 0.03) -2px 8px 8px 0px;
+  --shadow-raised-lg: rgba(0, 0, 0, 0.08) 0px 10px 20px 0px;
+
+  /* Z-index ladder — DESIGN.md §6 */
+  --z-base: 1;
+  --z-raised: 2;
+  --z-sticky: 3;
+  --z-fixed: 5;
+  --z-dropdown: 10;
+  --z-modal-backdrop: 15;
+  --z-modal: 20;
+  --z-tooltip: 25;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+  h1 {
+    @apply text-h1 font-bold;
+  }
+  h2 {
+    @apply text-h2 font-bold;
+  }
+  h3 {
+    @apply text-h3 font-bold;
+  }
+  h4 {
+    @apply text-h4 font-bold;
+  }
+}
+
+/* Print styles — used for PDF export of reports (Thai renders natively) */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #ffffff;
+  }
+  .print-container {
+    padding: 0;
+    margin: 0;
+  }
+}

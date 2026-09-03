@@ -1,0 +1,79 @@
+# Local development dependencies: Postgres (the database) and MinIO (an
+# S3-compatible stand-in for Cloudflare R2, so image uploads work locally
+# with no R2 account).
+#
+#   docker compose up -d
+#
+# Then apply the schema (BOTH files — see DEPLOYMENT.md; the extras file is
+# not in Drizzle's migration journal and must be applied by hand):
+#
+#   npm run db:migrate
+#   psql "$DATABASE_URL" -f drizzle/0000_init_extras.sql
+#   npm run db:seed
+#   npm run create-owner
+#
+# The matching DATABASE_URL and R2_*/MinIO values are in .env.example.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: clothshop-dev-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: clothshop
+      POSTGRES_PASSWORD: devpassword
+      POSTGRES_DB: clothshop
+    ports:
+      - "5432:5432"
+    volumes:
+      - clothshop-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clothshop -d clothshop"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Local object storage standing in for Cloudflare R2. The app talks to it
+  # through the same S3 client and the same presigned-PUT flow it uses
+  # against R2 in production — only `R2_ENDPOINT` differs (see src/lib/r2.ts).
+  #
+  # MINIO_API_CORS_ALLOW_ORIGIN is load-bearing: product images are PUT
+  # straight from the browser to this server via a presigned URL, so the
+  # dev origin must be allowed or every upload fails on preflight. It
+  # mirrors the CORS policy the real R2 bucket needs (see README
+  # "Infrastructure").
+  minio:
+    image: minio/minio:latest
+    container_name: clothshop-dev-storage
+    restart: unless-stopped
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_API_CORS_ALLOW_ORIGIN: "http://localhost:3000"
+    ports:
+      - "9000:9000"
+    volumes:
+      - clothshop-minio-data:/data
+
+  # One-shot: creates the bucket and makes it publicly readable, matching
+  # the public custom domain a real R2 bucket has attached. Exits as soon as
+  # it's done — `docker compose ps` showing it stopped is the success state,
+  # and re-running `docker compose up -d` is safe (both steps are
+  # idempotent).
+  minio-init:
+    image: minio/mc:latest
+    container_name: clothshop-dev-storage-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 minioadmin minioadmin >/dev/null 2>&1; do
+        echo 'waiting for minio...'; sleep 1;
+      done;
+      mc mb --ignore-existing local/clothshop;
+      mc anonymous set download local/clothshop;
+      "
+
+volumes:
+  clothshop-pgdata:
+  clothshop-minio-data:
