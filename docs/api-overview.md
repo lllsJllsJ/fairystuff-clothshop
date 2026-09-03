@@ -195,7 +195,7 @@ date-range filters resolved in SQL (not filtered in memory).
 
 ## `POST /api/uploads/presign`
 
-Owner-gated. Returns presigned R2 `PUT` URLs for storage keys the browser
+Owner-gated. Returns presigned Railway Bucket `PUT` URLs for storage keys the browser
 already computed client-side (`lib/image-resize.ts#buildProductImageKey`).
 This endpoint never invents a key — it only signs the ones it's handed, after
 validating them.
@@ -237,7 +237,7 @@ Each `url` is valid for 300 seconds and accepts exactly one `PUT` with
 
 In local development the signed URLs point at the MinIO container from
 `docker-compose.yml` instead
-(`http://localhost:9000/clothshop/products/...`) — set by `R2_ENDPOINT`, see
+(`http://localhost:9000/clothshop/products/...`) — set by `STORAGE_ENDPOINT`, see
 the README's Environment Variables. The request/response contract and every
 validation layer are identical either way.
 
@@ -249,7 +249,25 @@ validation layer are identical either way.
 | `400` | Request body fails the schema, or any key doesn't match the well-formed-key pattern. Body: `{ "error": "invalid" }`. |
 | `401` | No session. Body: `{ "error": "unauthorized" }`. As above, `src/proxy.ts` already blocks this in normal operation; the handler's own check is the real backstop. |
 | `403` | Session exists but not `owner`. Body: `{ "error": "forbidden" }`. |
-| `500` | R2/signing error. Body: `{ "error": "failed" }`. |
+| `500` | Bucket/signing error. Body: `{ "error": "failed" }`. |
+
+---
+
+## `GET /api/images/[...key]`
+
+Public, read-only proxy for product images in the private Railway Bucket. It
+accepts only keys shaped as
+`products/<uuid>/<generated-name>-(480|800|1600).webp`; all other paths return
+`404`. Successful responses stream `image/webp` with `ETag`, `nosniff`, and
+`Cache-Control: public, max-age=31536000, immutable`. A matching
+`If-None-Match` returns `304`.
+
+| Code | When |
+|---|---|
+| `200` | The object exists and is streamed successfully. |
+| `304` | The request ETag matches the stored object. |
+| `404` | The key is malformed or the object does not exist. |
+| `502` | Authenticated storage read failed. No storage credentials are exposed. |
 
 ---
 

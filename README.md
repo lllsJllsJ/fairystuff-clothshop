@@ -52,9 +52,9 @@ separate API service and no serverless cold start.
                 └─────────────────┬──────────────────┘
                                   ▼
                  ┌───────────────────────────────────┐   ┌──────────────────────┐
-                 │ Railway Postgres                  │   │ Cloudflare R2        │
-                 │ pg.Pool + Drizzle - max 10        │   │ product images       │
-                 │ no public API - no RLS            │   │ img.<your-domain>    │
+                 │ Railway Postgres                  │   │ Railway Bucket       │
+                 │ pg.Pool + Drizzle - max 10        │   │ private images       │
+                 │ no public API - no RLS            │   │ via /api/images/*    │
                  └───────────────────────────────────┘   └──────────────────────┘
 ```
 
@@ -89,10 +89,10 @@ separate API service and no serverless cold start.
    never leaves stale ISR content live in the language the admin isn't
    looking at.
 7. **Product images** are resized to three WebP widths in the browser, then
-   uploaded straight to Cloudflare R2 via owner-gated presigned PUT URLs —
-   the original file never touches this app's server.
+   uploaded straight to a private Railway Bucket via owner-gated presigned PUT
+   URLs. Public reads use the cacheable same-origin `/api/images/*` proxy.
 8. **The FairyStuff catalogue** is prepared out-of-band from the reviewed
-   workbook into a manifest. Supplier photos are copied into R2/MinIO (never
+   workbook into a manifest. Supplier photos are copied into Railway Bucket/MinIO (never
    hotlinked), and replacement stays a dry run unless all destructive CLI
    guards are supplied.
 
@@ -115,7 +115,7 @@ separate API service and no serverless cold start.
 - Credentials-only auth (single `owner` role; `staff` reserved with zero v1
   capability) — no public signup route; the only owner account is created via
   `npm run create-owner`.
-- Browser-side image pipeline: canvas resize → WebP → presigned R2 PUT, so no
+- Browser-side image pipeline: canvas resize → WebP → presigned bucket PUT, so no
   file ever passes through the app server and no host's image-optimization
   service sits in the critical path.
 - DB-enforced money math: margin, order totals, and line totals are Postgres
@@ -146,9 +146,8 @@ separate API service and no serverless cold start.
   `npm run smoke` uses
 - A [Railway](https://railway.app) project with a Postgres service attached,
   for anything beyond local development
-- A [Cloudflare R2](https://developers.cloudflare.com/r2/) bucket with a
-  public custom domain — **for deployment only.** Local development needs no
-  Cloudflare account: `docker compose up -d` starts MinIO as an
+- A Railway Storage Bucket for production product images. Local development
+  uses MinIO: `docker compose up -d` starts it as an
   S3-compatible stand-in (step 2 below).
 - `psql` on your machine (for the manual migration step below)
 
@@ -169,22 +168,17 @@ cp .env.example .env.local   # fill in real values, see Environment Variables be
    success state). Use the connection string already shown in `.env.example`
    for `DATABASE_URL`:
    `postgres://clothshop:devpassword@localhost:5432/clothshop`.
-2. **Point storage at MinIO** — no Cloudflare account needed for local dev.
-   Copy the five values from `.env.example`'s object-storage block:
+2. **Point storage at MinIO.** Copy these values from `.env.example`:
    ```
-   R2_ENDPOINT=http://localhost:9000
-   R2_ACCESS_KEY_ID=minioadmin
-   R2_SECRET_ACCESS_KEY=minioadmin
-   R2_BUCKET=clothshop
-   NEXT_PUBLIC_R2_PUBLIC_URL=http://localhost:9000/clothshop
+   STORAGE_ENDPOINT=http://localhost:9000
+   STORAGE_ACCESS_KEY_ID=minioadmin
+   STORAGE_SECRET_ACCESS_KEY=minioadmin
+   STORAGE_BUCKET=clothshop
+   STORAGE_REGION=auto
+   STORAGE_FORCE_PATH_STYLE=true
    ```
-   `R2_ENDPOINT` is the only switch: setting it points `src/lib/r2.ts`'s S3
-   client at MinIO (and at path-style addressing, which MinIO requires and
-   R2 doesn't use). Everything downstream — the browser-side resize, key
-   validation, presigned `PUT`, public `GET`, and `next/image`'s custom
-   loader — is the same code path that runs against R2 in production, so
-   the upload flow is exercised for real locally rather than stubbed.
-   Leave `R2_ENDPOINT` empty in production and the R2 path is unchanged.
+   The endpoint points the S3 client at MinIO; path-style addressing is enabled
+   explicitly. Reads still go through `/api/images/*`, matching production.
 3. **Run the Drizzle-generated migration:**
    ```bash
    npm run db:migrate
@@ -212,12 +206,11 @@ cp .env.example .env.local   # fill in real values, see Environment Variables be
    ```bash
    npm run create-owner
    ```
-7. **Set up R2 — deployment only, skip this for local development.** Create a
-   bucket, attach a public custom domain to it (e.g. `img.yourdomain.com`),
-   create an access key, then leave `R2_ENDPOINT` **empty** and fill in
-   `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`,
-   and `NEXT_PUBLIC_R2_PUBLIC_URL`. See [Infrastructure](#infrastructure) for
-   the CORS rule the bucket needs for browser-side PUT uploads.
+7. **Set up Railway Bucket — deployment only.** Add a Bucket in the same
+   Railway project, then reference its `ENDPOINT`, `ACCESS_KEY_ID`,
+   `SECRET_ACCESS_KEY`, `BUCKET`, and `REGION` values using the `STORAGE_*`
+   names shown in `.env.example`. Set `STORAGE_FORCE_PATH_STYLE=false` and
+   configure bucket CORS for `PUT` from the storefront origin.
 8. **Prepare and review the FairyStuff catalogue** (no database/storage writes):
    ```bash
    npm run catalog:prepare
@@ -247,9 +240,9 @@ two other things:
 - **The local dev database and object storage** — `docker-compose.yml` at
   the repo root starts a throwaway Postgres 16 container for `DATABASE_URL`
   plus a MinIO container (with a one-shot `minio-init` bucket bootstrapper)
-  standing in for R2, so image uploads work with no Cloudflare account (see
+  standing in for Railway Storage, so image uploads work locally (see
   steps 1–2 above). Neither container is used in production — Railway
-  provides Postgres, and R2 provides storage.
+  provides Postgres and private object storage.
 - **Testing** — `npm run smoke` spins up its own separate throwaway
   Postgres container (different name and port from the dev database), runs
   the real `src/db/index.ts` query layer plus the schema assertions against
@@ -270,22 +263,22 @@ never real secrets).
 | `DATABASE_URL` | Postgres connection string — Railway injects this automatically when a Postgres service is attached; locally, `docker compose up -d` then use the value already shown in `.env.example` |
 | `AUTH_SECRET` | Signs Auth.js session JWTs — generate with `npx auth secret` |
 | `AUTH_URL` | Canonical deployment URL Auth.js uses to build callback/redirect URLs (`http://localhost:3000` in dev) |
-| `R2_ACCOUNT_ID` | Cloudflare account ID for the R2 S3-compatible endpoint |
-| `R2_ACCESS_KEY_ID` | R2 API token access key |
-| `R2_SECRET_ACCESS_KEY` | R2 API token secret |
-| `R2_BUCKET` | Bucket name storing product images (`clothshop` against local MinIO) |
-| `NEXT_PUBLIC_R2_PUBLIC_URL` | Public base URL the browser fetches images from — R2's public custom domain (e.g. `https://img.example.com`), or `http://localhost:9000/clothshop` against local MinIO. Exposed to the browser by design, not a secret |
+| `STORAGE_ENDPOINT` | S3 endpoint: reference the Railway Bucket's `ENDPOINT`; use `http://localhost:9000` for MinIO |
+| `STORAGE_ACCESS_KEY_ID` | Reference the Railway Bucket's `ACCESS_KEY_ID` |
+| `STORAGE_SECRET_ACCESS_KEY` | Reference the Railway Bucket's `SECRET_ACCESS_KEY` |
+| `STORAGE_BUCKET` | Reference the Railway Bucket's globally unique `BUCKET` value (not its display name) |
+| `STORAGE_REGION` | Reference the Railway Bucket's `REGION` (`auto` locally) |
+| `STORAGE_FORCE_PATH_STYLE` | `false` for current Railway Buckets; `true` for local MinIO or a legacy Railway bucket whose Credentials tab says path-style |
 | `NEXT_PUBLIC_SITE_URL` | Canonical public site URL, used for sitemap/robots/metadata/JSON-LD — exposed to the browser |
 
-`R2_ACCOUNT_ID` is required only when `R2_ENDPOINT` is empty (i.e. in
-production, where it builds R2's endpoint hostname); local MinIO development
-leaves it blank.
+The app stores same-origin `/api/images/*` URLs in Postgres. Railway's private
+credentials are never exposed to the browser and no public bucket URL is needed.
 
 ### Optional
 
 | Variable | Purpose |
 |---|---|
-| `R2_ENDPOINT` | Overrides the S3 endpoint with an S3-compatible server and switches the client to path-style addressing — `http://localhost:9000` for the MinIO container in `docker-compose.yml`. **Leave empty in production**; when unset, `src/lib/r2.ts` derives the real R2 endpoint from `R2_ACCOUNT_ID` as before |
+| Legacy `R2_*` variables | Accepted as fallbacks for an existing Cloudflare R2 deployment; new Railway deployments should use `STORAGE_*` |
 
 Every other variable is required for the app to function correctly (a
 missing storage or `DATABASE_URL` value fails fast via
@@ -303,7 +296,8 @@ src/
 │   │   ├── products/route.ts              # public product list JSON
 │   │   ├── admin/products/route.ts        # owner-gated product list JSON
 │   │   ├── admin/orders/route.ts          # owner-gated order list JSON
-│   │   ├── uploads/presign/route.ts       # owner-gated R2 presign
+│   │   ├── uploads/presign/route.ts       # owner-gated bucket PUT presign
+│   │   ├── images/[...key]/route.ts       # cached public proxy to private bucket
 │   │   └── auth/[...nextauth]/route.ts    # Auth.js handlers
 │   ├── [locale]/
 │   │   ├── (shop)/                        # public storefront (ISR)
@@ -335,7 +329,7 @@ src/
 │       └── product-types.ts
 ├── lib/
 │   ├── auth-helpers.ts / roles.ts         # requireOwner(), isOwner()/isStaff()
-│   ├── r2.ts                              # presign + server-side put + delete
+│   ├── r2.ts                              # S3 read/presign/put/delete adapter
 │   ├── product-code.ts                    # type -> prefix -> next code (server-owned)
 │   ├── catalog/                           # FairyStuff parser, manifest, images, replacement
 │   ├── shop-data.ts                       # owner-only transactional clear
@@ -369,12 +363,11 @@ scripts/
   **Railway Postgres is always-on** — there is no autosuspend/pause state to
   defend against — see `docs/health-check.md` and `docs/cron-flow.md` for
   why that means no keepalive job is needed.
-- **Cloudflare R2** (S3-compatible). Product images only. The bucket needs a
-  **public custom domain** attached (so `next/image`'s custom loader —
-  `src/lib/image-loader.ts` — can serve images directly, with no host image
-  service in the critical path) and a **CORS policy** allowing browser-side
+- **Railway Storage Bucket** (S3-compatible and private). Product images only.
+  The cacheable `/api/images/*` route streams public catalogue images without
+  revealing credentials. A **CORS policy** must allow browser-side
   `PUT` from your app's origin(s), since uploads go straight from the
-  browser to R2 via presigned URLs:
+  browser to the Bucket via presigned URLs:
   ```json
   [
     {
@@ -385,20 +378,20 @@ scripts/
     }
   ]
   ```
-  **Locally, MinIO stands in for R2** — `docker-compose.yml` runs it on
+  **Locally, MinIO stands in for Railway Storage** — `docker-compose.yml` runs it on
   `http://localhost:9000` with a public-read `clothshop` bucket and
   `MINIO_API_CORS_ALLOW_ORIGIN=http://localhost:3000` (the same browser-PUT
-  allowance the policy above grants). Setting `R2_ENDPOINT` is the only
-  difference in the app itself; see `src/lib/r2.ts`.
+  allowance the policy above grants). Its `STORAGE_FORCE_PATH_STYLE=true` is
+  the only addressing difference; see `src/lib/r2.ts`.
 - **Supplier catalogue sources.** The preparation CLI accepts only canonical
   HTTPS SHEIN, Amazon, 1688, and Taobao pages and their approved image CDNs.
   Downloads are bounded and MIME-checked. Accepted photos are re-encoded at
-  480/800/1600 widths and copied into R2/MinIO during apply; storefront URLs
+  480/800/1600 widths and copied into Railway Bucket/MinIO during apply; storefront URLs
   always point at owned storage, never at supplier hosts.
 - **Auth.js v5** (Credentials provider, JWT session strategy, no database
   adapter — a single owner account doesn't need a `sessions` table). No
   external identity provider is wired up.
-- **No runtime external services beyond Railway Postgres and R2.** The
+- **No runtime external services beyond Railway Postgres and Railway Bucket.** The
   out-of-band catalogue preparation described above may read supplier pages.
   There is no email provider, no
   payment processor (the storefront's order CTA is LINE/Instagram DM, not
@@ -447,9 +440,11 @@ platform-specific package and no platform cron, and two decisions stay as
 they are:
 
 - **Images bypass any host's image-optimization service.** `next/image` uses
-  a custom passthrough loader (`src/lib/image-loader.ts`) against three
-  widths pre-generated in the browser or by the catalogue CLI and stored in R2. R2
-  charges **no egress**, so serving product photos costs nothing and no
+  a custom loader against three widths pre-generated in the browser or by the
+  catalogue CLI. `/api/images/*` streams them from private storage with
+  immutable cache headers. Railway Bucket egress is free, though proxying
+  bytes through the app can count as service egress, and no image-optimization
+  quota applies. A shop with colour variants would
   image-optimization quota applies. A shop with colour variants would
   otherwise burn through that quota quickly — 100 products × 4 photos ×
   3 colours is 1,200 source images.
@@ -517,7 +512,7 @@ npm run lint
 npx drizzle-kit check
 ```
 
-A database-less build needs dummy env vars for `DATABASE_URL` and the R2
+A database-less build needs dummy env vars for `DATABASE_URL` and storage
 variables so the module-level `requireEnv()`/`requireDatabaseUrl()` calls
 don't throw before Next even gets to prerendering — see `CLAUDE.md`'s verify
 section for the exact command.
@@ -528,7 +523,7 @@ Next.js 16.2.10 (App Router, Turbopack) · React 19.2.4 · TypeScript ·
 Tailwind v4 (tokens in `src/app/globals.css`, no config file) · shadcn/ui
 `base-nova` style on `@base-ui/react` (not Radix) · Drizzle ORM 0.45 +
 `pg` (`node-postgres`) · Auth.js v5 (beta) · `@aws-sdk/client-s3` +
-`s3-request-presigner` (R2) · `next-intl` v4 · TanStack Query v5 · React Hook
+`s3-request-presigner` (Railway Bucket/MinIO) · `next-intl` v4 · TanStack Query v5 · React Hook
 Form + Zod v4 · `xlsx` (import/export) · Sharp (catalogue renditions) ·
 Recharts (dashboard charts).
 
@@ -545,7 +540,7 @@ Recharts (dashboard charts).
   diagram and its failure path.
 - [`docs/cron-flow.md`](docs/cron-flow.md) — there are no scheduled jobs;
   this file explains why and records that deliberately.
-- [`DEPLOYMENT.md`](DEPLOYMENT.md) — Railway Postgres/R2 setup, environment
+- [`DEPLOYMENT.md`](DEPLOYMENT.md) — Railway Postgres/Bucket setup, environment
   variables per environment, first-owner creation, and the post-deploy
   checklist.
 - [`CLAUDE.md`](CLAUDE.md) — project-specific notes for AI coding assistants

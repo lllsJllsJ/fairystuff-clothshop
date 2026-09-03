@@ -15,6 +15,7 @@ import {
   users,
 } from "@/db/schema"
 import { nextProductCodeIn } from "@/lib/product-code"
+import { productImageUrl } from "@/lib/product-image-keys"
 import {
   deleteProductImage,
   deleteProductImageRenditions,
@@ -56,17 +57,10 @@ export type CatalogImportSummary = {
   removedOldImages: number
 }
 
-function publicBase(): string {
-  const value = process.env.NEXT_PUBLIC_R2_PUBLIC_URL?.replace(/\/+$/, "")
-  if (!value) throw new Error("NEXT_PUBLIC_R2_PUBLIC_URL is required for catalogue import")
-  return value
-}
-
 async function stageManifest(manifest: CatalogManifest): Promise<{
   products: StagedProduct[]
   keys: string[]
 }> {
-  const base = publicBase()
   const staged: StagedProduct[] = []
   const keys: string[] = []
 
@@ -86,7 +80,7 @@ async function stageManifest(manifest: CatalogManifest): Promise<{
         }
         const canonicalKey = allKeys.find((key) => key.endsWith("-1600.webp"))
         if (!canonicalKey) throw new Error(`Missing canonical rendition for row ${source.workbookRow}`)
-        images.push({ canonicalKey, url: `${base}/${canonicalKey}`, allKeys })
+        images.push({ canonicalKey, url: productImageUrl(canonicalKey), allKeys })
       }
       staged.push({ id, source, images })
     }

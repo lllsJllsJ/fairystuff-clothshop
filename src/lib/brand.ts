@@ -39,16 +39,9 @@ export const ABOUT_STORY_EN =
   "Your brand story goes here — edit it in src/lib/brand.ts."
 
 /**
- * Builds a public R2 URL for a stored product image storage key
- * (`products/<productId>/<file>.webp`). Requires
- * `NEXT_PUBLIC_R2_PUBLIC_URL` (the R2 bucket's public custom domain, e.g.
- * `https://img.example.com`, no trailing slash — see .env.example).
- * Exposed to the client by design (it's a public CDN URL, not a secret).
+ * Builds the stable same-origin proxy URL for a private stored product image.
+ * Kept under its original exported name for compatibility with older callers.
  */
 export function r2PublicUrl(storageKey: string): string {
-  const base = process.env.NEXT_PUBLIC_R2_PUBLIC_URL
-  if (!base) {
-    throw new Error("NEXT_PUBLIC_R2_PUBLIC_URL is not set. See .env.example.")
-  }
-  return `${base.replace(/\/+$/, "")}/${storageKey.replace(/^\/+/, "")}`
+  return `/api/images/${storageKey.replace(/^\/+/, "")}`
 }

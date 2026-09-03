@@ -34,7 +34,7 @@ async function main() {
     allowRemote: process.argv.includes("--allow-remote"),
   })
   console.log(`Replacing catalogue on ${new URL(databaseUrl).hostname} (${privateTarget ? "local/private" : "remote"})`)
-  console.log(`Object bucket: ${process.env.R2_BUCKET ?? "(not set)"}`)
+  console.log(`Object bucket: ${process.env.STORAGE_BUCKET ?? process.env.R2_BUCKET ?? process.env.BUCKET ?? "(not set)"}`)
 
   const { replaceCatalog } = await import("../src/lib/catalog/import")
   const summary = await replaceCatalog(manifest)

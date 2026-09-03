@@ -6,8 +6,7 @@ then `npm run start`) — not serverless functions, so there's no per-request
 cold start and no function-invocation connection-count pressure on Postgres.
 
 The codebase itself stays portable: no platform-specific package, no
-platform cron, and images bypass any host's image optimizer entirely (see
-the README). A future move off Railway would be a redeploy, not a rewrite.
+platform cron, and the S3-compatible storage adapter remains portable.
 
 ## 1. Railway Postgres setup
 
@@ -87,18 +86,20 @@ route in the app. Run this against the target environment's `DATABASE_URL`
 running it against your local dev database does not create an account on
 production.
 
-## 5. Cloudflare R2 setup
+## 5. Railway Storage Bucket setup
 
-1. Create an R2 bucket for product images.
-2. Attach a **public custom domain** to the bucket (e.g.
-   `img.yourdomain.com`) — this becomes `NEXT_PUBLIC_R2_PUBLIC_URL`. The app
-   never proxies image bytes through itself; `next/image`'s custom loader
-   (`src/lib/image-loader.ts`) points straight at this domain.
-3. Create an R2 API token with read/write access to that bucket; its
-   access key ID / secret become `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`.
-   Your Cloudflare account ID becomes `R2_ACCOUNT_ID`.
+1. In the project canvas choose **Create → Bucket**, select the Singapore
+   region (`sin`), and name it `clothshop-images`.
+2. In the app service's Variables tab add references to the Bucket service:
+   `STORAGE_ENDPOINT` → `ENDPOINT`, `STORAGE_ACCESS_KEY_ID` → `ACCESS_KEY_ID`,
+   `STORAGE_SECRET_ACCESS_KEY` → `SECRET_ACCESS_KEY`, `STORAGE_BUCKET` →
+   `BUCKET`, and `STORAGE_REGION` → `REGION`. Set
+   `STORAGE_FORCE_PATH_STYLE=false`. Use the globally unique `BUCKET`, not
+   the bucket display-name variable.
+3. Do not create a public domain. Railway Buckets are private; the app serves
+   immutable product images through `/api/images/*` and caches those responses.
 4. **Configure CORS on the bucket** — product images upload directly from
-   the owner's browser to R2 via presigned `PUT` URLs
+   the owner's browser via presigned `PUT` URLs
    (`src/app/api/uploads/presign`), so the bucket must allow cross-origin
    `PUT` from your app's origin(s):
    ```json
@@ -121,10 +122,10 @@ production.
 | `DATABASE_URL` | prod Postgres service (private URL) | staging Postgres service (private URL) | Railway injects this automatically per environment when a Postgres service is attached — never share one Postgres between environments |
 | `AUTH_SECRET` | unique, generated | unique, generated | `npx auth secret` per environment — never reuse |
 | `AUTH_URL` | `https://your-production-domain` | `https://your-staging-domain` | Must match the deployment's real canonical URL |
-| `R2_ACCOUNT_ID` | shared or per-env, your choice | — | Same account can serve multiple buckets |
-| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | prod token | staging token | Scope each token to its own bucket if you split buckets per environment |
-| `R2_BUCKET` | prod bucket name | staging bucket name (recommended separate) | Mixing environments into one bucket risks a staging test polluting production images |
-| `NEXT_PUBLIC_R2_PUBLIC_URL` | prod public domain | staging public domain | Client-exposed — not a secret |
+| `STORAGE_ENDPOINT` / `STORAGE_REGION` | references to prod Bucket | references to staging Bucket | Use Railway reference variables so each environment follows its own bucket instance |
+| `STORAGE_ACCESS_KEY_ID` / `STORAGE_SECRET_ACCESS_KEY` | references to prod Bucket | references to staging Bucket | Secrets remain server-side |
+| `STORAGE_BUCKET` | reference to prod `BUCKET` | reference to staging `BUCKET` | Use the S3 bucket name, not `RAILWAY_BUCKET_NAME` |
+| `STORAGE_FORCE_PATH_STYLE` | `false` | `false` | Set `true` only when the Bucket Credentials tab explicitly reports path style |
 | `NEXT_PUBLIC_SITE_URL` | `https://your-production-domain` | `https://your-staging-domain` | Feeds sitemap/robots/JSON-LD/canonical URLs |
 
 Never commit real values for any of these — `.env.example` holds only
@@ -166,17 +167,17 @@ Railway build log:
 - **`drizzle/0000_init_extras.sql` not applied** (step 2). Orders silently
   report zero profit, because every monetary figure is computed by generated
   columns and the `recalc_order` trigger, all of which live only in that file.
-- **R2 CORS not configured** (step 5). The admin loads fine and image uploads
+- **Bucket CORS not configured** (step 5). The admin loads fine and image uploads
   fail only when someone actually tries one, since the browser PUTs directly
-  to R2.
+  to the Bucket.
 
 ## 8. Post-deploy checklist
 
 - [ ] `npm run db:migrate` ran, **and** `psql "$DATABASE_URL" -f drizzle/0000_init_extras.sql` ran manually against this environment's database.
 - [ ] `npm run db:seed` ran (product types visible in `/admin/settings`).
 - [ ] An owner account exists for this environment (`npm run create-owner` was run against the right `DATABASE_URL`) and sign-in works at `/<locale>/login`.
-- [ ] R2 bucket's public custom domain resolves and serves an uploaded test image.
-- [ ] R2 CORS is configured — uploading a product photo in `/admin/products/new` succeeds end to end (resize → presign → PUT).
+- [ ] `/api/images/<valid-storage-key>` serves an uploaded test image without exposing a signed bucket URL.
+- [ ] Bucket CORS is configured — uploading a product photo in `/admin/products/new` succeeds end to end (resize → presign → PUT).
 - [ ] `sitemap.xml` and `robots.txt` resolve and reference the correct `NEXT_PUBLIC_SITE_URL`.
 - [ ] Run the full [`docs/health-check.md`](docs/health-check.md) security block against this environment's real URL — every check must pass (empty greps on 1/2/3/5, `401` on both checks in 4) before treating the environment as live.
 - [ ] Edit a product's price in admin, then hard-reload `/shop` in an incognito window — the new price must appear without waiting out the 300s ISR window (the storefront-revalidation check called out in step 7 above).

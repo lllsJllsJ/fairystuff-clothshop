@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils"
 import { useRouter } from "@/i18n/navigation"
 import { formatBaht } from "@/lib/format"
 import { buildProductImageKey, resizeProductImage } from "@/lib/image-resize"
+import { productImageUrl } from "@/lib/product-image-keys"
 import {
   productFormSchema,
   type ProductFormValues,
@@ -53,7 +54,7 @@ type PresignResponse = { uploads: { key: string; url: string }[] }
 /**
  * Resizes one picked file into its WebP renditions, asks the owner-gated
  * presign endpoint for PUT URLs at the exact keys it computed, and PUTs
- * each rendition straight to R2. Runs entirely client-side except for the
+ * each rendition straight to S3-compatible storage. Runs entirely client-side except for the
  * one presign round-trip — the file itself never touches this app's
  * server (plan §7).
  */
@@ -92,8 +93,7 @@ async function uploadProductImage(
   // "master" key; the widest gives the detail-view zoom the most to work
   // with.
   const widestKey = keys[keys.length - 1]
-  const publicBase = (process.env.NEXT_PUBLIC_R2_PUBLIC_URL ?? "").replace(/\/$/, "")
-  return { url: `${publicBase}/${widestKey}`, storageKey: widestKey }
+  return { url: productImageUrl(widestKey), storageKey: widestKey }
 }
 
 export function ProductForm({

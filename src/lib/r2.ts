@@ -2,6 +2,7 @@ import "server-only"
 
 import {
   DeleteObjectCommand,
+  GetObjectCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3"
@@ -10,7 +11,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { PRODUCT_IMAGE_WIDTHS, productImageRenditionKeys } from "@/lib/product-image-keys"
 
 /**
- * Cloudflare R2 client (S3-compatible). Server-only — this reads secret
+ * S3-compatible object-storage client. Server-only — this reads secret
  * credentials from the environment, so it must never be imported from a
  * client component; the "server-only" import throws at build time if that
  * ever happens instead of silently shipping secrets to the browser.
@@ -22,43 +23,48 @@ import { PRODUCT_IMAGE_WIDTHS, productImageRenditionKeys } from "@/lib/product-i
  * for PUT URLs for exactly those keys. This module only signs URLs for
  * keys the caller already built; it never invents a key itself.
  *
- * LOCAL DEVELOPMENT (no R2 account needed): set `R2_ENDPOINT` to an
+ * LOCAL DEVELOPMENT: set `STORAGE_ENDPOINT` to an
  * S3-compatible server — `docker-compose.yml` runs MinIO on
  * http://localhost:9000 for exactly this. Setting it also flips the client
  * to path-style addressing (`<endpoint>/<bucket>/<key>`), which MinIO
- * requires and R2 does not use. Leave `R2_ENDPOINT` unset in production and
- * the real R2 endpoint below is derived from `R2_ACCOUNT_ID` as before —
- * every other layer (key validation, presigning, the public URL the
- * browser fetches) is byte-for-byte the same code path against either
- * backend. See README "Installation & Setup".
+ * requires. Railway Buckets use virtual-hosted addressing, so production sets
+ * `STORAGE_FORCE_PATH_STYLE=false`. Legacy R2 variable names remain accepted
+ * to avoid breaking an existing deployment. See README "Installation & Setup".
  */
 
 const PRESIGN_EXPIRY_SECONDS = 300
 
-function requireEnv(name: string): string {
-  const value = process.env[name]
+function requireOne(names: string[]): string {
+  const value = names.map((name) => process.env[name]).find(Boolean)
   if (!value) {
-    throw new Error(`${name} is not set. See .env.example.`)
+    throw new Error(`${names.join(" or ")} is not set. See .env.example.`)
   }
   return value
+}
+
+function bucketName(): string {
+  return requireOne(["STORAGE_BUCKET", "R2_BUCKET", "BUCKET"])
 }
 
 let cachedClient: S3Client | null = null
 
 function r2Client(): S3Client {
   if (cachedClient) return cachedClient
-  // A local S3-compatible endpoint (MinIO) when R2_ENDPOINT is set,
-  // otherwise the real R2 endpoint for this account.
-  const localEndpoint = process.env.R2_ENDPOINT
+  const endpoint = process.env.STORAGE_ENDPOINT ?? process.env.R2_ENDPOINT ?? process.env.ENDPOINT
+  const accountId = process.env.R2_ACCOUNT_ID
+  const forcePathStyle = process.env.STORAGE_FORCE_PATH_STYLE === "true" ||
+    Boolean(endpoint && /localhost|127\.0\.0\.1/.test(endpoint))
   cachedClient = new S3Client({
-    region: "auto",
-    endpoint:
-      localEndpoint ??
-      `https://${requireEnv("R2_ACCOUNT_ID")}.r2.cloudflarestorage.com`,
-    forcePathStyle: Boolean(localEndpoint),
+    region: process.env.STORAGE_REGION ?? process.env.REGION ?? "auto",
+    endpoint: endpoint ?? (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : undefined),
+    forcePathStyle,
     credentials: {
-      accessKeyId: requireEnv("R2_ACCESS_KEY_ID"),
-      secretAccessKey: requireEnv("R2_SECRET_ACCESS_KEY"),
+      accessKeyId: requireOne(["STORAGE_ACCESS_KEY_ID", "R2_ACCESS_KEY_ID", "ACCESS_KEY_ID"]),
+      secretAccessKey: requireOne([
+        "STORAGE_SECRET_ACCESS_KEY",
+        "R2_SECRET_ACCESS_KEY",
+        "SECRET_ACCESS_KEY",
+      ]),
     },
   })
   return cachedClient
@@ -80,7 +86,7 @@ export async function presignProductImagePut(
   keys: string[]
 ): Promise<PresignedUpload[]> {
   const prefix = `products/${productId}/`
-  const bucket = requireEnv("R2_BUCKET")
+  const bucket = bucketName()
   const client = r2Client()
 
   return Promise.all(
@@ -125,7 +131,7 @@ export async function putProductImage(
   }
   await r2Client().send(
     new PutObjectCommand({
-      Bucket: requireEnv("R2_BUCKET"),
+      Bucket: bucketName(),
       Key: storageKey,
       Body: body,
       ContentType: "image/webp",
@@ -134,16 +140,20 @@ export async function putProductImage(
 }
 
 /**
- * Deletes one product image from R2 by its storage key. Best-effort —
+ * Deletes one product image from object storage by its key. Best-effort —
  * callers (e.g. `deleteProduct`/`updateProduct` in the action layer) should
  * not fail the surrounding database write if this throws; catch, log, and
- * move on. An orphaned R2 object costs storage; a stuck admin write costs
+ * move on. An orphaned object costs storage; a stuck admin write costs
  * more.
  */
 export async function deleteProductImage(storageKey: string): Promise<void> {
-  const bucket = requireEnv("R2_BUCKET")
+  const bucket = bucketName()
   const client = r2Client()
   await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: storageKey }))
+}
+
+export async function getProductImage(storageKey: string) {
+  return r2Client().send(new GetObjectCommand({ Bucket: bucketName(), Key: storageKey }))
 }
 
 /** The browser and catalogue importer always create these three siblings. */

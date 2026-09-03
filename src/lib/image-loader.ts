@@ -4,7 +4,7 @@
  * the critical path (plan §7 / host-agnostic constraint): this just maps
  * the width Next requests (it asks for several, to build a responsive
  * `srcset`) to the nearest of the three widths `lib/image-resize.ts`
- * actually generated, and returns the R2 URL for that rendition as-is.
+ * actually generated, and returns the same-origin image route for that rendition.
  *
  * IMPORTANT: `AVAILABLE_WIDTHS` must stay in sync with
  * `PRODUCT_IMAGE_WIDTHS` in `lib/image-resize.ts`. It is duplicated here

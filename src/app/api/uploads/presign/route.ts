@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/lib/auth-helpers"
 import { isOwner } from "@/lib/roles"
 
 /**
- * Owner-gated. Returns presigned R2 PUT URLs for the exact keys the
+ * Owner-gated. Returns presigned object-storage PUT URLs for the exact keys the
  * browser already computed client-side (plan §7 — the resize step happens
  * before this call, via lib/image-resize.ts). This endpoint never invents
  * a storage key itself; it only signs the ones it's handed, after

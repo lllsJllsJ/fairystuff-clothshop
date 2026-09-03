@@ -21,43 +21,44 @@
 14. [Sitemap](#sitemap)
 15. [Robots](#robots)
 16. [404 — Draft/Archived/Unknown Product Code](#404--draftarchivedunknown-product-code)
+17. [`GET /api/images/[...key]` — Private Bucket Read](#get-apiimageskey--private-bucket-read)
 
 **Admin**
-17. [Admin Dashboard](#admin-dashboard)
-18. [Product Browse](#product-browse)
-19. [Image Upload — Resize → Presign → R2 PUT](#image-upload--resize--presign--r2-put)
-20. [Create Product](#create-product)
-21. [Product Code Generation](#product-code-generation)
-22. [Edit Product + Cover Reorder](#edit-product--cover-reorder)
-23. [Inline Table Edit](#inline-table-edit)
-24. [Delete Product](#delete-product)
-25. [Variant Rows Save](#variant-rows-save)
-26. [Excel Import — Parse → Preview → Commit](#excel-import--parse--preview--commit)
-27. [Orders List](#orders-list)
-28. [Create Order](#create-order)
-29. [Edit Order](#edit-order)
-30. [Quick Order Status Change](#quick-order-status-change)
-31. [Print Order Receipt](#print-order-receipt)
-32. [Delete Order](#delete-order)
-33. [Reports — View + Excel Export + Print](#reports--view--excel-export--print)
-34. [Settings — Create Product Type](#settings--create-product-type)
-35. [Settings — Rename Product Type (Cascade)](#settings--rename-product-type-cascade)
-36. [Settings — Delete Product Type (Blocked When In Use)](#settings--delete-product-type-blocked-when-in-use)
-37. [Settings — Reorder Product Types](#settings--reorder-product-types)
-38. [Settings — Clear Shop Data](#settings--clear-shop-data)
+18. [Admin Dashboard](#admin-dashboard)
+19. [Product Browse](#product-browse)
+20. [Image Upload — Resize → Presign → Bucket PUT](#image-upload--resize--presign--bucket-put)
+21. [Create Product](#create-product)
+22. [Product Code Generation](#product-code-generation)
+23. [Edit Product + Cover Reorder](#edit-product--cover-reorder)
+24. [Inline Table Edit](#inline-table-edit)
+25. [Delete Product](#delete-product)
+26. [Variant Rows Save](#variant-rows-save)
+27. [Excel Import — Parse → Preview → Commit](#excel-import--parse--preview--commit)
+28. [Orders List](#orders-list)
+29. [Create Order](#create-order)
+30. [Edit Order](#edit-order)
+31. [Quick Order Status Change](#quick-order-status-change)
+32. [Print Order Receipt](#print-order-receipt)
+33. [Delete Order](#delete-order)
+34. [Reports — View + Excel Export + Print](#reports--view--excel-export--print)
+35. [Settings — Create Product Type](#settings--create-product-type)
+36. [Settings — Rename Product Type (Cascade)](#settings--rename-product-type-cascade)
+37. [Settings — Delete Product Type (Blocked When In Use)](#settings--delete-product-type-blocked-when-in-use)
+38. [Settings — Reorder Product Types](#settings--reorder-product-types)
+39. [Settings — Clear Shop Data](#settings--clear-shop-data)
 
 **Catalogue CLI**
-39. [Catalogue Prepare — Workbook Extraction](#catalogue-prepare--workbook-extraction)
-40. [Catalogue Prepare — Supplier Enrichment + Workbook Fallback](#catalogue-prepare--supplier-enrichment--workbook-fallback)
-41. [Catalogue Verify + Import Dry Run](#catalogue-verify--import-dry-run)
-42. [Catalogue Apply — Storage Staging](#catalogue-apply--storage-staging)
-43. [Catalogue Apply — Transactional Replacement](#catalogue-apply--transactional-replacement)
-44. [Catalogue Apply — Rollback + Object Cleanup](#catalogue-apply--rollback--object-cleanup)
+40. [Catalogue Prepare — Workbook Extraction](#catalogue-prepare--workbook-extraction)
+41. [Catalogue Prepare — Supplier Enrichment + Workbook Fallback](#catalogue-prepare--supplier-enrichment--workbook-fallback)
+42. [Catalogue Verify + Import Dry Run](#catalogue-verify--import-dry-run)
+43. [Catalogue Apply — Storage Staging](#catalogue-apply--storage-staging)
+44. [Catalogue Apply — Transactional Replacement](#catalogue-apply--transactional-replacement)
+45. [Catalogue Apply — Rollback + Object Cleanup](#catalogue-apply--rollback--object-cleanup)
 
 **Cross-cutting**
-45. [Storefront Revalidation After a Product Mutation](#storefront-revalidation-after-a-product-mutation)
-46. [Unauthorized / Forbidden Denial Paths](#unauthorized--forbidden-denial-paths)
-47. [Transaction Rollback on Mid-Write Failure](#transaction-rollback-on-mid-write-failure)
+46. [Storefront Revalidation After a Product Mutation](#storefront-revalidation-after-a-product-mutation)
+47. [Unauthorized / Forbidden Denial Paths](#unauthorized--forbidden-denial-paths)
+48. [Transaction Rollback on Mid-Write Failure](#transaction-rollback-on-mid-write-failure)
 
 ---
 
@@ -504,7 +505,28 @@ between page load and the client fetch (rare — the page itself already
 required a session); `500` on an unexpected query error, surfaced as a
 `useQuery` error state.
 
-## Image Upload — Resize → Presign → R2 PUT
+## `GET /api/images/[...key]` — Private Bucket Read
+
+Public product-image request. The URL remains stable while Railway credentials
+and signed storage URLs stay private.
+
+```
+Browser / next/image loader
+          │ GET /api/images/products/<uuid>/<immutable-file>.webp
+          ▼
+validate exact product key ──invalid──▶ 404
+          │ valid
+          ▼
+Railway private Bucket GetObject
+          ├── missing ────────────────▶ 404
+          ├── storage failure ────────▶ 502
+          └── WebP stream + ETag + one-year immutable cache ──▶ Browser/CDN
+```
+
+An `If-None-Match` request matching the stored ETag returns `304`. The route
+accepts only generated `products/<uuid>/*-(480|800|1600).webp` keys.
+
+## Image Upload — Resize → Presign → Bucket PUT
 
 Runs inside `ProductForm` whenever the owner picks image files, for both
 create and edit. The file never touches this app's server.
@@ -529,7 +551,7 @@ create and edit. The file never touches this app's server.
                                         │
                                         ▼
                         Browser PUTs each WebP blob
-                        directly to R2 (parallel)
+                        directly to the Railway Bucket (parallel)
                                         │
                                         ▼
                         widest rendition's URL/key stored
@@ -541,14 +563,13 @@ Failure: any failed presign or failed PUT throws inside `handleFiles`,
 caught and surfaced as a generic error toast (`errors.generic`); nothing
 partially uploaded is referenced by the product until the surrounding
 create/edit action actually saves, so a failed upload just means the image
-never appears in the picker — no orphaned DB reference, though the R2
+never appears in the picker — no orphaned DB reference, though the bucket
 objects themselves may be orphaned (see the product-form.tsx comment on
 `handleRemoveImage`).
 
 Local development runs this flow unchanged against the MinIO container in
-`docker-compose.yml` instead of R2: setting `R2_ENDPOINT` swaps the S3
-endpoint (and turns on path-style addressing) inside `lib/r2.ts`, and
-`NEXT_PUBLIC_R2_PUBLIC_URL` points at the local bucket. Every other box
+`docker-compose.yml`: `STORAGE_ENDPOINT` swaps the S3 endpoint and
+`STORAGE_FORCE_PATH_STYLE=true` selects MinIO addressing. Every other box
 above — resize, key building, the 3-layer validation, the presigned PUT — is
 the same code. See the README's Installation & Setup.
 
@@ -1327,7 +1348,7 @@ Zod contract: version + exactly 53 products
        catalog:verify -> summary only
        catalog:import (without --apply) -> dry-run summary only
                     │
-                    └── no DB connection, no R2/MinIO write
+                    └── no DB connection, no Bucket/MinIO write
 ```
 
 Failure: any unapproved missing image fails closed. Applying cannot bypass
