@@ -20,8 +20,7 @@ export const LINE_URL = `https://line.me/R/ti/p/${LINE_ID}`
 export const INSTAGRAM_HANDLE = "yourlabel"
 export const INSTAGRAM_URL = `https://instagram.com/${INSTAGRAM_HANDLE}`
 
-// TODO: replace with real contact copy for the order CTA (plan: "Order CTA
-// = LINE + Instagram DM, no checkout").
+// TODO: replace with real contact copy for the order handoff CTA.
 export const CONTACT_COPY_TH =
   "สนใจสั่งซื้อ ทักแชททาง LINE หรือ Instagram ได้เลยค่ะ"
 export const CONTACT_COPY_EN =

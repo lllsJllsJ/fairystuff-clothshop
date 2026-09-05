@@ -16,17 +16,13 @@ export function ProductJsonLd({
   locale: string
 }) {
   const currency = "THB"
-  const availability = product.inStock
-    ? "https://schema.org/InStock"
-    : "https://schema.org/OutOfStock"
-
   const json = {
     "@context": "https://schema.org",
     "@type": "Product",
     sku: product.productCode,
     name: product.productName,
     description: product.description ?? product.productName,
-    category: product.productType ?? undefined,
+    category: product.characters[0]?.nameEn ?? product.characters[0]?.name ?? undefined,
     image: product.images.map((img) => img.url),
     inLanguage: locale,
     offers: {
@@ -34,7 +30,7 @@ export function ProductJsonLd({
       url,
       priceCurrency: currency,
       price: Number(product.sellPrice).toFixed(2),
-      availability,
+      availability: "https://schema.org/PreOrder",
       itemCondition: "https://schema.org/NewCondition",
     },
   }

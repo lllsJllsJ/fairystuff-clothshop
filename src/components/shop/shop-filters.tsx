@@ -1,12 +1,11 @@
 "use client"
 
-import { useTranslations } from "next-intl"
+import { useLocale, useTranslations } from "next-intl"
 import { X } from "lucide-react"
 
-import type { PublicProductType } from "@/db/queries/storefront"
+import type { PublicCharacterFacet } from "@/db/queries/storefront"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Switch } from "@/components/ui/switch"
 import { SimpleSelect } from "@/components/ui/simple-select"
 
 /**
@@ -21,23 +20,22 @@ import { SimpleSelect } from "@/components/ui/simple-select"
 export const STANDARD_SIZE_OPTIONS = ["XS", "S", "M", "L", "XL", "2XL", "Free Size"]
 
 export type ShopFilterValues = {
-  type: string
+  character: string
   color: string
   size: string
-  inStockOnly: boolean
   minPrice: string
   maxPrice: string
 }
 
 export function ShopFilters({
-  types,
+  characters,
   colorOptions,
   values,
   onChange,
   onClear,
   hasActiveFilters,
 }: {
-  types: PublicProductType[]
+  characters: PublicCharacterFacet[]
   colorOptions: string[]
   values: ShopFilterValues
   onChange: <K extends keyof ShopFilterValues>(key: K, value: ShopFilterValues[K]) => void
@@ -45,10 +43,14 @@ export function ShopFilters({
   hasActiveFilters: boolean
 }) {
   const t = useTranslations()
+  const locale = useLocale()
 
-  const typeOptions = [
+  const characterOptions = [
     { value: "", label: t("common.all") },
-    ...types.map((type) => ({ value: type.name, label: `${type.name} (${type.count})` })),
+    ...characters.map((character) => ({
+      value: character.slug,
+      label: `${locale === "en" ? (character.nameEn ?? character.name) : character.name} (${character.count})`,
+    })),
   ]
   const colorSelectOptions = [
     { value: "", label: t("common.all") },
@@ -71,11 +73,11 @@ export function ShopFilters({
         )}
       </div>
 
-      <FilterField label={t("shop.productType")}>
+      <FilterField label={t("shop.character")}>
         <SimpleSelect
-          value={values.type}
-          onValueChange={(v) => onChange("type", v)}
-          options={typeOptions}
+          value={values.character}
+          onValueChange={(v) => onChange("character", v)}
+          options={characterOptions}
           className="h-11"
         />
       </FilterField>
@@ -124,13 +126,6 @@ export function ShopFilters({
         </div>
       </FilterField>
 
-      <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3">
-        <span className="text-body text-foreground">{t("shop.inStockOnly")}</span>
-        <Switch
-          checked={values.inStockOnly}
-          onCheckedChange={(checked) => onChange("inStockOnly", checked)}
-        />
-      </label>
     </div>
   )
 }

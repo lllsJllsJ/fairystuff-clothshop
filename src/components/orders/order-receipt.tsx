@@ -3,14 +3,6 @@ import { getTranslations } from "next-intl/server"
 import { formatBaht, formatDate, formatDateTime } from "@/lib/format"
 import type { OrderWithItems } from "@/db/queries/orders"
 
-function statusLabelKey(status: OrderWithItems["status"]): string {
-  const suffix = status
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join("")
-  return `order.status${suffix}`
-}
-
 /**
  * Print-only receipt view — a plain, non-interactive render of the order
  * built straight from `OrderWithItems` (server component, no client JS
@@ -19,7 +11,13 @@ function statusLabelKey(status: OrderWithItems["status"]): string {
  * other direction (`print:hidden`), so printing the page yields a clean
  * receipt instead of the edit form's inputs and buttons.
  */
-export async function OrderReceipt({ order }: { order: OrderWithItems }) {
+export async function OrderReceipt({
+  order,
+  statusLabel,
+}: {
+  order: OrderWithItems
+  statusLabel: string
+}) {
   const t = await getTranslations()
 
   const itemsTotal = Number(order.itemsTotal)
@@ -46,7 +44,7 @@ export async function OrderReceipt({ order }: { order: OrderWithItems }) {
             {t("order.orderDate")}: {formatDate(order.orderDate)}
           </p>
           <p>
-            {t("order.status")}: {t(statusLabelKey(order.status))}
+            {t("order.status")}: {statusLabel}
           </p>
         </div>
         <div>

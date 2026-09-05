@@ -11,15 +11,24 @@
  * column names silently resolved to the wrong table.
  */
 import { db } from "../../src/db"
-import { orderItems, orders, productImages, productTypes, productVariants, products } from "../../src/db/schema"
-import { getPublicProducts, getPublicProductByCode, getPublicTypes, getActiveProductCodes } from "../../src/db/queries/storefront"
+import { characters, orderItems, orders, productCharacters, productImages, productTypes, productVariants, products } from "../../src/db/schema"
+import { getPublicProducts, getPublicProductByCode, getPublicCharacters, getActiveProductCodes } from "../../src/db/queries/storefront"
 import { getProducts, getProductById, getProductCodes } from "../../src/db/queries/products"
 import { getOrders, getOrderById } from "../../src/db/queries/orders"
 import { getProductTypes } from "../../src/db/queries/product-types"
 import { getDashboardData } from "../../src/db/queries/dashboard"
 import { getReportsData } from "../../src/db/queries/reports"
 
-const PRIVATE = ["originalPrice", "buyingSource", "sourceLink", "margin", "quantity"]
+const PRIVATE = [
+  "originalPrice",
+  "buyingSource",
+  "sourceLink",
+  "margin",
+  "quantity",
+  "productType",
+  "preorderMinDays",
+  "preorderMaxDays",
+]
 let pass = 0
 let fail = 0
 
@@ -43,7 +52,7 @@ function scanPrivate(value: unknown, path = "$"): string[] {
 
 async function seed() {
   await db.delete(orderItems); await db.delete(orders)
-  await db.delete(productImages); await db.delete(productVariants)
+  await db.delete(productImages); await db.delete(productVariants); await db.delete(productCharacters)
   await db.delete(products); await db.delete(productTypes)
 
   await db.insert(productTypes).values([
@@ -51,11 +60,13 @@ async function seed() {
     { name: "เดรส", nameEn: "Dress", slug: "dress", sortOrder: 2 },
   ])
 
+  const [character] = await db.insert(characters).values({ name: "มิกกี้", nameEn: "Mickey", slug: "mickey" }).returning({ id: characters.id })
   const [live] = await db.insert(products).values({
     productCode: "TEE-001", productName: "เสื้อยืดลายดอก", productType: "เสื้อยืด",
     sellPrice: "890", originalPrice: "350", buyingSource: "Chatuchak",
     sourceLink: "https://example.com/supplier", status: "active",
   }).returning({ id: products.id })
+  await db.insert(productCharacters).values({ productId: live.id, characterId: character.id })
 
   await db.insert(products).values({
     productCode: "DRAFT-9", productName: "ยังไม่เปิดขาย", productType: "เดรส",
@@ -74,7 +85,7 @@ async function seed() {
 
   const [ord] = await db.insert(orders).values({
     customerName: "คุณมานี", customerPhone: "0812345678",
-    shippingCost: "50", packingCost: "20", status: "new",
+    shippingCost: "50", packingCost: "20", advertisingCost: "30", status: "new",
   }).returning({ id: orders.id })
 
   await db.insert(orderItems).values({
@@ -94,22 +105,22 @@ async function main() {
     `${list.rows.length} row(s), draft excluded`)
   const listLeaks = scanPrivate(list.rows)
   check("getPublicProducts leaks nothing private", listLeaks.length === 0, listLeaks.join(", ") || "clean")
-  check("getPublicProducts exposes inStock boolean + colours",
-    list.rows[0]?.inStock === true && Array.isArray(list.rows[0]?.colors),
+  check("getPublicProducts exposes preorder colours + characters",
+    Array.isArray(list.rows[0]?.colors) && list.rows[0]?.characters[0]?.slug === "mickey",
     `colors=${JSON.stringify(list.rows[0]?.colors)}`)
 
   const detail = await getPublicProductByCode("TEE-001")
   const detLeaks = scanPrivate(detail)
   check("getPublicProductByCode leaks nothing private", detLeaks.length === 0, detLeaks.join(", ") || "clean")
-  check("detail variants expose inStock not quantity",
-    !!detail && detail.variants.every((v) => "inStock" in v && !("quantity" in v)),
+  check("detail variants expose no private stock quantity",
+    !!detail && detail.variants.every((v) => !("quantity" in v)),
     `${detail?.variants.length} variants`)
   check("draft product is not publicly reachable", (await getPublicProductByCode("DRAFT-9")) === null)
   check("lookup is case-insensitive", (await getPublicProductByCode("tee-001")) !== null)
 
-  const types = await getPublicTypes()
-  check("getPublicTypes only lists types with live products",
-    types.length === 1 && types[0].name === "เสื้อยืด", JSON.stringify(types))
+  const publicCharacters = await getPublicCharacters()
+  check("getPublicCharacters only lists characters with live products",
+    publicCharacters.length === 1 && publicCharacters[0].slug === "mickey", JSON.stringify(publicCharacters))
   const codes = await getActiveProductCodes()
   check("getActiveProductCodes excludes draft", codes.length === 1 && codes[0] === "TEE-001")
 
@@ -125,7 +136,9 @@ async function main() {
   const ord = await getOrders({})
   check("getOrders returns rows with itemCount",
     ord.rows.length === 1 && ord.rows[0].itemCount === 1, `itemCount=${ord.rows[0]?.itemCount}`)
-  check("getOrders profit computed by DB", ord.rows[0]?.profit === "1010.00", `profit=${ord.rows[0]?.profit}`)
+  check("getOrders includes advertising cost", ord.rows[0]?.advertisingCost === "30.00",
+    `advertisingCost=${ord.rows[0]?.advertisingCost}`)
+  check("getOrders profit includes advertising cost", ord.rows[0]?.profit === "980.00", `profit=${ord.rows[0]?.profit}`)
   check("getOrders search by customer name", (await getOrders({ search: "มานี" })).rows.length === 1)
   check("getOrders search by order number", (await getOrders({ search: String(ord.rows[0].orderNo) })).rows.length === 1)
   check("getOrders search miss returns none", (await getOrders({ search: "ไม่มีอยู่จริง" })).rows.length === 0)
@@ -160,8 +173,15 @@ async function main() {
   console.log("--- aggregates ---")
   const dash = await getDashboardData()
   check("getDashboardData executes", !!dash, Object.keys(dash).join(","))
+  check("dashboard SKU counts distinguish ready and sold out",
+    dash.totalSkus === 3 && dash.readyToShipSkus === 2 && dash.soldOutVariantCount === 1)
+  check("dashboard separates gross and net profit",
+    dash.totalProfit === 1080 && dash.netProfit === 980 && dash.advertisingCost === 30,
+    `gross=${dash.totalProfit} net=${dash.netProfit} advertising=${dash.advertisingCost}`)
   const rep = await getReportsData({})
   check("getReportsData executes", !!rep, Object.keys(rep).join(","))
+  check("reports include advertising cost",
+    rep.orders[0]?.advertisingCost === 30 && rep.orders[0]?.profit === 980)
 
   console.log(`\n${pass} passed, ${fail} failed`)
   process.exit(fail === 0 ? 0 : 1)

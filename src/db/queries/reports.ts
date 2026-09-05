@@ -1,6 +1,6 @@
 import "server-only"
 
-import { and, asc, desc, eq, gte, lte, max, ne, sum } from "drizzle-orm"
+import { and, asc, desc, eq, gte, lte, max, ne, notInArray, sum } from "drizzle-orm"
 
 import { db } from "@/db"
 import {
@@ -26,8 +26,8 @@ import {
  * re-typed later — which is the whole point of snapshotting in the first
  * place.
  *
- * Same `cancelled` exclusion as `queries/dashboard.ts`: a cancelled order
- * was never fulfilled and shouldn't appear as revenue/profit.
+ * Same cancelled/full-refund exclusion as `queries/dashboard.ts`: neither
+ * should appear as fulfilled revenue/profit.
  */
 
 export type OrderStatusValue = (typeof orderStatus.enumValues)[number]
@@ -42,6 +42,7 @@ export type ReportOrderRow = {
   itemsCost: number
   shippingCost: number
   packingCost: number
+  advertisingCost: number
   totalCost: number
   profit: number
   status: OrderStatusValue
@@ -85,7 +86,7 @@ export type ReportsParams = {
 export async function getReportsData(params: ReportsParams = {}): Promise<ReportsData> {
   const { dateFrom, dateTo } = params
 
-  const dateConditions = [ne(orders.status, "cancelled")]
+  const dateConditions = [notInArray(orders.status, ["cancelled", "refund"])]
   if (dateFrom) dateConditions.push(gte(orders.orderDate, dateFrom))
   if (dateTo) dateConditions.push(lte(orders.orderDate, dateTo))
   const orderWhere = and(...dateConditions)!
@@ -101,6 +102,7 @@ export async function getReportsData(params: ReportsParams = {}): Promise<Report
         itemsCost: orders.itemsCost,
         shippingCost: orders.shippingCost,
         packingCost: orders.packingCost,
+        advertisingCost: orders.advertisingCost,
         totalCost: orders.totalCost,
         profit: orders.profit,
         status: orders.status,
@@ -151,6 +153,7 @@ export async function getReportsData(params: ReportsParams = {}): Promise<Report
     itemsCost: Number(o.itemsCost),
     shippingCost: Number(o.shippingCost),
     packingCost: Number(o.packingCost),
+    advertisingCost: Number(o.advertisingCost),
     totalCost: Number(o.totalCost ?? 0),
     profit: Number(o.profit ?? 0),
     status: o.status,

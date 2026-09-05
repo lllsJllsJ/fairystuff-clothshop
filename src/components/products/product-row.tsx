@@ -282,6 +282,25 @@ export function ProductRow({
         </TableCell>
       )}
 
+      {show("characters") && (
+        <TableCell className="max-w-48 px-2 text-small text-muted-foreground">
+          {product.characters.length > 0
+            ? product.characters.map((character) => character.name).join(", ")
+            : "—"}
+        </TableCell>
+      )}
+
+      {show("preorder") && (
+        <TableCell className="whitespace-nowrap px-2 text-small">
+          {product.preorderMinDays != null && product.preorderMaxDays != null
+            ? t("product.preorderDaysRange", {
+                min: product.preorderMinDays,
+                max: product.preorderMaxDays,
+              })
+            : t("product.preorderNotSet")}
+        </TableCell>
+      )}
+
       {show("sell_price") && (
         <TableCell className="p-1">
           {textCell("sellPrice", formatBaht(Number(draft.sellPrice)), {

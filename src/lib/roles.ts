@@ -4,11 +4,11 @@
  * component without pulling server code into the browser bundle (see
  * src/lib/auth-helpers.ts, which is the server-only counterpart).
  *
- * Two-role enum only: `owner` runs the shop, `staff` is the fail-safe
- * default with zero capability in v1 (plan §1 row 2, §4).
+ * `owner` runs the shop, `staff` is the fail-safe default with no customer
+ * capability, and `customer` owns storefront orders.
  */
 
-export type UserRole = "owner" | "staff"
+export type UserRole = "owner" | "staff" | "customer"
 
 export function isOwner(role: UserRole | null | undefined): boolean {
   return role === "owner"
@@ -16,4 +16,8 @@ export function isOwner(role: UserRole | null | undefined): boolean {
 
 export function isStaff(role: UserRole | null | undefined): boolean {
   return role === "staff"
+}
+
+export function isCustomer(role: UserRole | null | undefined): boolean {
+  return role === "customer"
 }

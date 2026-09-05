@@ -15,20 +15,17 @@ import {
   CartesianGrid,
 } from "recharts"
 
-import { formatBahtCompact, formatNumber } from "@/lib/format"
+import { formatBahtCompact } from "@/lib/format"
 import type { DashboardData } from "@/db/queries/dashboard"
 
 /**
  * Port of carstockpro's `dashboard/charts.tsx`. Restyled to consume this
  * repo's `--chart-*` tokens (fuchsia/sky-blue/bright-blue/mint/brown, see
  * globals.css) instead of carstockpro's own palette, and reshaped for
- * `DashboardData`'s actual fields (plan §12): `monthlyRevenue` +
- * `monthlyProfit` are separate arrays sharing the same month keys, zipped
- * here into one combo chart; `typeDistribution` replaces brand
- * distribution; a bonus `stockBuckets` chart (sold_out/low/medium/high
- * units-held buckets — dashboard.ts's stand-in for carstockpro's
- * days-held aging, since clothing variants have no purchase date to age
- * against) rounds out the row without any extra query.
+ * `DashboardData`'s actual fields: `monthlyCost` + `monthlyProfit` share
+ * month keys and are zipped here into one chart; `typeDistribution`
+ * replaces brand distribution. The old stock-level chart was removed so
+ * the dashboard focuses on the requested cost and profit view.
  */
 
 const CHART_COLORS = [
@@ -65,30 +62,14 @@ const tooltipStyle = {
   },
 } as const
 
-const STOCK_BUCKET_LABEL_KEYS = {
-  sold_out: "dashboard.stockSoldOut",
-  low: "dashboard.stockLow",
-  medium: "dashboard.stockMedium",
-  high: "dashboard.stockHigh",
-} as const
-const STOCK_BUCKET_ORDER = ["sold_out", "low", "medium", "high"] as const
-
 export function DashboardCharts({ data }: { data: DashboardData }) {
   const t = useTranslations()
 
-  const monthlyPerformance = data.monthlyRevenue.map((point, i) => ({
+  const monthlyPerformance = data.monthlyCost.map((point, i) => ({
     month: point.month,
-    revenue: point.value,
+    cost: point.value,
     profit: data.monthlyProfit[i]?.value ?? 0,
   }))
-
-  const stockBuckets = STOCK_BUCKET_ORDER.map((key) => {
-    const bucket = data.stockBuckets.find((b) => b.bucket === key)
-    return {
-      bucket: t(STOCK_BUCKET_LABEL_KEYS[key]),
-      count: bucket?.count ?? 0,
-    }
-  })
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -102,10 +83,10 @@ export function DashboardCharts({ data }: { data: DashboardData }) {
             <Legend
               wrapperStyle={{ fontSize: 12 }}
               formatter={(value) =>
-                value === "revenue" ? t("dashboard.revenueLegend") : t("dashboard.profitLegend")
+                value === "cost" ? t("dashboard.costLegend") : t("dashboard.profitLegend")
               }
             />
-            <Bar dataKey="revenue" fill="var(--chart-1)" />
+            <Bar dataKey="cost" fill="var(--chart-1)" />
             <Bar dataKey="profit" fill="var(--chart-2)" />
           </BarChart>
         </ResponsiveContainer>
@@ -138,18 +119,6 @@ export function DashboardCharts({ data }: { data: DashboardData }) {
             </PieChart>
           </ResponsiveContainer>
         )}
-      </ChartCard>
-
-      <ChartCard title={t("dashboard.stockLevels")}>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={stockBuckets}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-            <XAxis dataKey="bucket" {...axisProps} />
-            <YAxis {...axisProps} width={36} allowDecimals={false} tickFormatter={(v) => formatNumber(v)} />
-            <Tooltip {...tooltipStyle} formatter={(value) => formatNumber(Number(value))} />
-            <Bar dataKey="count" fill="var(--chart-3)" />
-          </BarChart>
-        </ResponsiveContainer>
       </ChartCard>
     </div>
   )

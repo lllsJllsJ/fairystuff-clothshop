@@ -29,23 +29,27 @@ import type { OrderStatusValue } from "@/db/queries/orders"
 
 const STATUS_STYLES: Record<OrderStatusValue, string> = {
   new: "bg-secondary text-secondary-foreground",
-  source_shipped: "bg-chart-3 text-white",
-  packed: "bg-warning text-warning-foreground",
-  shipped: "bg-primary text-primary-foreground",
-  completed: "bg-[var(--pastel-green)] text-white",
+  accepted: "bg-chart-3 text-white",
+  preorder: "bg-chart-5 text-white",
+  packaging: "bg-warning text-warning-foreground",
+  shipping: "bg-primary text-primary-foreground",
+  complete: "bg-[var(--pastel-green)] text-white",
   cancelled: "bg-destructive text-destructive-foreground",
+  refund: "bg-muted text-muted-foreground",
 }
 
 const STATUS_LABEL_KEY: Record<OrderStatusValue, string> = {
   new: "order.statusNew",
-  source_shipped: "order.statusSourceShipped",
-  packed: "order.statusPacked",
-  shipped: "order.statusShipped",
-  completed: "order.statusCompleted",
+  accepted: "order.statusAccepted",
+  preorder: "order.statusPreorder",
+  packaging: "order.statusPackaging",
+  shipping: "order.statusShipping",
+  complete: "order.statusComplete",
   cancelled: "order.statusCancelled",
+  refund: "order.statusRefund",
 }
 
-export function OrderStatusBadge({ status }: { status: OrderStatusValue }) {
+export function OrderStatusBadge({ status, label }: { status: OrderStatusValue; label?: string }) {
   const t = useTranslations()
   return (
     <span
@@ -55,7 +59,7 @@ export function OrderStatusBadge({ status }: { status: OrderStatusValue }) {
         STATUS_STYLES[status]
       )}
     >
-      {t(STATUS_LABEL_KEY[status])}
+      {label ?? t(STATUS_LABEL_KEY[status])}
     </span>
   )
 }

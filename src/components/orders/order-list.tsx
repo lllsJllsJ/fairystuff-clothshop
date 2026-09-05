@@ -23,6 +23,8 @@ import { Link, usePathname, useRouter } from "@/i18n/navigation"
 import { formatBaht, formatDate } from "@/lib/format"
 import { exportToExcel } from "@/lib/export"
 import type { OrderSort, OrderStatusValue } from "@/db/queries/orders"
+import type { OrderStatusLabel } from "@/db/queries/settings"
+import { DEFAULT_ADMIN_STATUS_LABELS } from "@/lib/order-status"
 import { orderStatusValues } from "@/lib/validations/order"
 import type { OrderListApiResult, OrderListRow } from "@/app/api/admin/orders/route"
 import { deleteOrder, setOrderStatus } from "@/app/[locale]/admin/orders/actions"
@@ -43,14 +45,6 @@ function useDebounced<T>(value: T, delay = 350): T {
   return debounced
 }
 
-function statusLabelKey(status: OrderStatusValue): string {
-  const suffix = status
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join("")
-  return `order.status${suffix}`
-}
-
 /**
  * The single `/admin/orders` screen: date-range + status filters, search by
  * customer name or order number, sort, pagination, Excel export, and an
@@ -64,11 +58,15 @@ function statusLabelKey(status: OrderStatusValue): string {
  * search-term and item-count gaps in `getOrders()` are worked around — see
  * that file's header comment.
  */
-export function OrderList() {
+export function OrderList({ statusLabels, locale }: { statusLabels: OrderStatusLabel[]; locale: string }) {
   const t = useTranslations()
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const statusLabel = (status: OrderStatusValue) => {
+    const row = statusLabels.find((item) => item.status === status)
+    return locale === "en" ? (row?.labelEn ?? DEFAULT_ADMIN_STATUS_LABELS[status].en) : (row?.labelTh ?? DEFAULT_ADMIN_STATUS_LABELS[status].th)
+  }
 
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState<OrderStatusValue | "all">(
@@ -152,9 +150,14 @@ export function OrderList() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   async function handleStatusChange(row: OrderListRow, next: OrderStatusValue) {
-    const result = await setOrderStatus(row.id, next)
+    let refundReason: string | undefined
+    if (next === "refund") {
+      refundReason = window.prompt(t("order.refundReasonPrompt"))?.trim() || undefined
+      if (!refundReason) return
+    }
+    const result = await setOrderStatus(row.id, next, refundReason)
     if (!result.ok) {
-      toast.error(t("errors.generic"))
+      toast.error(result.error === "items_pending" ? t("order.itemsPending") : result.error === "reason_required" ? t("order.refundReasonRequired") : t("errors.generic"))
       return
     }
     toast.success(t("order.statusUpdated"))
@@ -187,7 +190,7 @@ export function OrderList() {
         [t("order.itemCount")]: row.itemCount,
         [t("order.itemsTotal")]: Number(row.itemsTotal),
         [t("order.profit")]: Number(row.profit ?? 0),
-        [t("order.status")]: t(statusLabelKey(row.status)),
+        [t("order.status")]: statusLabel(row.status),
       }))
     )
   }
@@ -245,7 +248,7 @@ export function OrderList() {
             onValueChange={(v) => changeStatus(v as OrderStatusValue | "all")}
             options={[
               { value: "all", label: t("common.all") },
-              ...orderStatusValues.map((s) => ({ value: s, label: t(statusLabelKey(s)) })),
+              ...orderStatusValues.map((s) => ({ value: s, label: statusLabel(s) })),
             ]}
             className="h-11 min-w-32"
           />
@@ -332,7 +335,7 @@ export function OrderList() {
                       onValueChange={(v) => handleStatusChange(row, v as OrderStatusValue)}
                       options={orderStatusValues.map((s) => ({
                         value: s,
-                        label: t(statusLabelKey(s)),
+                        label: statusLabel(s),
                       }))}
                       className="h-8 min-w-32"
                     />

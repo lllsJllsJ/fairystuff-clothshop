@@ -35,7 +35,7 @@ This is the one thing that actually needs to be checked repeatedly, and it
 is a security check, not a health check: Railway Postgres has no public API
 of its own (unlike the old Supabase design this replaced, which needed RLS
 to guard a publicly reachable database), so the only realistic way private product data
-(cost, supplier, exact stock depth) leaks to the public is through **this
+(product type, preorder lead time, cost, supplier, exact stock depth) leaks to the public is through **this
 app's own public endpoints accidentally selecting private columns** — see
 `docs/api-overview.md`'s "Public data contract" section for the mechanism
 (the RSC-payload leak path in particular).
@@ -48,7 +48,7 @@ BASE="https://<your-deploy>"     # or http://localhost:3000
 
 # 1. Public product API must never carry private fields
 curl -s "$BASE/api/products" \
-  | grep -Ei 'originalPrice|buyingSource|sourceLink|margin' \
+  | grep -Ei 'productType|preorderMinDays|preorderMaxDays|originalPrice|buyingSource|sourceLink|margin' \
   && echo "FAIL: private field leaked" || echo "PASS"
 
 # 2. Nor exact stock depth
@@ -57,7 +57,7 @@ curl -s "$BASE/api/products" | grep -E '"quantity"' \
 
 # 3. Nor the server-rendered detail page (RSC payload included)
 curl -s "$BASE/th/shop/<code>" \
-  | grep -Ei 'originalPrice|buyingSource|sourceLink|margin' \
+  | grep -Ei 'productType|preorderMinDays|preorderMaxDays|originalPrice|buyingSource|sourceLink|margin' \
   && echo "FAIL: leaked in HTML/RSC" || echo "PASS"
 
 # 4. Admin endpoints reject anonymous callers
@@ -104,7 +104,7 @@ Every monetary figure in the app is computed **in Postgres**, not in TypeScript:
 | `products.margin` | `GENERATED ALWAYS AS (sell_price - original_price)` |
 | `order_items.line_total` / `line_cost` | `GENERATED ALWAYS` |
 | `orders.items_total` / `items_cost` | maintained by the `recalc_order` trigger |
-| `orders.total_cost` / `profit` | `GENERATED ALWAYS` over the above |
+| `orders.total_cost` / `profit` | `GENERATED ALWAYS`; total cost includes item, shipping, packing, and advertising costs |
 
 None of that is visible to `tsc`. Drizzle cannot model `GENERATED ALWAYS`, and
 the trigger exists only in `drizzle/0000_init_extras.sql` — the file that is
@@ -126,7 +126,7 @@ schema assertions, then runs the query-layer assertions against the real
 nothing else on the machine — not even the `docker compose` dev database
 (different container name and port).
 
-It has two halves, 32 checks total: 8 schema checks plus 24 query-layer and
+It has two halves, 36 checks total: 8 schema checks plus 28 query-layer and
 transaction checks (including the two rollback/commit checks below). The
 first half executes the SQL guarantees directly:
 
@@ -134,14 +134,14 @@ The eight schema checks:
 
 1. `margin` computes from sell price minus cost
 2. `line_total` / `line_cost` compute per line
-3. Order totals aggregate correctly, including shipping and packing
+3. Order totals aggregate correctly, including shipping, packing, and advertising
 4. Changing a line quantity recomputes the order
 5. **Stock is untouched by orders** — manual stock is deliberate product
    behaviour. A FAIL here means someone added a decrement trigger. Do not
    "fix" it by making this check pass; remove the trigger.
 6. Order history survives deleting the product (the line is a snapshot;
    `product_id` nulls but `product_code` and the figures remain)
-7. Cancelled orders are excluded from revenue
+7. Cancelled and fully refunded orders are excluded from revenue
 8. Deleting an order cascades to its line items, leaving no orphans
 
 **Re-run after any change to either file under `drizzle/`.** All eight must
@@ -168,12 +168,14 @@ It asserts, among other things:
 - `getPublicProducts` / `getPublicProductByCode` return **no** private field,
   verified by a recursive scan of the returned structure rather than by
   inspection — this is the programmatic form of the leak test above
-- Public variants carry `inStock` and never `quantity`
+- Public variants carry selectable preorder options and never `quantity`;
+  public products expose characters but not product type or preorder-day fields
 - Product-code lookup is case-insensitive
 - Admin queries *do* see cost fields (the converse check — proving the split is
   real rather than just absent everywhere)
 - Order search matches by customer name and by order number, and misses cleanly
-- The dashboard and reports aggregates execute without SQL errors
+- Dashboard SKU/gross/net/cost totals and report advertising-cost aggregates
+  execute with the expected values
 - **`db.transaction()` rolls back on a thrown error** — a product inserted
   inside a transaction that then throws does not survive the transaction,
   proven by counting rows before and after

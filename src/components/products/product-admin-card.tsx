@@ -49,6 +49,16 @@ export function ProductAdminCard({ product }: { product: ProductWithRelations })
         {product.productType && (
           <p className="truncate text-small text-muted-foreground">{product.productType}</p>
         )}
+        {product.characters.length > 0 && (
+          <p className="line-clamp-1 text-small text-muted-foreground">
+            {product.characters.map((character) => character.name).join(", ")}
+          </p>
+        )}
+        <p className="text-small font-medium text-foreground">
+          {t("product.preorderLeadTime")}: {product.preorderMinDays != null && product.preorderMaxDays != null
+            ? t("product.preorderDaysRange", { min: product.preorderMinDays, max: product.preorderMaxDays })
+            : t("product.preorderNotSet")}
+        </p>
 
         <div className="mt-auto flex items-end justify-between gap-2 pt-2">
           <div className="flex flex-col">

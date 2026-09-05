@@ -1,10 +1,10 @@
 "use server"
 
-import { eq } from "drizzle-orm"
+import { and, eq, inArray } from "drizzle-orm"
 import { z } from "zod"
 
 import { db, txDb } from "@/db"
-import { orderItems, orderStatus, orders } from "@/db/schema"
+import { orderItems, orderItemStatuses, orderStatus, orders } from "@/db/schema"
 import { getCurrentUser } from "@/lib/auth-helpers"
 import { isOwner } from "@/lib/roles"
 import { orderFormSchema, type OrderFormValues } from "@/lib/validations/order"
@@ -43,20 +43,12 @@ import { revalidateOrders } from "./revalidate"
  * `deleteProduct` relies on cascade for variants/images.
  *
  * ---------------------------------------------------------------------
- * ORDER ITEMS HAVE NO CLIENT-SIDE IDENTITY — this diverges from
- * `updateProduct`'s variant handling on purpose
+ * ORDER-ITEM IDENTITY IS LOAD-BEARING
  * ---------------------------------------------------------------------
- * `productVariantSchema` (validations/product.ts) carries an optional
- * `id` so `updateProduct` can delta-match: update existing rows by id,
- * delete the ones dropped, insert the ones without an id. `orderItemSchema`
- * (validations/order.ts — not a file this phase owns, so it is used
- * as-is) has NO `id` field at all. There is nothing to delta-match
- * against, so `updateOrder` instead deletes every existing `order_items`
- * row for the order and reinserts the submitted set fresh, inside the
- * same transaction. This sidesteps the primary-key-vs-arbiter trap Phase 3
- * hit entirely (there are no pre-existing ids being re-sent) and is the
- * correct behavior for this schema shape, not a shortcut around it — see
- * the phase report for the fuller reasoning.
+ * Fulfillment and refund metadata belongs to each order-item row, so edits
+ * delta-match optional item ids: validate ownership, delete removed ids,
+ * update retained rows, insert new rows. Never regress this to delete-all /
+ * reinsert-all; doing so erases the per-item operational history.
  *
  * ---------------------------------------------------------------------
  * GENERATED / TRIGGER-MAINTAINED COLUMNS — never write these
@@ -101,6 +93,7 @@ function toItemRows(items: OrderFormValues["items"], orderId: string) {
   return items.map((item, i) => ({
     orderId,
     productId: item.productId ? item.productId : null,
+    productVariantId: item.productVariantId ? item.productVariantId : null,
     productCode: item.productCode,
     productName: item.productName,
     productType: toNullable(item.productType),
@@ -109,8 +102,19 @@ function toItemRows(items: OrderFormValues["items"], orderId: string) {
     productCost: toMoney(Number(item.productCost)),
     sellPrice: toMoney(Number(item.sellPrice)),
     quantity: Number(item.quantity),
+    statusCode: item.statusCode ?? "not_ordered",
     sortOrder: i,
   }))
+}
+
+async function submittedItemsResolved(items: OrderFormValues["items"]): Promise<boolean> {
+  const codes = [...new Set(items.map((item) => item.statusCode ?? "not_ordered"))]
+  const definitions = await db.select().from(orderItemStatuses).where(inArray(orderItemStatuses.code, codes))
+  const definitionMap = new Map(definitions.map((item) => [item.code, item]))
+  return items.every((item) => {
+    const definition = definitionMap.get(item.statusCode ?? "not_ordered")
+    return !!definition && (definition.isReceived || definition.isRefunded)
+  })
 }
 
 export async function createOrder(values: OrderFormValues): Promise<OrderResult> {
@@ -121,6 +125,8 @@ export async function createOrder(values: OrderFormValues): Promise<OrderResult>
   const parsed = orderFormSchema.safeParse(values)
   if (!parsed.success) return { ok: false, error: "invalid" }
   const v = parsed.data
+  if (v.status === "refund" && !toNullable(v.refundReason)) return { ok: false, error: "reason_required" }
+  if (v.status === "packaging" && !(await submittedItemsResolved(v.items))) return { ok: false, error: "items_pending" }
 
   let insertedId: string
   try {
@@ -134,7 +140,11 @@ export async function createOrder(values: OrderFormValues): Promise<OrderResult>
           customerPhone: toNullable(v.customerPhone),
           shippingCost: toMoney(v.shippingCost),
           packingCost: toMoney(v.packingCost),
+          advertisingCost: toMoney(v.advertisingCost),
+          shippingConfirmedAt: v.shippingConfirmed ? new Date() : null,
           status: v.status,
+          refundReason: v.status === "refund" ? toNullable(v.refundReason) : null,
+          refundedAt: v.status === "refund" ? new Date() : null,
           note: toNullable(v.note),
           createdBy: user.id,
         })
@@ -163,9 +173,21 @@ export async function updateOrder(id: string, values: OrderFormValues): Promise<
   const parsed = orderFormSchema.safeParse(values)
   if (!parsed.success) return { ok: false, error: "invalid" }
   const v = parsed.data
+  if (v.status === "refund" && !toNullable(v.refundReason)) return { ok: false, error: "reason_required" }
+  if (v.status === "packaging" && !(await submittedItemsResolved(v.items))) return { ok: false, error: "items_pending" }
 
   try {
     await txDb().transaction(async (tx) => {
+      const [currentOrder] = await tx
+        .select({
+          shippingConfirmedAt: orders.shippingConfirmedAt,
+          refundedAt: orders.refundedAt,
+        })
+        .from(orders)
+        .where(eq(orders.id, id))
+        .limit(1)
+      if (!currentOrder) throw new Error("not_found")
+
       const [updatedRow] = await tx
         .update(orders)
         .set({
@@ -175,7 +197,15 @@ export async function updateOrder(id: string, values: OrderFormValues): Promise<
           customerPhone: toNullable(v.customerPhone),
           shippingCost: toMoney(v.shippingCost),
           packingCost: toMoney(v.packingCost),
+          advertisingCost: toMoney(v.advertisingCost),
+          shippingConfirmedAt: v.shippingConfirmed
+            ? (currentOrder.shippingConfirmedAt ?? new Date())
+            : null,
           status: v.status,
+          ...(v.status === "refund" ? {
+            refundReason: toNullable(v.refundReason),
+            refundedAt: currentOrder.refundedAt ?? new Date(),
+          } : {}),
           note: toNullable(v.note),
           updatedAt: new Date(),
         })
@@ -184,11 +214,24 @@ export async function updateOrder(id: string, values: OrderFormValues): Promise<
 
       if (!updatedRow) throw new Error("not_found")
 
-      // Full replace — see the file header's "ORDER ITEMS HAVE NO
-      // CLIENT-SIDE IDENTITY" note for why this is delete-all + insert-all
-      // rather than update-existing-by-id.
-      await tx.delete(orderItems).where(eq(orderItems.orderId, id))
-      await tx.insert(orderItems).values(toItemRows(v.items, id))
+      const existing = await tx.select({ id: orderItems.id }).from(orderItems).where(eq(orderItems.orderId, id))
+      const existingIds = new Set(existing.map((item) => item.id))
+      const submittedIds = v.items.flatMap((item) => item.id ? [item.id] : [])
+      if (submittedIds.some((itemId) => !existingIds.has(itemId))) throw new Error("invalid_item")
+
+      const removedIds = [...existingIds].filter((itemId) => !submittedIds.includes(itemId))
+      if (removedIds.length) await tx.delete(orderItems).where(and(eq(orderItems.orderId, id), inArray(orderItems.id, removedIds)))
+
+      const rows = toItemRows(v.items, id)
+      for (let index = 0; index < v.items.length; index++) {
+        const item = v.items[index]
+        const row = rows[index]
+        if (item.id) {
+          await tx.update(orderItems).set(row).where(and(eq(orderItems.id, item.id), eq(orderItems.orderId, id)))
+        } else {
+          await tx.insert(orderItems).values(row)
+        }
+      }
     })
   } catch (error) {
     if (error instanceof Error && error.message === "not_found") {
@@ -219,7 +262,7 @@ export async function deleteOrder(id: string): Promise<ActionResult> {
   return { ok: true, id }
 }
 
-export async function setOrderStatus(id: string, status: string): Promise<ActionResult> {
+export async function setOrderStatus(id: string, status: string, refundReason?: string): Promise<ActionResult> {
   const user = await getCurrentUser()
   if (!user) return { ok: false, error: "unauthorized" }
   if (!isOwner(user.role)) return { ok: false, error: "forbidden" }
@@ -227,9 +270,27 @@ export async function setOrderStatus(id: string, status: string): Promise<Action
   const parsed = z.enum(orderStatus.enumValues).safeParse(status)
   if (!parsed.success) return { ok: false, error: "invalid" }
 
+  if (parsed.data === "packaging") {
+    const itemStates = await db
+      .select({ isReceived: orderItemStatuses.isReceived, isRefunded: orderItemStatuses.isRefunded })
+      .from(orderItems)
+      .leftJoin(orderItemStatuses, eq(orderItems.statusCode, orderItemStatuses.code))
+      .where(eq(orderItems.orderId, id))
+    if (!itemStates.length || itemStates.some((item) => !item.isReceived && !item.isRefunded)) {
+      return { ok: false, error: "items_pending" }
+    }
+  }
+
+  const reason = toNullable(refundReason)
+  if (parsed.data === "refund" && !reason) return { ok: false, error: "reason_required" }
+
   const [row] = await db
     .update(orders)
-    .set({ status: parsed.data, updatedAt: new Date() })
+    .set({
+      status: parsed.data,
+      ...(parsed.data === "refund" ? { refundReason: reason, refundedAt: new Date() } : {}),
+      updatedAt: new Date(),
+    })
     .where(eq(orders.id, id))
     .returning({ id: orders.id })
 
@@ -237,4 +298,53 @@ export async function setOrderStatus(id: string, status: string): Promise<Action
 
   revalidateOrders(id)
   return { ok: true, id }
+}
+
+export async function setOrderItemStatus(
+  orderId: string,
+  itemId: string,
+  statusCode: string,
+  refundReason?: string
+): Promise<ActionResult> {
+  const user = await getCurrentUser()
+  if (!user) return { ok: false, error: "unauthorized" }
+  if (!isOwner(user.role)) return { ok: false, error: "forbidden" }
+
+  const [definition] = await db
+    .select()
+    .from(orderItemStatuses)
+    .where(eq(orderItemStatuses.code, statusCode))
+    .limit(1)
+  if (!definition || !definition.isActive) return { ok: false, error: "invalid" }
+  const reason = toNullable(refundReason)
+  if (definition.isRefunded && !reason) return { ok: false, error: "reason_required" }
+
+  const [item] = await db
+    .update(orderItems)
+    .set({
+      statusCode,
+      ...(definition.isRefunded ? { refundReason: reason, refundedAt: new Date() } : {}),
+    })
+    .where(and(eq(orderItems.id, itemId), eq(orderItems.orderId, orderId)))
+    .returning({ id: orderItems.id })
+  if (!item) return { ok: false, error: "not_found" }
+
+  const states = await db
+    .select({ isRefunded: orderItemStatuses.isRefunded })
+    .from(orderItems)
+    .leftJoin(orderItemStatuses, eq(orderItems.statusCode, orderItemStatuses.code))
+    .where(eq(orderItems.orderId, orderId))
+  if (states.length > 0 && states.every((state) => state.isRefunded)) {
+    await db.update(orders).set({
+      status: "refund",
+      refundReason: reason ?? "All items refunded",
+      refundedAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(orders.id, orderId))
+  } else {
+    await db.update(orders).set({ updatedAt: new Date() }).where(eq(orders.id, orderId))
+  }
+
+  revalidateOrders(orderId)
+  return { ok: true, id: itemId }
 }

@@ -1,19 +1,17 @@
-import { useTranslations } from "next-intl"
+import { getTranslations } from "next-intl/server"
 
 import { Link } from "@/i18n/navigation"
 import {
   BRAND_NAME,
   BRAND_TAGLINE_EN,
   BRAND_TAGLINE_TH,
-  INSTAGRAM_HANDLE,
-  INSTAGRAM_URL,
-  LINE_ID,
-  LINE_URL,
 } from "@/lib/brand"
+import { contactLinks, getShopSettings } from "@/db/queries/settings"
 
 /** DESIGN.md §4 "Footer Link": sky blue, hover darkens + underlines. */
-export function SiteFooter({ locale }: { locale: string }) {
-  const t = useTranslations()
+export async function SiteFooter({ locale }: { locale: string }) {
+  const [t, settings] = await Promise.all([getTranslations(), getShopSettings()])
+  const links = contactLinks(settings)
   const tagline = locale === "th" ? BRAND_TAGLINE_TH : BRAND_TAGLINE_EN
   const year = new Date().getFullYear()
 
@@ -34,12 +32,13 @@ export function SiteFooter({ locale }: { locale: string }) {
 
         <div className="flex flex-col gap-2">
           <p className="text-small font-bold text-foreground">{t("footer.contact")}</p>
-          <a href={LINE_URL} target="_blank" rel="noopener noreferrer" className="text-link hover:text-link-hover hover:underline">
-            LINE: {LINE_ID}
-          </a>
-          <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer" className="text-link hover:text-link-hover hover:underline">
-            Instagram: @{INSTAGRAM_HANDLE}
-          </a>
+          {links.lineUrl && <a href={links.lineUrl} target="_blank" rel="noopener noreferrer" className="text-link hover:text-link-hover hover:underline">
+            LINE: {settings.lineId}
+          </a>}
+          {links.instagramUrl && <a href={links.instagramUrl} target="_blank" rel="noopener noreferrer" className="text-link hover:text-link-hover hover:underline">
+            Instagram: @{settings.instagramHandle}
+          </a>}
+          {!links.lineUrl && !links.instagramUrl && <span className="text-body text-muted-foreground">—</span>}
         </div>
       </div>
 

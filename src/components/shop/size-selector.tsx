@@ -16,7 +16,7 @@ export function SizeSelector({
   value,
   onChange,
 }: {
-  sizes: { size: string; inStock: boolean }[]
+  sizes: string[]
   value: string | null
   onChange: (size: string) => void
 }) {
@@ -29,7 +29,7 @@ export function SizeSelector({
       <p className="text-subtitle font-bold text-foreground">{t("shop.sizeLabel")}</p>
       <RadioChipGroup
         ariaLabel={t("shop.selectSize")}
-        options={sizes.map((s) => ({ value: s.size, label: s.size, disabled: !s.inStock }))}
+        options={sizes.map((size) => ({ value: size, label: size }))}
         value={value}
         onChange={onChange}
         className="flex flex-wrap gap-2"
@@ -40,12 +40,9 @@ export function SizeSelector({
               selected
                 ? "border-primary bg-primary text-primary-foreground"
                 : "border-[var(--border-lighter)] bg-background text-foreground hover:border-primary",
-              option.disabled &&
-                "text-muted-foreground opacity-50 line-through hover:border-[var(--border-lighter)]"
             )}
           >
             {option.label}
-            {option.disabled && <span className="sr-only"> — {t("shop.soldOut")}</span>}
           </span>
         )}
       />

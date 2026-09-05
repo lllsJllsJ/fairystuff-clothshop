@@ -5,60 +5,73 @@
 **Bootstrap & Auth**
 1. [Request / Proxy Bootstrap — Locale Negotiation + Auth Guard](#request--proxy-bootstrap--locale-negotiation--auth-guard)
 2. [Login](#login)
-3. [Session — JWT Callbacks](#session--jwt-callbacks)
-4. [Sign Out](#sign-out)
-5. [Locale Switch](#locale-switch)
+3. [Customer Registration](#customer-registration)
+4. [Email Verification + Resend](#email-verification--resend)
+5. [Password Reset](#password-reset)
+6. [Session — JWT Callbacks](#session--jwt-callbacks)
+7. [Sign Out](#sign-out)
+8. [Locale Switch](#locale-switch)
 
-**Public**
-6. [Home — ISR Render](#home--isr-render)
-7. [About — ISR Render](#about--isr-render)
-8. [Catalogue — SSR + Client Hydration (`/shop`)](#catalogue--ssr--client-hydration-shop)
-9. [`GET /api/products` — Client-Side Filter/Sort/Paginate](#get-apiproducts--client-side-filtersortpaginate)
-10. [Product Detail — Static Generation + Metadata + JSON-LD](#product-detail--static-generation--metadata--json-ld)
-11. [Colour Selection](#colour-selection)
-12. [Size Selection / Sold-Out](#size-selection--sold-out)
-13. [Filter + Sort — URL Sync](#filter--sort--url-sync)
-14. [Sitemap](#sitemap)
-15. [Robots](#robots)
-16. [404 — Draft/Archived/Unknown Product Code](#404--draftarchivedunknown-product-code)
-17. [`GET /api/images/[...key]` — Private Bucket Read](#get-apiimageskey--private-bucket-read)
+**Public storefront & customer commerce**
+9. [Home — ISR Render](#home--isr-render)
+10. [About — ISR Render](#about--isr-render)
+11. [Catalogue — SSR + Client Hydration (`/shop`)](#catalogue--ssr--client-hydration-shop)
+12. [`GET /api/products` — Client-Side Filter/Sort/Paginate](#get-apiproducts--client-side-filtersortpaginate)
+13. [Product Detail — Static Generation + Metadata + JSON-LD](#product-detail--static-generation--metadata--json-ld)
+14. [Colour Selection](#colour-selection)
+15. [Size Selection / Preorder](#size-selection--preorder)
+16. [Filter + Sort — URL Sync](#filter--sort--url-sync)
+17. [Local Cart](#local-cart)
+18. [Checkout + Order Creation](#checkout--order-creation)
+19. [Order-ID Contact Handoff](#order-id-contact-handoff)
+20. [Customer Order Tracking](#customer-order-tracking)
+21. [Sitemap](#sitemap)
+22. [Robots](#robots)
+23. [404 — Draft/Archived/Unknown Product Code](#404--draftarchivedunknown-product-code)
+24. [`GET /api/images/[...key]` — Private Bucket Read](#get-apiimageskey--private-bucket-read)
 
 **Admin**
-18. [Admin Dashboard](#admin-dashboard)
-19. [Product Browse](#product-browse)
-20. [Image Upload — Resize → Presign → Bucket PUT](#image-upload--resize--presign--bucket-put)
-21. [Create Product](#create-product)
-22. [Product Code Generation](#product-code-generation)
-23. [Edit Product + Cover Reorder](#edit-product--cover-reorder)
-24. [Inline Table Edit](#inline-table-edit)
-25. [Delete Product](#delete-product)
-26. [Variant Rows Save](#variant-rows-save)
-27. [Excel Import — Parse → Preview → Commit](#excel-import--parse--preview--commit)
-28. [Orders List](#orders-list)
-29. [Create Order](#create-order)
-30. [Edit Order](#edit-order)
-31. [Quick Order Status Change](#quick-order-status-change)
-32. [Print Order Receipt](#print-order-receipt)
-33. [Delete Order](#delete-order)
-34. [Reports — View + Excel Export + Print](#reports--view--excel-export--print)
-35. [Settings — Create Product Type](#settings--create-product-type)
-36. [Settings — Rename Product Type (Cascade)](#settings--rename-product-type-cascade)
-37. [Settings — Delete Product Type (Blocked When In Use)](#settings--delete-product-type-blocked-when-in-use)
-38. [Settings — Reorder Product Types](#settings--reorder-product-types)
-39. [Settings — Clear Shop Data](#settings--clear-shop-data)
+25. [Admin Dashboard](#admin-dashboard)
+26. [Product Browse](#product-browse)
+27. [Image Upload — Resize → Presign → Bucket PUT](#image-upload--resize--presign--bucket-put)
+28. [Create Product](#create-product)
+29. [Product Code Generation](#product-code-generation)
+30. [Edit Product + Cover Reorder](#edit-product--cover-reorder)
+31. [Inline Table Edit](#inline-table-edit)
+32. [Delete Product](#delete-product)
+33. [Variant Rows Save](#variant-rows-save)
+34. [Excel Import — Parse → Preview → Commit](#excel-import--parse--preview--commit)
+35. [Orders List](#orders-list)
+36. [Create Order](#create-order)
+37. [Edit Order](#edit-order)
+38. [Quick Order Status Change](#quick-order-status-change)
+39. [Line-Item Fulfillment + Partial Refund](#line-item-fulfillment--partial-refund)
+40. [Full Order Refund](#full-order-refund)
+41. [Print Order Receipt](#print-order-receipt)
+42. [Delete Order](#delete-order)
+43. [Reports — View + Excel Export + Print](#reports--view--excel-export--print)
+44. [Settings — Create Product Type](#settings--create-product-type)
+45. [Settings — Rename Product Type (Cascade)](#settings--rename-product-type-cascade)
+46. [Settings — Delete Product Type (Blocked When In Use)](#settings--delete-product-type-blocked-when-in-use)
+47. [Settings — Reorder Product Types](#settings--reorder-product-types)
+48. [Settings — Clear Shop Data](#settings--clear-shop-data)
+49. [Settings — Shop Contacts](#settings--shop-contacts)
+50. [Settings — Character Taxonomy](#settings--character-taxonomy)
+51. [Settings — Order Status Labels](#settings--order-status-labels)
+52. [Settings — Line-Item Status Lifecycle](#settings--line-item-status-lifecycle)
 
 **Catalogue CLI**
-40. [Catalogue Prepare — Workbook Extraction](#catalogue-prepare--workbook-extraction)
-41. [Catalogue Prepare — Supplier Enrichment + Workbook Fallback](#catalogue-prepare--supplier-enrichment--workbook-fallback)
-42. [Catalogue Verify + Import Dry Run](#catalogue-verify--import-dry-run)
-43. [Catalogue Apply — Storage Staging](#catalogue-apply--storage-staging)
-44. [Catalogue Apply — Transactional Replacement](#catalogue-apply--transactional-replacement)
-45. [Catalogue Apply — Rollback + Object Cleanup](#catalogue-apply--rollback--object-cleanup)
+53. [Catalogue Prepare — Workbook Extraction](#catalogue-prepare--workbook-extraction)
+54. [Catalogue Prepare — Supplier Enrichment + Workbook Fallback](#catalogue-prepare--supplier-enrichment--workbook-fallback)
+55. [Catalogue Verify + Import Dry Run](#catalogue-verify--import-dry-run)
+56. [Catalogue Apply — Storage Staging](#catalogue-apply--storage-staging)
+57. [Catalogue Apply — Transactional Replacement](#catalogue-apply--transactional-replacement)
+58. [Catalogue Apply — Rollback + Object Cleanup](#catalogue-apply--rollback--object-cleanup)
 
 **Cross-cutting**
-46. [Storefront Revalidation After a Product Mutation](#storefront-revalidation-after-a-product-mutation)
-47. [Unauthorized / Forbidden Denial Paths](#unauthorized--forbidden-denial-paths)
-48. [Transaction Rollback on Mid-Write Failure](#transaction-rollback-on-mid-write-failure)
+59. [Storefront Revalidation After a Product Mutation](#storefront-revalidation-after-a-product-mutation)
+60. [Unauthorized / Forbidden Denial Paths](#unauthorized--forbidden-denial-paths)
+61. [Transaction Rollback on Mid-Write Failure](#transaction-rollback-on-mid-write-failure)
 
 ---
 
@@ -88,7 +101,7 @@ strip locale segment -> bare path
 protected prefix + no session? ──yes──▶ 307 redirect to /<locale>/login?redirect=<path>
   │no
   ▼
-already signed in + path === /login? ──yes──▶ 307 redirect to /<locale>/admin
+already signed in + path === /login? ──yes──▶ owner -> /admin; customer -> /account/orders
   │no
   ▼
 pass through to the matched page
@@ -97,7 +110,8 @@ pass through to the matched page
 Failure/edge behavior: an `/api/**` path never gets a redirect — it fails
 with a JSON `401`, because a `fetch`/`curl` caller following a redirect would
 otherwise see a `200` HTML login page instead of a clear failure. Protected
-prefixes are a **denylist** (`/admin`, `/api/admin`, `/api/uploads`) — the
+prefixes are a **denylist** (`/admin`, `/account`, `/checkout`, `/api/admin`,
+`/api/uploads`) — the
 inverse of an allowlist — because this shop's storefront is public-by-default.
 
 ## Login
@@ -123,10 +137,12 @@ called from `LoginForm`. Triggered by submitting the sign-in form on `/login`.
               JWT session issued      AuthError thrown
                      │                      │
                      ▼                      ▼
-        { ok: true } returned      { ok:false, error:"invalid" }
+        { ok: true, role }         { ok:false, error:"invalid" }
                      │                      │
                      ▼                      ▼
-      client router.push(redirectTo)  toast: invalidCredentials
+      role-safe redirect: owner/admin,
+      customer/account or checkout,
+      staff/home                   toast: invalidCredentials
 ```
 
 Failure: **every** failure mode — malformed input, unknown email, wrong
@@ -212,7 +228,7 @@ locales at build time (`generateStaticParams`), revalidates every 300s.
                           ┌───yes─────┴─────no────┐
                           ▼                        ▼
               re-render: getPublicProducts     serve cached HTML
-              (newest 6) + getPublicTypes
+              (newest 6) + getPublicCharacters + shop contacts
               via db/queries/storefront.ts
               (PUBLIC_PRODUCT_COLUMNS only)
                           │
@@ -220,8 +236,7 @@ locales at build time (`generateStaticParams`), revalidates every 300s.
                 cache updated, served
 ```
 
-Failure: `getPublicProducts`/`getPublicTypes` are wrapped in try/catch
-(`safeGetPublicProducts`/`safeGetPublicTypes`) — a database error during
+Failure: product/character reads are wrapped in try/catch — a database error during
 prerender (e.g. a database-less CI build) falls back to an empty result
 instead of failing the build; a live database error at revalidation time
 means the previously-cached page keeps serving until the next successful
@@ -229,8 +244,8 @@ revalidation.
 
 ## About — ISR Render
 
-`GET /about`, `src/app/[locale]/(shop)/about/page.tsx`. Static, no database
-read at all — brand copy comes from `src/lib/brand.ts` constants.
+`GET /about`, `src/app/[locale]/(shop)/about/page.tsx`. Brand copy is static;
+the contact CTA reads the owner-managed shop contacts.
 
 ```
 ┌────────┐  GET /<locale>/about   ┌─────────────────────┐
@@ -238,7 +253,8 @@ read at all — brand copy comes from `src/lib/brand.ts` constants.
 └────────┘                        └──────────────────────┘
 ```
 
-Failure: none — no external dependency to fail against.
+Failure: during a database-less production build, missing shop settings fall
+back to no contact CTA. At runtime a database failure propagates.
 
 ## Catalogue — SSR + Client Hydration (`/shop`)
 
@@ -250,7 +266,7 @@ for SEO, and an `initialData` seed so the client doesn't refetch on load.
 ┌────────┐ GET /<locale>/shop  ┌───────────────────┐
 │ Browser│ ──────────────────▶ │ Server render (ISR) │
 └────────┘                     │ getPublicProducts    │
-                                │ getPublicTypes        │
+                                │ getPublicCharacters   │
                                 │ (page 1, no filters)  │
                                 └──────────┬────────────┘
                                            │ HTML + initialResult
@@ -261,6 +277,10 @@ for SEO, and an `initialData` seed so the client doesn't refetch on load.
                                  │ = initialResult        │
                                  │ (no refetch on load)   │
                                  └──────────────────────┘
+                                           │
+                                           ▼
+                                 ProductGrid: 2 columns on mobile,
+                                 3 on large, 4 on extra-large screens
 ```
 
 Failure: same try/catch fallback pattern as the home page — a database
@@ -349,7 +369,7 @@ Failure: none — pure client state, no network call. A colour with zero
 stock across every size still renders (desaturated chip) so the shopper can
 browse its photos; it just starts every size disabled.
 
-## Size Selection / Sold-Out
+## Size Selection / Preorder
 
 Client interaction inside `ProductDetail` → `SizeSelector`, on `/shop/[code]`.
 
@@ -358,17 +378,17 @@ Client interaction inside `ProductDetail` → `SizeSelector`, on `/shop/[code]`.
 │ Browser│ ────────────────▶│ SizeSelector state │
 └────────┘                  └──────────┬──────────┘
                                         ▼
-                          quantity > 0 for (colour, size)? ──no──▶ chip stays
-                                        │yes                        aria-disabled,
-                                        ▼                            click no-ops
-                          selection recorded (contact-CTA copy
-                          can reference it; no checkout exists)
+                          matching (colour, size) variant exists?
+                                  │yes                 │no
+                                  ▼                    ▼
+                          selection recorded      add-to-cart prompts
+                          (stock is ignored for   for a valid selection
+                           preorder products)
 ```
 
-Failure: a sold-out size is rendered `aria-disabled` (struck through), never
-removed from the list — clicking it is a no-op, not an error. There is no
-checkout flow to fail; the storefront's CTA is a LINE/Instagram DM link, not
-a cart.
+Failure: an add-to-cart attempt without a required variant selection is
+rejected in the client. Exact stock depth and sold-out state are admin-only;
+all active configured variants remain available for preorder.
 
 ## Filter + Sort — URL Sync
 
@@ -469,14 +489,27 @@ admin layout's `requireOwner()` forces that for the whole subtree.
                                fetched once, aggregated in JS)
                                         │
                                         ▼
-                      KPI cards + charts (Recharts) + alerts panel
-                      (no photo / no price / no variants / all sold out)
+                      10 KPI cards:
+                      total / ready / sold-out SKUs, orders, revenue,
+                      gross profit, advertising / shipping / packaging,
+                      net profit
+                                        │
+                                        ▼
+                      Recharts: monthly total cost vs net profit
+                      + product-type distribution (no stock-level chart)
+                                        │
+                                        ▼
+                      alerts: no photo / price / variants / all sold out
 ```
 
 Failure: this route never runs at prerender time (it's gated dynamic), so
 there is no build-time fallback path like the public pages have — a
 database error here surfaces as a normal Next.js error boundary/500, since
 the owner is already authenticated and expects live data.
+
+Cancelled orders are excluded. Gross profit is item revenue minus item cost;
+net profit additionally subtracts shipping, packaging, and advertising. A SKU
+is one variant row: quantity above zero is ready to ship, and zero is sold out.
 
 ## Product Browse
 
@@ -573,6 +606,11 @@ Local development runs this flow unchanged against the MinIO container in
 above — resize, key building, the 3-layer validation, the presigned PUT — is
 the same code. See the README's Installation & Setup.
 
+Railway Bucket CORS must allow `PUT` with `Content-Type` from both the deployed
+origin and `http://localhost:3000`. A missing policy fails only the browser-to-
+bucket step; the admin page and presign request can still succeed, which makes
+this look like an Add Product form failure unless the browser upload is checked.
+
 ## Create Product
 
 `createProduct` Server Action, `src/app/[locale]/admin/products/actions.ts`.
@@ -583,13 +621,16 @@ Triggered by submitting `ProductForm` in create mode.
 │ Owner  │ ────────────▶│ createProduct()     │
 └────────┘               └──────┬───────────────┘
                                  │ auth -> isOwner -> zod parse
+                                 │ (empty code preview is allowed; image URL
+                                 │  must exactly match its validated key)
                                  ▼
                       db.transaction(async tx => {
                         nextProductCodeIn(tx, type)   <- code is MINTED here;
                           -> "TS-003"                     v.productCode (the
                                                           form's preview) is
                                                           ignored outright
-                        insert products (+ optional pre-set id)
+                        insert products (+ admin-only preorder day range)
+                        insert productCharacters[] (many-to-many links)
                         insert productVariants[]  (sortOrder = index)
                         insert productImages[]    (sortOrder = index)
                       })
@@ -611,6 +652,8 @@ back the whole transaction and returns `duplicate_code` — no partial
 product/variants/images row survives. Any other insert failure rolls back
 identically and returns `insert_failed`. Auth/role failures short-circuit
 before any database work at all (`unauthorized`/`forbidden`).
+Client validation failures also show an error toast; the submit can no longer
+stop silently because an asynchronous, disabled code-preview input is empty.
 
 ## Product Code Generation
 
@@ -684,7 +727,8 @@ star-clicking a different image to the front in the UI is what sets that.
                                      R2 cleanup runs after commit)
                                                      ▼
                               txDb().transaction(async tx => {
-                                update products
+                                update products (including preorder day range)
+                                replace productCharacters links
                                 delta-match productVariants:
                                   delete stale ids, update-by-id kept,
                                   upsert (productId,color,size) new ones
@@ -718,7 +762,7 @@ view) — Enter or blur saves, Escape cancels.
 └────────┘                        └──────────┬─────────────────┘
                                              │ auth -> isOwner -> zod parse
                                              ▼
-                                db.update(products).set({...})
+                                db.update(products).set({...preorder day range})
                                 (single statement, plain `db` —
                                  no multi-table write here)
                                              │
@@ -912,7 +956,8 @@ computes `orders.itemsTotal`/`itemsCost` from the inserted line items.
                                             │ auth -> isOwner -> zod parse
                                             ▼
                              txDb().transaction(async tx => {
-                               insert orders (shipping/packing/status/note)
+                               insert orders (shipping/packing/advertising/
+                                 status/note)
                                insert orderItems[] (snapshotted product
                                  fields: code/name/type/color/size/cost/price)
                              })
@@ -920,8 +965,10 @@ computes `orders.itemsTotal`/`itemsCost` from the inserted line items.
                                      [Postgres AFTER INSERT trigger fires
                                       on order_items -> recalc_order(order_id)
                                       -> orders.items_total/items_cost updated
-                                      -> totalCost/profit GENERATED columns
-                                         recompute automatically]
+                                      -> GENERATED columns recompute:
+                                         totalCost = itemsCost + shipping
+                                           + packing + advertising
+                                         profit = itemsTotal - totalCost]
                                             │
                                     success? ──no──▶ insert_failed (rollback)
                                         │yes
@@ -947,9 +994,12 @@ mode from `/admin/orders/[id]`.
                                         │ auth -> isOwner -> zod parse
                                         ▼
                           txDb().transaction(async tx => {
-                            update orders (shipping/packing/status/etc)
-                            delete ALL existing orderItems for this order
-                            insert the submitted items[] fresh
+                            update orders (shipping/packing/advertising,
+                              shipping confirmation, refund fields, status)
+                            validate submitted item ids belong to this order
+                            delete only removed item ids
+                            update existing item ids in place
+                            insert only new item rows
                           })
                                         │
                               [recalc_order trigger fires again on both
@@ -960,11 +1010,9 @@ mode from `/admin/orders/[id]`.
                               revalidateOrders(id)
 ```
 
-Failure: order line items have no client-side identity (`orderItemSchema`
-carries no `id`), so edits are always **delete-all, reinsert-all** inside one
-transaction — not a delta-match like variants. A failure mid-transaction
-rolls back both the delete and the reinsert, so the order is never left with
-zero or duplicate line items.
+Failure: a forged line-item id that belongs to another order is rejected.
+Preserving existing ids also preserves each line's independently managed
+preorder/refund history. Any mid-write failure rolls back the whole edit.
 
 ## Quick Order Status Change
 
@@ -977,15 +1025,19 @@ zero or duplicate line items.
 └────────┘                   └──────────┬───────────────┘
                                         │ auth -> isOwner -> enum parse
                                         ▼
-                              db.update(orders).set({status})
+                              target packaging? -> verify every item is
+                                received or refunded
+                              target refund? -> require refund reason
+                              db.update(orders).set({status, refund metadata})
                               (single statement)
                                         │
                                         ▼
                               revalidateOrders(id)
 ```
 
-Failure: an invalid status value fails the zod enum parse before any write
-(`invalid`); a nonexistent order id returns `not_found`.
+Failure: an invalid status fails before a write; `packaging` returns
+`items_pending` until every line is resolved; `refund` returns
+`reason_required` without a reason; a missing id returns `not_found`.
 
 ## Print Order Receipt
 
@@ -1005,6 +1057,8 @@ no server round trip.
 
 Failure: none — no network call; if the browser blocks the print dialog
 (popup-blocker-adjacent behavior) the button simply does nothing further.
+Advertising cost is internal accounting data and is deliberately omitted from
+the customer-facing receipt; it remains visible in the admin form and reports.
 
 ## Delete Order
 
@@ -1053,6 +1107,9 @@ inventory (a point-in-time snapshot that ignores the date range).
                                                                           │
                                                                           ▼
                                                              ReportView renders table
+                                                             + summary cards; monthly/
+                                                             annual include each order's
+                                                             advertising cost
                                                                           │
                                           ┌───────────────────┴───────────────────┐
                                           ▼                                       ▼
@@ -1069,6 +1126,10 @@ Grouping `profitByProduct` on the **snapshotted** `productCode` (not the
 soft-linked, nullable `productId`) is what keeps a deleted product's
 historical profit visible in this report after the product row itself is
 gone.
+
+Advertising is order-level rather than line-level, so it appears in monthly
+and annual summaries, tables, Excel exports, and net profit. It is not
+arbitrarily allocated across products in the profit-by-product tab.
 
 ## Settings — Create Product Type
 
@@ -1611,3 +1672,245 @@ re-running after any change to `createProduct`/`updateProduct`/
 On laptop/desktop breakpoints, the 4:5 gallery width is clamped from the
 viewport height (360–560px wide). This keeps the main photo and thumbnail rail
 inside a typical laptop viewport; mobile retains the full-width gallery.
+
+## Customer Registration
+
+`/register` submits name, normalized email, and password to
+`registerCustomer`. The only role this public action can create is `customer`.
+
+```
+Customer -> signupSchema -> email already exists?
+                              | yes -> generic success (no enumeration)
+                              | no
+                              v
+                    bcrypt hash -> INSERT users(role=customer)
+                              |
+                 EMAIL_ENABLED=false? --yes--> email_verified_at=now()
+                              | no
+                              v
+                    issue hashed token -> Resend verification email
+```
+
+Failure: malformed input writes nothing. With email enabled, an email-send
+failure is reported while the safely hashed account remains available for the
+resend flow. With email disabled (the default), no Resend call is attempted and
+the new account can sign in immediately.
+
+## Email Verification + Resend
+
+`/verify-email?token=...` consumes a one-time verification token;
+`/resend-verification` requests a replacement when email is enabled.
+
+```
+Resend form -> normalized email -> user exists and unverified?
+                                      | no -> generic success
+                                      | yes
+                                      v
+                           cooldown -> replace hashed token -> Resend
+
+Verification link -> SHA-256 token lookup + expiry check
+                                      | valid
+                                      v
+                      transaction: verify user + delete verify tokens
+```
+
+Failure: raw tokens are never stored. Invalid/expired links show a generic
+message. When `EMAIL_ENABLED=false`, the resend page explains that email is
+unavailable and performs no external call.
+
+## Password Reset
+
+`/forgot-password` issues a one-hour token and `/reset-password?token=...`
+consumes it.
+
+```
+Email form -> generic response -> known account? -> hashed reset token -> Resend
+Reset link -> validate token/expiry -> bcrypt new password
+                                      -> delete every token for that user
+```
+
+Failure: reset requests never reveal whether an email exists. Invalid or
+expired tokens do not update the password. The entire feature is disabled in
+UI and server actions while `EMAIL_ENABLED=false`.
+
+## Local Cart
+
+The product detail add-to-cart action and `/cart` use `CartProvider`; cart data
+is device-local and contains public snapshot fields only.
+
+```
+Product detail -> choose colour/size + quantity -> addItem()
+                                                   |
+                                                   v
+                                    React cart state <-> localStorage
+                                                   |
+                                  header count + /cart edit/remove/subtotal
+```
+
+Failure: malformed stored JSON is discarded. Quantity is clamped to `1..99`.
+The server does not trust cart prices or product availability at checkout.
+
+## Checkout + Order Creation
+
+`/checkout` requires a signed-in customer. `submitCheckout` creates the durable
+order; no online payment or stock decrement occurs.
+
+```
+Customer -> phone/address + local cart -> checkoutSchema
+             |                               |
+             |                    LINE/Instagram configured?
+             |                               | no -> contact_missing
+             v                               v
+     reload active products + variants; compare ids and current prices
+                         | changed -> cart_changed
+                         v
+ transaction: INSERT order(status=new, customerId, checkoutKey)
+              INSERT snapshot line items(status=default configured status)
+                         |
+                         v
+         Postgres total trigger -> generated order number -> clear local cart
+```
+
+Failure: `checkoutKey` makes retries idempotent. A missing/inactive product,
+invalid variant, or changed price rejects the entire checkout. Shipping stays
+unconfirmed and excluded from the customer total until the owner confirms it.
+
+## Order-ID Contact Handoff
+
+`/checkout/success/[id]` is customer-scoped and shows the generated order
+number plus configured LINE/Instagram links.
+
+```
+Created order -> scoped lookup(customerId + orderId) -> copy order number
+                                                    -> open LINE / Instagram
+                                                    -> customer sends number
+                                                    -> owner accepts order
+```
+
+Failure: another customer's id returns 404. Missing contacts prevent checkout
+earlier, so a successfully created order always has at least one handoff path.
+
+## Customer Order Tracking
+
+`/account/orders` and `/account/orders/[id]` list/read only the signed-in
+customer's orders.
+
+```
+Customer session -> WHERE orders.customer_id = session.user.id
+                              |
+                 internal status mapped to customer stage
+ new -> Received; accepted/preorder/packaging -> Preparing
+ shipping -> Shipping; complete -> Complete
+ cancelled -> Cancelled; refund -> Refunded
+                              |
+                              v
+                 list/detail (view only; no mutation control)
+```
+
+Failure: unauthenticated visitors return to login with the intended path;
+owner/staff sessions are redirected away; cross-customer order ids return 404.
+
+## Line-Item Fulfillment + Partial Refund
+
+On `/admin/orders/[id]`, `OrderFulfillment` changes each order item's private
+status independently through `setOrderItemStatus`.
+
+```
+Owner -> choose item status -> owner check -> active definition lookup
+                                      |
+                         refunded status? -> require reason + timestamp
+                                      |
+                                      v
+                         UPDATE only that order_items row
+                                      |
+             all lines received/refunded? -> show "ready for packaging"
+                                      |
+                               owner confirms packaging
+```
+
+Failure: inactive/unknown statuses, forged item/order pairs, and refund without
+a reason are rejected. A partial refund leaves the order active while the
+remaining lines continue through preorder fulfillment.
+
+## Full Order Refund
+
+An owner can select the fixed `refund` order status, or the system moves there
+when every line item is changed to a status marked `isRefunded`.
+
+```
+Order refund selection -> reason required -> status=refund
+                                          -> refund_reason + refunded_at
+
+Last non-refunded line -> refunded -> all line definitions isRefunded?
+                                      | yes -> order status=refund + timestamp
+```
+
+Failure: this is an operational record only; no payment provider is called.
+Missing reasons are rejected, and the customer sees only the exceptional
+`Refunded` order stage—not private supplier/item workflow details. Fully
+refunded orders are excluded from dashboard/report revenue and profit.
+
+## Settings — Shop Contacts
+
+The owner saves LINE ID and Instagram handle in the singleton
+`shop_settings` row.
+
+```
+Owner -> Settings form -> validate + normalize -> UPSERT shop_settings(default)
+                                              -> revalidate storefront/settings
+                                              -> footer/CTA/checkout use links
+```
+
+Failure: empty values are allowed for maintenance, but checkout remains
+disabled until at least one contact is configured.
+
+## Settings — Character Taxonomy
+
+Character create/update/delete actions maintain the many-to-many taxonomy used
+instead of product type on customer pages.
+
+```
+Owner -> create character -> slug + sort order -> INSERT characters
+Owner -> product form -> character ids -> replace product_characters links
+Owner -> delete character -> links exist? --yes--> in_use
+                                      | no -> DELETE
+```
+
+Failure: duplicate names/slugs and invalid ids are rejected. Product types stay
+available in admin only; public collection/filter/detail/card queries select
+characters through the join table.
+
+## Settings — Order Status Labels
+
+Admin and customer status keys are fixed while their Thai/English labels are
+editable.
+
+```
+Owner -> choose fixed key + TH/EN labels -> enum validation
+                                           |
+                                           v
+                              UPSERT admin/customer label row
+                                           |
+                              admin list/form or customer tracking renders it
+```
+
+Failure: unknown keys and blank labels are rejected. Fixed keys preserve the
+workflow and the internal-to-customer mapping even when display text changes.
+
+## Settings — Line-Item Status Lifecycle
+
+The owner creates supplier-specific item statuses, chooses one default, and
+marks terminal received/refunded semantics.
+
+```
+Owner -> create/edit status(code, labels, active, received, refunded)
+                    |
+                    +-> choose default -> transaction clears old + sets new
+                    |
+                    +-> delete -> default or referenced? --yes--> blocked
+                                                       | no -> DELETE
+```
+
+Failure: only lowercase code keys are accepted; one partial unique index
+enforces a single default. Referenced statuses cannot be deleted, and inactive
+statuses remain visible on existing lines but cannot be newly selected.

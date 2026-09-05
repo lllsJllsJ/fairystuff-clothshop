@@ -4,7 +4,7 @@ import { Shirt } from "lucide-react"
 import type { PublicProductSummary } from "@/db/queries/storefront"
 import { ProductTile } from "@/components/shop/product-tile"
 
-/** DESIGN.md §5/§8: 4 columns desktop -> 3 tablet -> 2 mobile -> 1 extra-small. */
+/** Two compact cards per row on mobile, then 3/4 columns on larger screens. */
 export function ProductGrid({
   products,
   newCodes,
@@ -28,7 +28,7 @@ export function ProductGrid({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
       {products.map((product, index) => (
         <ProductTile
           key={product.id}

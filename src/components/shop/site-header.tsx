@@ -2,13 +2,14 @@
 
 import { useState, useTransition } from "react"
 import { useLocale, useTranslations } from "next-intl"
-import { Languages, Menu, Shirt } from "lucide-react"
+import { Languages, Menu, PackageSearch, Shirt, ShoppingBag } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Link, usePathname, useRouter } from "@/i18n/navigation"
 import type { Locale } from "@/i18n/request"
 import { BRAND_NAME } from "@/lib/brand"
 import { Button } from "@/components/ui/button"
+import { useCart } from "@/components/cart/cart-provider"
 import {
   Sheet,
   SheetClose,
@@ -35,6 +36,7 @@ export function SiteHeader() {
   const t = useTranslations()
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
+  const { count } = useCart()
 
   return (
     <header className="sticky top-0 z-[var(--z-fixed)] bg-primary shadow-[var(--shadow-raised-xs)]">
@@ -67,6 +69,31 @@ export function SiteHeader() {
         </nav>
 
         <div className="ml-auto flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            nativeButton={false}
+            render={<Link href="/account/orders" />}
+            aria-label={t("nav.orders")}
+            className="text-white hover:bg-white/10 hover:text-white"
+          >
+            <PackageSearch />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            nativeButton={false}
+            render={<Link href="/cart" />}
+            aria-label={t("nav.cart")}
+            className="relative text-white hover:bg-white/10 hover:text-white"
+          >
+            <ShoppingBag />
+            {count > 0 && (
+              <span className="absolute -top-1 -right-1 flex min-w-5 items-center justify-center rounded-full bg-white px-1 text-[10px] font-bold text-primary">
+                {count > 99 ? "99+" : count}
+              </span>
+            )}
+          </Button>
           <HeaderLocaleToggle />
           <Button
             variant="ghost"

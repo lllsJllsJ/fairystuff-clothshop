@@ -9,6 +9,8 @@ import { Link, usePathname, useRouter } from "@/i18n/navigation"
 import { formatBaht, formatDateTime, formatNumber } from "@/lib/format"
 import { exportToExcel, printReport } from "@/lib/export"
 import type { ReportsData, OrderStatusValue } from "@/db/queries/reports"
+import type { OrderStatusLabel } from "@/db/queries/settings"
+import { DEFAULT_ADMIN_STATUS_LABELS } from "@/lib/order-status"
 import { Button } from "@/components/ui/button"
 import { SimpleSelect } from "@/components/ui/simple-select"
 import {
@@ -24,14 +26,6 @@ export type ReportTab = "monthly" | "annual" | "profitByProduct" | "inventory"
 
 const YEARS_BACK = 4
 
-function statusLabelKey(status: OrderStatusValue): string {
-  const suffix = status
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join("")
-  return `order.status${suffix}`
-}
-
 /**
  * Tabbed monthly / annual / profit-by-product / inventory report. Every
  * number here comes straight from `getReportsData()` (Phase 6, plan §11 —
@@ -46,16 +40,27 @@ export function ReportView({
   tab,
   year,
   month,
+  statusLabels,
+  locale,
 }: {
   data: ReportsData
   tab: ReportTab
   year: number
   month: number
+  statusLabels: OrderStatusLabel[]
+  locale: string
 }) {
   const t = useTranslations()
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+
+  function statusLabel(status: OrderStatusValue) {
+    const row = statusLabels.find((item) => item.status === status)
+    return locale === "en"
+      ? (row?.labelEn ?? DEFAULT_ADMIN_STATUS_LABELS[status].en)
+      : (row?.labelTh ?? DEFAULT_ADMIN_STATUS_LABELS[status].th)
+  }
 
   function navigate(next: { tab?: ReportTab; year?: number; month?: number }) {
     const params = new URLSearchParams(searchParams.toString())
@@ -86,6 +91,7 @@ export function ReportView({
         revenue: null as number | null,
         cost: data.inventory.reduce((s, r) => s + r.stockValueAtCost, 0),
         profit: null as number | null,
+        advertising: null as number | null,
       }
     }
     if (tab === "profitByProduct") {
@@ -94,6 +100,7 @@ export function ReportView({
         revenue: data.profitByProduct.reduce((s, r) => s + r.totalRevenue, 0),
         cost: data.profitByProduct.reduce((s, r) => s + r.totalCost, 0),
         profit: data.profitByProduct.reduce((s, r) => s + r.totalProfit, 0),
+        advertising: null as number | null,
       }
     }
     return {
@@ -101,6 +108,7 @@ export function ReportView({
       revenue: data.orders.reduce((s, r) => s + r.itemsTotal, 0),
       cost: data.orders.reduce((s, r) => s + r.totalCost, 0),
       profit: data.orders.reduce((s, r) => s + r.profit, 0),
+      advertising: data.orders.reduce((s, r) => s + r.advertisingCost, 0),
     }
   }, [tab, data])
 
@@ -151,8 +159,9 @@ export function ReportView({
         [t("order.orderNo")]: r.orderNo,
         [t("order.orderDate")]: r.orderDate,
         [t("order.customerName")]: r.customerName,
-        [t("order.status")]: t(statusLabelKey(r.status)),
+        [t("order.status")]: statusLabel(r.status),
         [t("order.itemsTotal")]: r.itemsTotal,
+        [t("order.advertisingCost")]: r.advertisingCost,
         [t("order.totalCost")]: r.totalCost,
         [t("order.profit")]: r.profit,
       }))
@@ -224,11 +233,17 @@ export function ReportView({
           </p>
         )}
 
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
           <SummaryTile
             label={tab === "inventory" ? t("product.list") : tab === "profitByProduct" ? t("variant.quantity") : t("reports.ordersCount")}
             value={formatNumber(summary.count)}
           />
+          {summary.advertising !== null && (
+            <SummaryTile
+              label={t("reports.totalAdvertisingCost")}
+              value={formatBaht(summary.advertising)}
+            />
+          )}
           {summary.revenue !== null && (
             <SummaryTile label={t("reports.totalRevenue")} value={formatBaht(summary.revenue)} />
           )}
@@ -317,6 +332,7 @@ export function ReportView({
                   <TableHead>{t("order.customerName")}</TableHead>
                   <TableHead>{t("order.status")}</TableHead>
                   <TableHead className="text-right">{t("order.itemsTotal")}</TableHead>
+                  <TableHead className="text-right">{t("order.advertisingCost")}</TableHead>
                   <TableHead className="text-right">{t("order.totalCost")}</TableHead>
                   <TableHead className="text-right">{t("order.profit")}</TableHead>
                 </TableRow>
@@ -331,8 +347,9 @@ export function ReportView({
                     </TableCell>
                     <TableCell>{r.orderDate}</TableCell>
                     <TableCell className="max-w-40 truncate">{r.customerName}</TableCell>
-                    <TableCell>{t(statusLabelKey(r.status))}</TableCell>
+                    <TableCell>{statusLabel(r.status)}</TableCell>
                     <TableCell className="text-right tabular-nums">{formatBaht(r.itemsTotal)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatBaht(r.advertisingCost)}</TableCell>
                     <TableCell className="text-right tabular-nums">{formatBaht(r.totalCost)}</TableCell>
                     <TableCell
                       className={

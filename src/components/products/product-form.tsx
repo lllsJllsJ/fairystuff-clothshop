@@ -20,6 +20,7 @@ import {
 } from "@/lib/validations/product"
 import type { ProductWithRelations } from "@/db/queries/products"
 import type { ProductType } from "@/db/queries/product-types"
+import type { Character } from "@/db/queries/characters"
 import {
   createProduct,
   previewProductCode,
@@ -99,9 +100,11 @@ async function uploadProductImage(
 export function ProductForm({
   product,
   types,
+  characters,
 }: {
   product?: ProductWithRelations
   types: ProductType[]
+  characters: Character[]
 }) {
   const t = useTranslations()
   const router = useRouter()
@@ -138,6 +141,9 @@ export function ProductForm({
       originalPrice: product ? Number(product.originalPrice) : 0,
       buyingSource: product?.buyingSource ?? "",
       sourceLink: product?.sourceLink ?? "",
+      preorderMinDays: product?.preorderMinDays ?? "",
+      preorderMaxDays: product?.preorderMaxDays ?? "",
+      characterIds: product?.characters.map((character) => character.id) ?? [],
       status: product?.status ?? "active",
       variants:
         product?.variants.map((v) => ({
@@ -152,6 +158,7 @@ export function ProductForm({
 
   const typeOptions = useMemo(() => types.map((pt) => pt.name), [types])
   const selectedType = watch("productType") ?? ""
+  const selectedCharacterIds = watch("characterIds") ?? []
 
   /**
    * The product code is generated from the type, never typed (see
@@ -290,7 +297,10 @@ export function ProductForm({
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    <form
+      onSubmit={handleSubmit(onSubmit, () => toast.error(t("errors.invalid")))}
+      className="space-y-6"
+    >
       {/* Images */}
       <section className="space-y-3 border border-border bg-card p-4">
         <Label>{t("product.images")}</Label>
@@ -398,6 +408,46 @@ export function ProductForm({
         <div className="sm:col-span-2">
           <Field label={t("product.description")}>
             <Textarea rows={3} disabled={awaitingType} {...register("description")} />
+          </Field>
+        </div>
+        <Field
+          label={t("product.preorderMinDays")}
+          error={errors.preorderMinDays && t("errors.invalid")}
+        >
+          <Input type="number" inputMode="numeric" min={1} max={3650} {...register("preorderMinDays")} />
+        </Field>
+        <Field
+          label={t("product.preorderMaxDays")}
+          error={errors.preorderMaxDays && t("errors.invalid")}
+        >
+          <Input type="number" inputMode="numeric" min={1} max={3650} {...register("preorderMaxDays")} />
+        </Field>
+        <div className="sm:col-span-2">
+          <Field label={t("product.characters")} hint={t("product.charactersHint")}>
+            <div className="flex flex-wrap gap-2">
+              {characters.length === 0 ? (
+                <span className="text-small text-muted-foreground">{t("product.noCharacters")}</span>
+              ) : characters.map((character) => {
+                const selected = selectedCharacterIds.includes(character.id)
+                return (
+                  <Button
+                    key={character.id}
+                    type="button"
+                    size="sm"
+                    variant={selected ? "default" : "outline"}
+                    onClick={() => setValue(
+                      "characterIds",
+                      selected
+                        ? selectedCharacterIds.filter((id) => id !== character.id)
+                        : [...selectedCharacterIds, character.id],
+                      { shouldValidate: true, shouldDirty: true }
+                    )}
+                  >
+                    {character.name}{character.nameEn ? ` / ${character.nameEn}` : ""}
+                  </Button>
+                )
+              })}
+            </div>
           </Field>
         </div>
       </section>

@@ -10,6 +10,7 @@ import { Loader2 } from "lucide-react"
 import { login } from "@/app/[locale]/(auth)/login/actions"
 import { loginSchema, type LoginInput } from "@/lib/validations/auth"
 import { Button } from "@/components/ui/button"
+import { Link } from "@/i18n/navigation"
 import { Input } from "@/components/ui/input"
 import {
   Form,
@@ -28,12 +29,12 @@ import {
  * current locale, which would double it (`/th/th/admin`). The fallback
  * builds the same shape by hand from the current locale.
  */
-export function LoginForm() {
+export function LoginForm({ emailEnabled }: { emailEnabled: boolean }) {
   const t = useTranslations("auth")
   const locale = useLocale()
   const router = useRouter()
   const params = useSearchParams()
-  const redirectTo = params.get("redirect") || `/${locale}/admin`
+  const requestedRedirect = params.get("redirect")
 
   const [submitError, setSubmitError] = useState<string | null>(null)
 
@@ -53,7 +54,16 @@ export function LoginForm() {
       setSubmitError(t("invalidCredentials"))
       return
     }
-    router.push(redirectTo)
+    const fallback = result.role === "owner"
+      ? `/${locale}/admin`
+      : result.role === "customer"
+        ? `/${locale}/account/orders`
+        : `/${locale}`
+    const allowedRequested = requestedRedirect && (
+      (result.role === "owner" && requestedRedirect.startsWith(`/${locale}/admin`)) ||
+      (result.role === "customer" && ["/account", "/checkout"].some((path) => requestedRedirect.startsWith(`/${locale}${path}`)))
+    )
+    router.push(allowedRequested ? requestedRedirect : fallback)
     router.refresh()
   }
 
@@ -112,6 +122,11 @@ export function LoginForm() {
           {submitting && <Loader2 className="animate-spin" />}
           {submitting ? t("signingIn") : t("signIn")}
         </Button>
+        <div className="flex justify-between gap-3 text-small">
+          <Link href="/register" className="text-link hover:underline">{t("createAccount")}</Link>
+          {emailEnabled && <Link href="/forgot-password" className="text-link hover:underline">{t("forgotPassword")}</Link>}
+        </div>
+        {emailEnabled && <Link href="/resend-verification" className="text-center text-small text-link hover:underline">{t("resendVerification")}</Link>}
       </form>
     </Form>
   )

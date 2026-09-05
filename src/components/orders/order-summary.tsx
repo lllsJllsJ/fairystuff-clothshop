@@ -17,7 +17,8 @@ import type { OrderItemValues } from "@/lib/validations/order"
  *   itemsTotal = Σ(sellPrice * quantity)
  *   itemsCost  = Σ(productCost * quantity)
  *   totalCost  = itemsCost + shippingCost + packingCost
- *   profit     = itemsTotal - itemsCost - shippingCost - packingCost
+ *                + advertisingCost
+ *   profit     = itemsTotal - totalCost
  *   amountDue  = itemsTotal + shippingCost + packingCost   (display-only —
  *                no DB column backs this; it's what the customer pays)
  */
@@ -25,10 +26,12 @@ export function OrderSummary({
   items,
   shippingCost,
   packingCost,
+  advertisingCost,
 }: {
   items: OrderItemValues[]
   shippingCost: number
   packingCost: number
+  advertisingCost: number
 }) {
   const t = useTranslations()
 
@@ -42,8 +45,9 @@ export function OrderSummary({
   )
   const shipping = Number(shippingCost || 0)
   const packing = Number(packingCost || 0)
-  const totalCost = itemsCost + shipping + packing
-  const profit = itemsTotal - itemsCost - shipping - packing
+  const advertising = Number(advertisingCost || 0)
+  const totalCost = itemsCost + shipping + packing + advertising
+  const profit = itemsTotal - totalCost
   const amountDue = itemsTotal + shipping + packing
 
   return (
@@ -58,6 +62,7 @@ export function OrderSummary({
         <Row label={t("order.itemsCost")} value={formatBaht(itemsCost)} />
         <Row label={t("order.shippingCost")} value={formatBaht(shipping)} />
         <Row label={t("order.packingCost")} value={formatBaht(packing)} />
+        <Row label={t("order.advertisingCost")} value={formatBaht(advertising)} />
         <Row label={t("order.totalCost")} value={formatBaht(totalCost)} />
         <Row label={t("order.amountDue")} value={formatBaht(amountDue)} />
       </dl>

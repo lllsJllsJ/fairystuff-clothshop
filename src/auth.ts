@@ -28,8 +28,8 @@ import { loginSchema } from "@/lib/validations/auth"
  * config readable by Next 16's proxy, which decodes the session cookie
  * without touching the database — see src/proxy.ts).
  *
- * There is NO signup route. The only way an `owner` row is created is
- * `scripts/create-owner.ts` — do not add a public registration path.
+ * Public registration exists for customers only. The only way an `owner`
+ * row is created is `scripts/create-owner.ts`.
  */
 
 /**
@@ -72,6 +72,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const hash = user?.passwordHash ?? DUMMY_PASSWORD_HASH
         const valid = await bcrypt.compare(password, hash)
         if (!user || !valid) return null
+        if (user.role === "customer" && !user.emailVerifiedAt) return null
 
         return {
           id: user.id,

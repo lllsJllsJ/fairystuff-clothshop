@@ -20,6 +20,10 @@ the bottom.
   it is the design: there is no RLS in this stack (see `CLAUDE.md`), so a
   route handler's own check is what stops an anonymous or non-owner caller if
   the proxy's matcher is ever narrowed or the route is ever moved.
+- **Customer-gated pages/actions:** `/checkout` and `/account/**` require a
+  signed-in `customer`; order reads additionally filter on `customerId` so an
+  authenticated customer cannot fetch another customer's order. These flows
+  use Server Actions rather than separate JSON endpoints.
 
 ---
 
@@ -34,10 +38,9 @@ nothing is trusted to be well-formed.
 | Param | Type | Notes |
 |---|---|---|
 | `search` | string | Matches `productName` or `productCode`, substring, case-insensitive. Clamped to 100 chars. |
-| `type` | string | Exact match on `productType`. |
+| `character` | string | Exact character slug linked through `product_characters`. |
 | `color` | string | Exact match on any variant's `color`. |
 | `size` | string | Exact match on any variant's `size`. |
-| `inStock` | `"true"` | If present and exactly `"true"`, only products with at least one variant at `quantity > 0`. |
 | `minPrice`, `maxPrice` | number | Clamped to `[0, 10_000_000]`. |
 | `sort` | `newest` \| `price_asc` \| `price_desc` | Defaults to `newest`. Anything else falls back to `newest`. |
 | `page` | integer | Clamped to `[1, 10_000]`. |
@@ -46,7 +49,7 @@ nothing is trusted to be well-formed.
 **Example request**
 
 ```
-GET /api/products?search=dress&type=%E0%B9%80%E0%B8%94%E0%B8%A3%E0%B8%AA&sort=price_asc&page=1
+GET /api/products?search=dress&character=mickey&sort=price_asc&page=1
 ```
 
 **Example response — `200`**
@@ -58,13 +61,14 @@ GET /api/products?search=dress&type=%E0%B9%80%E0%B8%94%E0%B8%A3%E0%B8%AA&sort=pr
       "id": "b2f0...",
       "productCode": "DR-001",
       "productName": "Linen Wrap Dress",
-      "productType": "เดรส",
       "description": "...",
       "sellPrice": "1290.00",
       "createdAt": "2026-01-14T08:00:00.000Z",
       "coverImageUrl": "https://img.example.com/products/.../1600.webp",
       "colors": ["ดำ", "ครีม"],
-      "inStock": true
+      "characters": [
+        { "id": "c_...", "slug": "mickey", "name": "มิกกี้", "nameEn": "Mickey" }
+      ]
     }
   ],
   "count": 42,
@@ -114,13 +118,16 @@ Every field a public caller would never see — `originalPrice`,
       "originalPrice": "650.00",
       "buyingSource": "Supplier A",
       "sourceLink": "https://...",
+      "preorderMinDays": 14,
+      "preorderMaxDays": 30,
       "margin": "640.00",
       "status": "active",
       "createdBy": "u_...",
       "createdAt": "...",
       "updatedAt": "...",
       "variants": [{ "id": "...", "color": "ดำ", "size": "S", "quantity": 3, "sku": null, "sortOrder": 0, "createdAt": "...", "updatedAt": "..." }],
-      "images": [{ "id": "...", "url": "...", "storageKey": "...", "alt": null, "color": null, "sortOrder": 0, "createdAt": "..." }]
+      "images": [{ "id": "...", "url": "...", "storageKey": "...", "alt": null, "color": null, "sortOrder": 0, "createdAt": "..." }],
+      "characters": [{ "id": "...", "slug": "mickey", "name": "มิกกี้", "nameEn": "Mickey", "sortOrder": 0 }]
     }
   ],
   "count": 118,
@@ -149,7 +156,7 @@ date-range filters resolved in SQL (not filtered in memory).
 
 | Param | Type | Notes |
 |---|---|---|
-| `status` | order status enum \| `all` | Default `all`. |
+| `status` | `new` \| `accepted` \| `preorder` \| `packaging` \| `shipping` \| `complete` \| `cancelled` \| `refund` \| `all` | Default `all`. |
 | `search` | string | Matches `customerName` (substring) or, if the term is all digits, an exact `orderNo`. |
 | `dateFrom`, `dateTo` | ISO `yyyy-mm-dd` | Inclusive bounds on `orderDate`. |
 | `sort` | `newest` \| `oldest` \| `orderno_high` \| `orderno_low` \| `total_high` \| `total_low` | Default `newest`; an unrecognised value falls back to it. `newest`/`oldest` sort on `orderDate` and `orderno_high`/`orderno_low` on the order number — the admin list's two sortable column headers set these. Every date sort breaks ties on `orderNo` descending, so a day's worth of orders paginates stably. |
@@ -166,15 +173,21 @@ date-range filters resolved in SQL (not filtered in memory).
       "orderNo": 1042,
       "orderDate": "2026-08-01",
       "customerName": "คุณสมชาย",
+      "customerEmail": "customer@example.com",
+      "customerId": "u_...",
       "customerAddress": null,
       "customerPhone": "081...",
       "shippingCost": "50.00",
       "packingCost": "10.00",
+      "advertisingCost": "30.00",
+      "shippingConfirmedAt": null,
       "itemsTotal": "1290.00",
       "itemsCost": "650.00",
-      "totalCost": "710.00",
-      "profit": "580.00",
+      "totalCost": "740.00",
+      "profit": "550.00",
       "status": "new",
+      "refundReason": null,
+      "refundedAt": null,
       "note": null,
       "createdBy": "u_...",
       "createdAt": "...",
@@ -308,7 +321,6 @@ export const PUBLIC_PRODUCT_COLUMNS = {
   id: products.id,
   productCode: products.productCode,
   productName: products.productName,
-  productType: products.productType,
   description: products.description,
   sellPrice: products.sellPrice,
   createdAt: products.createdAt,
@@ -316,12 +328,14 @@ export const PUBLIC_PRODUCT_COLUMNS = {
 ```
 
 Layered on top for list/detail views: a computed `coverImageUrl`, a
-deduplicated `colors` array, and a boolean `inStock` — never the raw
-variant row.
+deduplicated `colors` array, safe variant identifiers/options, and linked
+character objects — never the raw variant row or stock quantity.
 
-**`originalPrice`, `buyingSource`, `sourceLink`, `margin`, and any variant's
-exact `quantity` are never present in any public response — including RSC
-payloads.**
+**`productType`, preorder lead-time fields, `originalPrice`, `buyingSource`,
+`sourceLink`, `margin`, and any variant's exact `quantity` are never present
+in any public response — including RSC payloads.** Product type and lead time
+are admin-only; characters are the public taxonomy. All active variants are
+preorderable regardless of the admin stock ledger.
 
 That last clause matters more here than in a typical app. A React Server
 Component that fetches a *full* product row (e.g. via `queries/products.ts`,
@@ -342,9 +356,11 @@ this contract; re-run it after any change to `queries/storefront.ts` or
 
 ## Internal mutation contract
 
-Every product, order, and settings write in this app is a Next.js **Server
-Action** under `src/app/[locale]/admin/**/actions.ts` — there is no REST/JSON
-endpoint for creating or editing a product, order, or product type. These are
+Application writes are Next.js **Server Actions** under the locale routes —
+there is no REST/JSON endpoint for creating or editing a product, order, or
+product type. Owner mutations live under `admin/**/actions.ts`; registration,
+email-token, and customer checkout actions live under the relevant public
+route groups. These are
 **build-internal, not a stable public API**: they are called directly from
 admin client components via Next's Server Actions RPC mechanism, are not
 versioned, and are not intended to be called from outside this application.
@@ -360,8 +376,39 @@ codes (`"unauthorized"`, `"forbidden"`, `"invalid"`, `"duplicate_code"`,
 the full list of actions and `CLAUDE.md` for the security reasoning behind
 the repeated `isOwner()` check.
 
-The Settings mutation surface includes product-type management and
-`clearShopData` only. The former `loadDemoShopData` Server Action has been
+Product creation validates the generated-code form independently from its
+image list. An empty asynchronous code preview is valid because the immutable
+code is minted inside the transaction; each submitted image must instead use
+the exact same-origin `/api/images/<storageKey>` URL for its validated product
+key. Products can link multiple managed characters and store an admin-only
+minimum/maximum preorder-day range. Order create/update payloads include non-negative `advertisingCost` along
+with shipping and packing. Postgres derives
+`totalCost = itemsCost + shippingCost + packingCost + advertisingCost` and
+`profit = itemsTotal - totalCost`; callers never submit either derived value.
+
+The Settings mutation surface includes product types, shop contacts,
+characters, fixed admin/customer status labels, configurable line-item
+statuses, and `clearShopData`. Deleting referenced character or item-status
+rows is blocked. Exactly one line-item status may be the default.
+
+Customer checkout re-resolves active products, variants, and current prices;
+it never trusts cart snapshots. A UUID checkout key makes retries idempotent.
+The resulting order stores `customerId`, generates `orderNo`, starts at `new`,
+and receives no online payment. Customer reads always scope by the session's
+`customerId`. Internal order statuses map to `Received`, `Preparing`,
+`Shipping`, or `Complete`, with `Cancelled`/`Refunded` exceptional stages.
+
+Refund actions require a reason and store a timestamp at order or line-item
+level. Moving an order to `packaging` is blocked until every line-item status
+is marked received or refunded; refunding every line automatically moves the
+order to `refund`. No payment-provider API is called.
+
+Registration always creates `customer` users. When `EMAIL_ENABLED=false`, new
+customers are auto-verified and verification/reset actions are disabled. When
+enabled, raw verification/reset tokens are emailed through Resend but only
+SHA-256 hashes are stored, with expiry and resend cooldown controls.
+
+The former `loadDemoShopData` Server Action has been
 removed; no Settings request can generate a mock catalogue or fake orders.
 The FairyStuff replacement is an internal, guarded CLI workflow—not a public
 HTTP route or Server Action—and therefore makes no REST response-contract

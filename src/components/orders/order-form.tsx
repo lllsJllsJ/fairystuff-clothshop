@@ -16,6 +16,8 @@ import {
 } from "@/lib/validations/order"
 import type { OrderWithItems } from "@/db/queries/orders"
 import type { ProductType } from "@/db/queries/product-types"
+import type { OrderStatusLabel } from "@/db/queries/settings"
+import { DEFAULT_ADMIN_STATUS_LABELS } from "@/lib/order-status"
 import { createOrder, updateOrder } from "@/app/[locale]/admin/orders/actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -40,6 +42,7 @@ const BLANK_ITEM: OrderItemValues = {
   productCost: 0,
   sellPrice: 0,
   quantity: 1,
+  statusCode: "not_ordered",
 }
 
 function todayIso(): string {
@@ -49,9 +52,13 @@ function todayIso(): string {
 export function OrderForm({
   order,
   types,
+  statusLabels = [],
+  locale = "th",
 }: {
   order?: OrderWithItems
   types: ProductType[]
+  statusLabels?: OrderStatusLabel[]
+  locale?: string
 }) {
   const t = useTranslations()
   const router = useRouter()
@@ -74,12 +81,17 @@ export function OrderForm({
       customerAddress: order?.customerAddress ?? "",
       shippingCost: order ? Number(order.shippingCost) : 0,
       packingCost: order ? Number(order.packingCost) : 0,
+      advertisingCost: order ? Number(order.advertisingCost) : 0,
       status: order?.status ?? "new",
+      shippingConfirmed: !!order?.shippingConfirmedAt,
+      refundReason: order?.refundReason ?? "",
       note: order?.note ?? "",
       items:
         order && order.items.length > 0
           ? order.items.map((item) => ({
+              id: item.id,
               productId: item.productId ?? "",
+              productVariantId: item.productVariantId ?? "",
               productCode: item.productCode,
               productName: item.productName,
               productType: item.productType ?? "",
@@ -88,6 +100,7 @@ export function OrderForm({
               productCost: Number(item.productCost),
               sellPrice: Number(item.sellPrice),
               quantity: item.quantity,
+              statusCode: item.statusCode,
             }))
           : [BLANK_ITEM],
     },
@@ -96,10 +109,15 @@ export function OrderForm({
   const { fields, append, remove, replace } = useFieldArray({ control, name: "items" })
 
   const typeOptions = types.map((pt) => pt.name)
+  const statusLabel = (status: (typeof orderStatusValues)[number]) => {
+    const row = statusLabels.find((item) => item.status === status)
+    return locale === "en" ? (row?.labelEn ?? DEFAULT_ADMIN_STATUS_LABELS[status].en) : (row?.labelTh ?? DEFAULT_ADMIN_STATUS_LABELS[status].th)
+  }
   const selectedStatus = watch("status") ?? "new"
   const items = watch("items") ?? []
   const shippingCost = watch("shippingCost")
   const packingCost = watch("packingCost")
+  const advertisingCost = watch("advertisingCost")
 
   function addLine() {
     append(BLANK_ITEM)
@@ -136,6 +154,8 @@ export function OrderForm({
     if (code === "unauthorized") return t("errors.unauthorized")
     if (code === "invalid") return t("errors.invalid")
     if (code === "not_found") return t("errors.notFound")
+    if (code === "items_pending") return t("order.itemsPending")
+    if (code === "reason_required") return t("order.refundReasonRequired")
     return t("errors.generic")
   }
 
@@ -155,21 +175,35 @@ export function OrderForm({
             }
             options={orderStatusValues.map((s) => ({
               value: s,
-              label: t(`order.status${statusLabelSuffix(s)}`),
+              label: statusLabel(s),
             }))}
           />
         </Field>
         <Field label={t("order.shippingCost")}>
           <Input type="number" inputMode="decimal" step="0.01" min={0} {...register("shippingCost")} />
         </Field>
+        <label className="flex items-center gap-2 self-end pb-2 text-body">
+          <input type="checkbox" {...register("shippingConfirmed")} />
+          {t("order.shippingConfirmed")}
+        </label>
         <Field label={t("order.packingCost")}>
           <Input type="number" inputMode="decimal" step="0.01" min={0} {...register("packingCost")} />
+        </Field>
+        <Field label={t("order.advertisingCost")}>
+          <Input type="number" inputMode="decimal" step="0.01" min={0} {...register("advertisingCost")} />
         </Field>
         <div className="sm:col-span-2">
           <Field label={t("order.note")}>
             <Textarea rows={2} {...register("note")} />
           </Field>
         </div>
+        {selectedStatus === "refund" && (
+          <div className="sm:col-span-3">
+            <Field label={t("order.refundReason")} required error={errors.refundReason && t("common.required")}>
+              <Textarea rows={2} {...register("refundReason")} />
+            </Field>
+          </div>
+        )}
       </section>
 
       {/* Customer */}
@@ -226,6 +260,7 @@ export function OrderForm({
         items={items}
         shippingCost={Number(shippingCost || 0)}
         packingCost={Number(packingCost || 0)}
+        advertisingCost={Number(advertisingCost || 0)}
       />
 
       <div className="flex gap-3">
@@ -245,11 +280,4 @@ export function OrderForm({
       </div>
     </form>
   )
-}
-
-function statusLabelSuffix(status: string): string {
-  return status
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join("")
 }

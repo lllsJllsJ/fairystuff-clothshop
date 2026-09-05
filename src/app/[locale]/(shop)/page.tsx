@@ -4,9 +4,9 @@ import { getTranslations, setRequestLocale } from "next-intl/server"
 import { routing } from "@/i18n/routing"
 import {
   getPublicProducts,
-  getPublicTypes,
+  getPublicCharacters,
   type PublicProductListResult,
-  type PublicProductType,
+  type PublicCharacterFacet,
 } from "@/db/queries/storefront"
 import { BRAND_NAME, BRAND_TAGLINE_EN, BRAND_TAGLINE_TH } from "@/lib/brand"
 import { Hero } from "@/components/shop/hero"
@@ -61,11 +61,11 @@ async function safeGetPublicProducts(
   }
 }
 
-async function safeGetPublicTypes(): Promise<PublicProductType[]> {
+async function safeGetPublicCharacters(): Promise<PublicCharacterFacet[]> {
   try {
-    return await getPublicTypes()
+    return await getPublicCharacters()
   } catch (error) {
-    console.error("[home] getPublicTypes failed during prerender", error)
+      console.error("[home] getPublicCharacters failed during prerender", error)
     return []
   }
 }
@@ -79,9 +79,9 @@ export default async function HomePage({
   setRequestLocale(locale)
   const t = await getTranslations()
 
-  const [newIn, types] = await Promise.all([
+  const [newIn, characters] = await Promise.all([
     safeGetPublicProducts({ page: 1, pageSize: NEW_IN_COUNT, sort: "newest" }),
-    safeGetPublicTypes(),
+    safeGetPublicCharacters(),
   ])
 
   return (
@@ -117,7 +117,7 @@ export default async function HomePage({
         </div>
       </section>
 
-      <CollectionStrip types={types} />
+      <CollectionStrip characters={characters} />
 
       <section aria-labelledby="story-heading" className="bg-muted">
         <div className="mx-auto max-w-[1440px] px-4 py-17 text-center sm:px-6 lg:px-8">

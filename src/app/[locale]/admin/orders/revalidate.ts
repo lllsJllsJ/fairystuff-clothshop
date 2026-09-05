@@ -8,10 +8,9 @@ import { routing } from "@/i18n/routing"
  * Single shared invalidation point for every order-mutating server action
  * (create/update/delete/status). Mirrors the shape of
  * `admin/products/revalidate.ts`'s `revalidateStorefront`, but deliberately
- * narrower: orders never affect the public, ISR-cached storefront (no
- * catalogue field is derived from an order), so there is no
+ * narrower: orders never affect the public catalogue, so there is no
  * `revalidatePath` call for `/`, `/shop`, or `/shop/<code>` here — only the
- * admin order paths. If a future phase adds an order-derived public surface
+ * admin and customer tracking paths. If a future phase adds a catalogue surface
  * (e.g. a "recently sold" strip), route it through its own explicit
  * revalidation rather than overloading this helper.
  *
@@ -28,6 +27,8 @@ export function revalidateOrders(id?: string): void {
   for (const locale of routing.locales) {
     revalidatePath(`/${locale}/admin`)
     revalidatePath(`/${locale}/admin/orders`)
+    revalidatePath(`/${locale}/account/orders`)
     if (id) revalidatePath(`/${locale}/admin/orders/${id}`)
+    if (id) revalidatePath(`/${locale}/account/orders/${id}`)
   }
 }

@@ -1,9 +1,10 @@
 "use server"
 
 import { and, eq, inArray } from "drizzle-orm"
+import { z } from "zod"
 
 import { db } from "@/db"
-import { productImages, products, productVariants } from "@/db/schema"
+import { productCharacters, productImages, products, productVariants } from "@/db/schema"
 import { getCurrentUser } from "@/lib/auth-helpers"
 import { deleteProductImageRenditions } from "@/lib/r2"
 import {
@@ -14,6 +15,7 @@ import { learnProductType } from "@/lib/reference"
 import { isOwner } from "@/lib/roles"
 import {
   productFormSchema,
+  productImageSchema,
   productInlineUpdateSchema,
   type ProductFormValues,
   type ProductImageInput,
@@ -131,8 +133,21 @@ export async function createProduct(
   if (!isOwner(user.role)) return { ok: false, error: "forbidden" }
 
   const parsed = productFormSchema.safeParse(values)
-  if (!parsed.success) return { ok: false, error: "invalid" }
+  const parsedImages = productImageSchema.array().max(100).safeParse(images)
+  const parsedProductId = productId === undefined ? null : z.uuid().safeParse(productId)
+  if (
+    !parsed.success ||
+    !parsedImages.success ||
+    (parsedProductId !== null && !parsedProductId.success) ||
+    (parsedImages.success && parsedImages.data.length > 0 && parsedProductId === null) ||
+    (parsedImages.success &&
+      parsedProductId?.success &&
+      parsedImages.data.some((image) => !image.storageKey.startsWith(`products/${productId}/`)))
+  ) {
+    return { ok: false, error: "invalid" }
+  }
   const v = parsed.data
+  const validImages = parsedImages.data
 
   // The product code is GENERATED, never taken from the client — see
   // lib/product-code.ts. `v.productCode` holds whatever preview the form
@@ -162,6 +177,8 @@ export async function createProduct(
           originalPrice: toMoney(v.originalPrice),
           buyingSource: toNullable(v.buyingSource),
           sourceLink: toNullable(v.sourceLink),
+          preorderMinDays: v.preorderMinDays ?? null,
+          preorderMaxDays: v.preorderMaxDays ?? null,
           status: v.status,
           createdBy: user.id,
         })
@@ -182,9 +199,15 @@ export async function createProduct(
         )
       }
 
-      if (images.length > 0) {
+      if (v.characterIds.length > 0) {
+        await tx.insert(productCharacters).values(
+          v.characterIds.map((characterId) => ({ productId: row.id, characterId }))
+        )
+      }
+
+      if (validImages.length > 0) {
         await tx.insert(productImages).values(
-          images.map((img) => ({
+          validImages.map((img) => ({
             productId: row.id,
             url: img.url,
             storageKey: img.storageKey,
@@ -243,8 +266,16 @@ export async function updateProduct(
   if (!isOwner(user.role)) return { ok: false, error: "forbidden" }
 
   const parsed = productFormSchema.safeParse(values)
-  if (!parsed.success) return { ok: false, error: "invalid" }
+  const parsedImages = productImageSchema.array().max(100).safeParse(newImages)
+  if (
+    !parsed.success ||
+    !parsedImages.success ||
+    parsedImages.data.some((image) => !image.storageKey.startsWith(`products/${id}/`))
+  ) {
+    return { ok: false, error: "invalid" }
+  }
   const v = parsed.data
+  const validNewImages = parsedImages.data
 
   // Fetch storage keys for removed images BEFORE the transaction deletes
   // their rows — deleteProductImage (R2 cleanup) runs after commit and is
@@ -281,6 +312,8 @@ export async function updateProduct(
           originalPrice: toMoney(v.originalPrice),
           buyingSource: toNullable(v.buyingSource),
           sourceLink: toNullable(v.sourceLink),
+          preorderMinDays: v.preorderMinDays ?? null,
+          preorderMaxDays: v.preorderMaxDays ?? null,
           status: v.status,
           updatedAt: new Date(),
         })
@@ -289,6 +322,13 @@ export async function updateProduct(
 
       if (!updatedRow) throw new Error("not_found")
       savedCode = updatedRow.productCode
+
+      await tx.delete(productCharacters).where(eq(productCharacters.productId, id))
+      if (v.characterIds.length > 0) {
+        await tx.insert(productCharacters).values(
+          v.characterIds.map((characterId) => ({ productId: id, characterId }))
+        )
+      }
 
       // Replace-semantics for variants: delete rows dropped from the
       // payload, then update-by-id the ones kept and insert the new ones.
@@ -353,9 +393,9 @@ export async function updateProduct(
         await tx.delete(productImages).where(inArray(productImages.id, removedImageIds))
       }
 
-      if (newImages.length > 0) {
+      if (validNewImages.length > 0) {
         await tx.insert(productImages).values(
-          newImages.map((img) => ({
+          validNewImages.map((img) => ({
             productId: id,
             url: img.url,
             storageKey: img.storageKey,
@@ -421,6 +461,8 @@ export async function updateProductInline(
         productType: toNullable(v.productType),
         sellPrice: toMoney(v.sellPrice),
         originalPrice: toMoney(v.originalPrice),
+        preorderMinDays: v.preorderMinDays ?? null,
+        preorderMaxDays: v.preorderMaxDays ?? null,
         status: v.status,
         updatedAt: new Date(),
       })

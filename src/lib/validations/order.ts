@@ -17,11 +17,13 @@ const emptyString = z.literal("").transform(() => "")
 
 export const orderStatusValues = [
   "new",
-  "source_shipped",
-  "packed",
-  "shipped",
-  "completed",
+  "accepted",
+  "preorder",
+  "packaging",
+  "shipping",
+  "complete",
   "cancelled",
+  "refund",
 ] as const
 
 // ---------------------------------------------------------------------------
@@ -33,7 +35,9 @@ export const orderStatusValues = [
 // ---------------------------------------------------------------------------
 
 export const orderItemSchema = z.object({
+  id: z.uuid().optional(),
   productId: z.union([z.uuid(), z.literal("")]).optional(),
+  productVariantId: z.union([z.uuid(), z.literal("")]).optional(),
   productCode: z.string().trim().min(1, "required").max(40),
   productName: z.string().trim().min(1, "required").max(160),
   productType: z.string().trim().max(60).optional().or(emptyString),
@@ -45,6 +49,7 @@ export const orderItemSchema = z.object({
     (v) => (v === "" || v === null || v === undefined ? 1 : Number(v)),
     z.number({ message: "required" }).int("required").min(1, "min").max(9999, "max")
   ),
+  statusCode: z.string().trim().min(1).max(80).default("not_ordered"),
 })
 
 export type OrderItemValues = z.input<typeof orderItemSchema>
@@ -64,7 +69,10 @@ export const orderFormSchema = z.object({
   customerAddress: z.string().trim().max(500).optional().or(emptyString),
   shippingCost: money,
   packingCost: money,
+  advertisingCost: money,
   status: z.enum(orderStatusValues).default("new"),
+  shippingConfirmed: z.boolean().default(false),
+  refundReason: z.string().trim().max(1000).optional().or(emptyString),
   note: z.string().trim().max(2000).optional().or(emptyString),
   items: z.array(orderItemSchema).min(1, "required").max(100),
 })

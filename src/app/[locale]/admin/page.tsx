@@ -1,5 +1,16 @@
 import { getTranslations, setRequestLocale } from "next-intl/server"
-import { Boxes, DollarSign, PackageX, Receipt, Shirt, TrendingUp, Warehouse } from "lucide-react"
+import {
+  BadgeDollarSign,
+  Boxes,
+  DollarSign,
+  Megaphone,
+  PackageCheck,
+  PackageX,
+  Receipt,
+  Ship,
+  TrendingUp,
+  WalletCards,
+} from "lucide-react"
 
 import { getDashboardData } from "@/db/queries/dashboard"
 import { formatBaht, formatNumber } from "@/lib/format"
@@ -34,15 +45,15 @@ export default async function AdminDashboardPage({
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
-          label={t("dashboard.activeProducts")}
-          value={formatNumber(data.activeProducts)}
-          icon={Shirt}
+          label={t("dashboard.totalSkus")}
+          value={formatNumber(data.totalSkus)}
+          icon={Boxes}
           tone="primary"
         />
         <KpiCard
-          label={t("dashboard.stockUnits")}
-          value={formatNumber(data.totalStockUnits)}
-          icon={Boxes}
+          label={t("dashboard.readyToShipSkus")}
+          value={formatNumber(data.readyToShipSkus)}
+          icon={PackageCheck}
         />
         <KpiCard
           label={t("dashboard.soldOutSkus")}
@@ -51,26 +62,42 @@ export default async function AdminDashboardPage({
           tone={data.soldOutVariantCount > 0 ? "warning" : "default"}
         />
         <KpiCard
-          label={t("dashboard.ordersThisMonth")}
-          value={formatNumber(data.ordersThisMonth)}
+          label={t("dashboard.totalOrders")}
+          value={formatNumber(data.totalOrders)}
           icon={Receipt}
         />
         <KpiCard
-          label={t("dashboard.revenueThisMonth")}
-          value={formatBaht(data.revenueThisMonth)}
+          label={t("dashboard.totalRevenue")}
+          value={formatBaht(data.totalRevenue)}
           icon={DollarSign}
           tone="primary"
         />
         <KpiCard
-          label={t("dashboard.profitThisMonth")}
-          value={formatBaht(data.profitThisMonth)}
+          label={t("dashboard.totalProfit")}
+          value={formatBaht(data.totalProfit)}
           icon={TrendingUp}
-          tone={data.profitThisMonth >= 0 ? "default" : "destructive"}
+          tone={data.totalProfit >= 0 ? "default" : "destructive"}
         />
         <KpiCard
-          label={t("dashboard.inventoryValue")}
-          value={formatBaht(data.inventoryValueAtCost)}
-          icon={Warehouse}
+          label={t("dashboard.advertisingCost")}
+          value={formatBaht(data.advertisingCost)}
+          icon={Megaphone}
+        />
+        <KpiCard
+          label={t("dashboard.shippingCost")}
+          value={formatBaht(data.shippingCost)}
+          icon={Ship}
+        />
+        <KpiCard
+          label={t("dashboard.packagingCost")}
+          value={formatBaht(data.packagingCost)}
+          icon={WalletCards}
+        />
+        <KpiCard
+          label={t("dashboard.netProfit")}
+          value={formatBaht(data.netProfit)}
+          icon={BadgeDollarSign}
+          tone={data.netProfit >= 0 ? "primary" : "destructive"}
         />
       </div>
 

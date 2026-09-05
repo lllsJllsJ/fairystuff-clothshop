@@ -7,6 +7,9 @@ import { OrderForm } from "@/components/orders/order-form"
 import { OrderReceipt } from "@/components/orders/order-receipt"
 import { OrderStatusBadge } from "@/components/orders/order-status-badge"
 import { PrintOrderButton } from "@/components/orders/print-order-button"
+import { OrderFulfillment } from "@/components/orders/order-fulfillment"
+import { getOrderItemStatuses, getOrderStatusLabels } from "@/db/queries/settings"
+import { DEFAULT_ADMIN_STATUS_LABELS } from "@/lib/order-status"
 
 /**
  * Detail + edit + print, all on one route (task spec). `OrderForm` in edit
@@ -23,11 +26,21 @@ export default async function OrderDetailPage({
 }: {
   params: Promise<{ locale: string; id: string }>
 }) {
-  const { id } = await params
+  const { id, locale } = await params
   const t = await getTranslations()
 
-  const [order, types] = await Promise.all([getOrderById(id), getProductTypes()])
+  const [order, types, itemStatuses, statusLabels] = await Promise.all([
+    getOrderById(id),
+    getProductTypes(),
+    getOrderItemStatuses(),
+    getOrderStatusLabels(),
+  ])
   if (!order) notFound()
+  const customStatus = statusLabels.find((item) => item.status === order.status)
+  const statusLabel =
+    locale === "en"
+      ? (customStatus?.labelEn ?? DEFAULT_ADMIN_STATUS_LABELS[order.status].en)
+      : (customStatus?.labelTh ?? DEFAULT_ADMIN_STATUS_LABELS[order.status].th)
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
@@ -36,15 +49,25 @@ export default async function OrderDetailPage({
           <h1 className="text-h3 font-bold text-foreground">
             {t("order.detail")} #{order.orderNo}
           </h1>
-          <OrderStatusBadge status={order.status} />
+          <OrderStatusBadge status={order.status} label={statusLabel} />
         </div>
         <PrintOrderButton />
       </div>
 
-      <OrderReceipt order={order} />
+      <OrderReceipt order={order} statusLabel={statusLabel} />
 
       <div className="print:hidden">
-        <OrderForm order={order} types={types} />
+        <OrderFulfillment
+          orderId={order.id}
+          orderStatus={order.status}
+          items={order.items}
+          statuses={itemStatuses}
+          locale={locale}
+        />
+      </div>
+
+      <div className="print:hidden">
+        <OrderForm order={order} types={types} statusLabels={statusLabels} locale={locale} />
       </div>
     </div>
   )

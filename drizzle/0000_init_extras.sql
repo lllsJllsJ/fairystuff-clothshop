@@ -46,8 +46,13 @@ alter table public.products
   add column margin numeric(12, 2)
   generated always as (sell_price - original_price) stored;
 
--- orders.total_cost = itemsCost + shippingCost + packingCost
--- orders.profit     = itemsTotal - itemsCost - shippingCost - packingCost
+-- Ensure advertising cost exists for databases bootstrapped from 0000 before
+-- the generated totals below are recreated.
+alter table public.orders
+  add column if not exists advertising_cost numeric(12, 2) not null default 0;
+
+-- orders.total_cost = itemsCost + shippingCost + packingCost + advertisingCost
+-- orders.profit     = itemsTotal - totalCost
 --
 -- itemsTotal / itemsCost are plain, trigger-maintained columns (see
 -- recalc_order() below) — NOT generated columns themselves, because a
@@ -56,13 +61,13 @@ alter table public.products
 alter table public.orders drop column if exists total_cost;
 alter table public.orders
   add column total_cost numeric(12, 2)
-  generated always as (items_cost + shipping_cost + packing_cost) stored;
+  generated always as (items_cost + shipping_cost + packing_cost + advertising_cost) stored;
 
 alter table public.orders drop column if exists profit;
 alter table public.orders
   add column profit numeric(12, 2)
   generated always as (
-    items_total - items_cost - shipping_cost - packing_cost
+    items_total - items_cost - shipping_cost - packing_cost - advertising_cost
   ) stored;
 
 -- order_items.line_total = sellPrice * quantity

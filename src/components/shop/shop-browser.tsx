@@ -9,7 +9,7 @@ import { ChevronLeft, ChevronRight, Search, SlidersHorizontal } from "lucide-rea
 import { usePathname, useRouter } from "@/i18n/navigation"
 import type {
   PublicProductListResult,
-  PublicProductType,
+  PublicCharacterFacet,
   PublicSort,
 } from "@/db/queries/storefront"
 import { Input } from "@/components/ui/input"
@@ -29,10 +29,9 @@ import { ShopFilters, type ShopFilterValues } from "@/components/shop/shop-filte
 const PAGE_SIZE = 24
 
 const DEFAULT_FILTERS: ShopFilterValues = {
-  type: "",
+  character: "",
   color: "",
   size: "",
-  inStockOnly: false,
   minPrice: "",
   maxPrice: "",
 }
@@ -65,11 +64,11 @@ function setParam(params: URLSearchParams, key: string, value: string) {
  */
 export function ShopBrowser({
   initialResult,
-  types,
+  characters,
   colorOptions,
 }: {
   initialResult: PublicProductListResult
-  types: PublicProductType[]
+  characters: PublicCharacterFacet[]
   colorOptions: string[]
 }) {
   const t = useTranslations()
@@ -79,10 +78,9 @@ export function ShopBrowser({
 
   const [search, setSearch] = useState(() => searchParams.get("q") ?? "")
   const [filters, setFilters] = useState<ShopFilterValues>(() => ({
-    type: searchParams.get("type") ?? "",
+    character: searchParams.get("character") ?? "",
     color: searchParams.get("color") ?? "",
     size: searchParams.get("size") ?? "",
-    inStockOnly: searchParams.get("inStock") === "true",
     minPrice: searchParams.get("minPrice") ?? "",
     maxPrice: searchParams.get("maxPrice") ?? "",
   }))
@@ -108,10 +106,9 @@ export function ShopBrowser({
     const p = next.page ?? page
 
     setParam(params, "q", q)
-    setParam(params, "type", f.type)
+    setParam(params, "character", f.character)
     setParam(params, "color", f.color)
     setParam(params, "size", f.size)
-    setParam(params, "inStock", f.inStockOnly ? "true" : "")
     setParam(params, "minPrice", f.minPrice)
     setParam(params, "maxPrice", f.maxPrice)
     setParam(params, "sort", s === "newest" ? "" : s)
@@ -167,10 +164,9 @@ export function ShopBrowser({
     debouncedSearch === "" &&
     page === 1 &&
     sort === "newest" &&
-    filters.type === "" &&
+    filters.character === "" &&
     filters.color === "" &&
     filters.size === "" &&
-    !filters.inStockOnly &&
     filters.minPrice === "" &&
     filters.maxPrice === ""
 
@@ -179,10 +175,9 @@ export function ShopBrowser({
     queryFn: async () => {
       const params = new URLSearchParams()
       setParam(params, "search", debouncedSearch)
-      setParam(params, "type", filters.type)
+      setParam(params, "character", filters.character)
       setParam(params, "color", filters.color)
       setParam(params, "size", filters.size)
-      setParam(params, "inStock", filters.inStockOnly ? "true" : "")
       setParam(params, "minPrice", filters.minPrice)
       setParam(params, "maxPrice", filters.maxPrice)
       params.set("sort", sort)
@@ -207,10 +202,9 @@ export function ShopBrowser({
   )
 
   const hasActiveFilters =
-    filters.type !== "" ||
+    filters.character !== "" ||
     filters.color !== "" ||
     filters.size !== "" ||
-    filters.inStockOnly ||
     filters.minPrice !== "" ||
     filters.maxPrice !== ""
 
@@ -271,7 +265,7 @@ export function ShopBrowser({
         <aside className="hidden lg:block">
           <div className="sticky top-24">
             <ShopFilters
-              types={types}
+              characters={characters}
               colorOptions={colorOptions}
               values={filters}
               onChange={updateFilter}
@@ -288,7 +282,7 @@ export function ShopBrowser({
             </SheetHeader>
             <div className="px-4 pb-4">
               <ShopFilters
-                types={types}
+                characters={characters}
                 colorOptions={colorOptions}
                 values={filters}
                 onChange={updateFilter}
@@ -306,7 +300,7 @@ export function ShopBrowser({
 
         <div>
           {query.isLoading ? (
-            <div className="grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
               {Array.from({ length: 8 }).map((_, i) => (
                 <Skeleton key={i} className="aspect-[4/5]" />
               ))}

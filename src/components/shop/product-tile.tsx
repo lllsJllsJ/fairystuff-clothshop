@@ -1,11 +1,11 @@
 import Image from "next/image"
-import { useTranslations } from "next-intl"
+import { useLocale, useTranslations } from "next-intl"
 import { Shirt } from "lucide-react"
 
 import { Link } from "@/i18n/navigation"
 import type { PublicProductSummary } from "@/db/queries/storefront"
 import { Price } from "@/components/shop/price"
-import { SoldOutBadge, NewBadge } from "@/components/shop/sold-out-badge"
+import { NewBadge } from "@/components/shop/sold-out-badge"
 
 const SWATCH_LIMIT = 4
 
@@ -28,6 +28,7 @@ export function ProductTile({
   sizes?: string
 }) {
   const t = useTranslations()
+  const locale = useLocale()
   const extraColors = Math.max(0, product.colors.length - SWATCH_LIMIT)
 
   return (
@@ -55,15 +56,18 @@ export function ProductTile({
 
         <div className="absolute top-2 left-2 flex flex-col items-start gap-1">
           {isNew && <NewBadge />}
-          {!product.inStock && <SoldOutBadge />}
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col gap-1.5 p-4">
-        {product.productType && (
-          <p className="truncate text-small text-muted-foreground">{product.productType}</p>
+      <div className="flex flex-1 flex-col gap-1 p-2.5 sm:gap-1.5 sm:p-4">
+        {product.characters.length > 0 && (
+          <p className="truncate text-small text-muted-foreground">
+            {product.characters
+              .map((character) => locale === "en" ? (character.nameEn ?? character.name) : character.name)
+              .join(" · ")}
+          </p>
         )}
-        <h3 className="line-clamp-2 text-body font-bold text-foreground">
+        <h3 className="line-clamp-2 text-small font-bold text-foreground sm:text-body">
           {product.productName}
         </h3>
 
@@ -90,4 +94,3 @@ export function ProductTile({
     </Link>
   )
 }
-

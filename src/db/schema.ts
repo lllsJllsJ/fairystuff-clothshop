@@ -1,12 +1,15 @@
 import { sql } from "drizzle-orm"
 import {
   bigint,
+  boolean,
+  check,
   date,
   index,
   integer,
   numeric,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -36,7 +39,7 @@ import {
 // Enums
 // ---------------------------------------------------------------------------
 
-export const userRole = pgEnum("user_role", ["owner", "staff"])
+export const userRole = pgEnum("user_role", ["owner", "staff", "customer"])
 
 export const productStatus = pgEnum("product_status", [
   "draft",
@@ -44,24 +47,37 @@ export const productStatus = pgEnum("product_status", [
   "archived",
 ])
 
-/**
- * `source_shipped` = the supplier (Buying Source) has dispatched to us,
- * before we pack and ship to the customer.
- */
+/** Internal owner workflow. Customer-facing stages are derived in
+ * `src/lib/order-status.ts` and deliberately expose less detail. */
 export const orderStatus = pgEnum("order_status", [
   "new",
-  "source_shipped",
-  "packed",
-  "shipped",
-  "completed",
+  "accepted",
+  "preorder",
+  "packaging",
+  "shipping",
+  "complete",
   "cancelled",
+  "refund",
+])
+
+export const customerOrderStage = pgEnum("customer_order_stage", [
+  "received",
+  "preparing",
+  "shipping",
+  "complete",
+  "cancelled",
+  "refunded",
+])
+
+export const authTokenType = pgEnum("auth_token_type", [
+  "verify_email",
+  "reset_password",
 ])
 
 // ---------------------------------------------------------------------------
-// users — replaces carstockpro's profiles + auth.users split. Auth.js owns
-// no tables under the JWT strategy. `staff` is the fail-safe default role;
-// it has no capability in v1. No public signup route — the only way an
-// owner account is created is `scripts/create-owner.ts`.
+// users — Auth.js owns no tables under the JWT strategy. `staff` is the
+// fail-safe default role and has no capability in v1. Public registration
+// always writes `customer`; owners are created only by create-owner.ts.
 // ---------------------------------------------------------------------------
 
 export const users = pgTable("users", {
@@ -70,10 +86,31 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   fullname: text("fullname"),
   role: userRole("role").notNull().default("staff"),
+  emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 })
+
+export const authTokens = pgTable(
+  "auth_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: authTokenType("type").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("auth_tokens_user_type_idx").on(table.userId, table.type),
+    index("auth_tokens_expires_at_idx").on(table.expiresAt),
+  ]
+)
 
 // ---------------------------------------------------------------------------
 // productTypes — reference list backing the CreatableCombobox. products
@@ -95,6 +132,19 @@ export const productTypes = pgTable("product_types", {
    * two types can never mint codes into the same sequence.
    */
   codePrefix: text("code_prefix").unique(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+})
+
+// Customer-facing character taxonomy. Unlike productTypes, characters are
+// relational because a product may match more than one character.
+export const characters = pgTable("characters", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull().unique(),
+  nameEn: text("name_en"),
+  slug: text("slug").notNull().unique(),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -124,6 +174,8 @@ export const products = pgTable(
       .default("0"),
     buyingSource: text("buying_source"),
     sourceLink: text("source_link"),
+    preorderMinDays: integer("preorder_min_days"),
+    preorderMaxDays: integer("preorder_max_days"),
     /**
      * Generated column (sellPrice - originalPrice). See the file-level note
      * above — the GENERATED ALWAYS AS expression is added by
@@ -148,9 +200,29 @@ export const products = pgTable(
     index("products_status_idx").on(table.status),
     index("products_product_type_idx").on(table.productType),
     index("products_created_at_idx").on(table.createdAt.desc()),
+    check(
+      "products_preorder_days_check",
+      sql`((${table.preorderMinDays} is null and ${table.preorderMaxDays} is null) or (${table.preorderMinDays} between 1 and 3650 and ${table.preorderMaxDays} between ${table.preorderMinDays} and 3650))`
+    ),
     // The pg_trgm GIN indexes on productName and productCode need the
     // gin_trgm_ops operator class, which drizzle-kit does not model
     // portably — those two live in 0000_init_extras.sql (plan §4).
+  ]
+)
+
+export const productCharacters = pgTable(
+  "product_characters",
+  {
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    characterId: uuid("character_id")
+      .notNull()
+      .references(() => characters.id, { onDelete: "restrict" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.productId, table.characterId] }),
+    index("product_characters_character_id_idx").on(table.characterId),
   ]
 )
 
@@ -217,6 +289,49 @@ export const productImages = pgTable(
   (table) => [index("product_images_product_id_idx").on(table.productId)]
 )
 
+export const orderItemStatuses = pgTable(
+  "order_item_statuses",
+  {
+    code: text("code").primaryKey(),
+    labelTh: text("label_th").notNull(),
+    labelEn: text("label_en").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    isDefault: boolean("is_default").notNull().default(false),
+    isReceived: boolean("is_received").notNull().default(false),
+    isRefunded: boolean("is_refunded").notNull().default(false),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("order_item_statuses_one_default_idx")
+      .on(table.isDefault)
+      .where(sql`${table.isDefault} = true`),
+  ]
+)
+
+export const orderStatusLabels = pgTable("order_status_labels", {
+  status: orderStatus("status").primaryKey(),
+  labelTh: text("label_th").notNull(),
+  labelEn: text("label_en").notNull(),
+})
+
+export const customerStatusLabels = pgTable("customer_status_labels", {
+  stage: customerOrderStage("stage").primaryKey(),
+  labelTh: text("label_th").notNull(),
+  labelEn: text("label_en").notNull(),
+})
+
+export const shopSettings = pgTable("shop_settings", {
+  id: text("id").primaryKey().default("default"),
+  lineId: text("line_id"),
+  instagramHandle: text("instagram_handle"),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+})
+
 // ---------------------------------------------------------------------------
 // orders — itemsTotal / itemsCost are trigger-maintained (recalc_order(),
 // see 0000_init_extras.sql) rather than generated, because a stored
@@ -237,14 +352,25 @@ export const orders = pgTable(
       .notNull()
       .default(sql`CURRENT_DATE`),
     customerName: text("customer_name").notNull(),
+    customerEmail: text("customer_email"),
     customerAddress: text("customer_address"),
     customerPhone: text("customer_phone"),
+    customerId: uuid("customer_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    checkoutKey: uuid("checkout_key"),
     shippingCost: numeric("shipping_cost", { precision: 12, scale: 2 })
       .notNull()
       .default("0"),
     packingCost: numeric("packing_cost", { precision: 12, scale: 2 })
       .notNull()
       .default("0"),
+    advertisingCost: numeric("advertising_cost", { precision: 12, scale: 2 })
+      .notNull()
+      .default("0"),
+    shippingConfirmedAt: timestamp("shipping_confirmed_at", {
+      withTimezone: true,
+    }),
     /** Trigger-maintained by recalc_order() — never set directly. */
     itemsTotal: numeric("items_total", { precision: 12, scale: 2 })
       .notNull()
@@ -253,11 +379,13 @@ export const orders = pgTable(
     itemsCost: numeric("items_cost", { precision: 12, scale: 2 })
       .notNull()
       .default("0"),
-    /** Generated column (itemsCost + shippingCost + packingCost). */
+    /** Generated column (itemsCost + shippingCost + packingCost + advertisingCost). */
     totalCost: numeric("total_cost", { precision: 12, scale: 2 }),
-    /** Generated column (itemsTotal - itemsCost - shippingCost - packingCost). */
+    /** Net profit after product, shipping, packing, and advertising costs. */
     profit: numeric("profit", { precision: 12, scale: 2 }),
     status: orderStatus("status").notNull().default("new"),
+    refundReason: text("refund_reason"),
+    refundedAt: timestamp("refunded_at", { withTimezone: true }),
     note: text("note"),
     createdBy: uuid("created_by").references(() => users.id, {
       onDelete: "set null",
@@ -272,6 +400,10 @@ export const orders = pgTable(
   (table) => [
     index("orders_status_idx").on(table.status),
     index("orders_order_date_idx").on(table.orderDate.desc()),
+    index("orders_customer_id_idx").on(table.customerId),
+    uniqueIndex("orders_checkout_key_idx")
+      .on(table.checkoutKey)
+      .where(sql`${table.checkoutKey} is not null`),
   ]
 )
 
@@ -293,6 +425,10 @@ export const orderItems = pgTable(
     productId: uuid("product_id").references(() => products.id, {
       onDelete: "set null",
     }),
+    productVariantId: uuid("product_variant_id").references(
+      () => productVariants.id,
+      { onDelete: "set null" }
+    ),
     productCode: text("product_code").notNull(),
     productName: text("product_name").notNull(),
     productType: text("product_type"),
@@ -306,6 +442,12 @@ export const orderItems = pgTable(
       .default("0"),
     /** Check (quantity > 0) is added in 0000_init_extras.sql. */
     quantity: integer("quantity").notNull().default(1),
+    statusCode: text("status_code")
+      .notNull()
+      .default("not_ordered")
+      .references(() => orderItemStatuses.code, { onDelete: "restrict" }),
+    refundReason: text("refund_reason"),
+    refundedAt: timestamp("refunded_at", { withTimezone: true }),
     /** Generated column (sellPrice * quantity). */
     lineTotal: numeric("line_total", { precision: 12, scale: 2 }),
     /** Generated column (productCost * quantity). */

@@ -3,7 +3,13 @@ import "server-only"
 import { and, asc, count, desc, eq, exists, gte, ilike, inArray, lte, or, sql } from "drizzle-orm"
 
 import { db } from "@/db"
-import { productImages, products, productVariants } from "@/db/schema"
+import {
+  characters,
+  productCharacters,
+  productImages,
+  products,
+  productVariants,
+} from "@/db/schema"
 
 /**
  * ============================================================================
@@ -24,8 +30,8 @@ import { productImages, products, productVariants } from "@/db/schema"
  *
  * DO NOT add: originalPrice, buyingSource, sourceLink, margin, or any
  * `product_variants.quantity` value (exact stock depth) to anything
- * exported from this file. Public stock is a boolean (`inStock`) — never
- * the count.
+ * exported from this file. Every active variant remains preorderable;
+ * stock is an admin-only operational field.
  *
  * Why this matters more here than it would in a typical app: a Server
  * Component that fetches a full product row and hands it to a client
@@ -40,7 +46,6 @@ export const PUBLIC_PRODUCT_COLUMNS = {
   id: products.id,
   productCode: products.productCode,
   productName: products.productName,
-  productType: products.productType,
   description: products.description,
   sellPrice: products.sellPrice,
   createdAt: products.createdAt,
@@ -50,7 +55,6 @@ type BasePublicProduct = {
   id: string
   productCode: string
   productName: string
-  productType: string | null
   description: string | null
   sellPrice: string
   createdAt: Date
@@ -61,16 +65,13 @@ export type PublicProductSummary = BasePublicProduct & {
   coverImageUrl: string | null
   /** Distinct variant colours, "-" (the one-colour sentinel) excluded. */
   colors: string[]
-  /** True if ANY variant has quantity > 0. Never the raw quantity. */
-  inStock: boolean
+  characters: PublicCharacter[]
 }
 
 export type PublicProductVariant = {
   id: string
   color: string
   size: string
-  /** Boolean only — see the file header. Never expose `quantity` itself. */
-  inStock: boolean
   sortOrder: number
 }
 
@@ -86,7 +87,7 @@ export type PublicProductImage = {
 
 export type PublicProductDetail = BasePublicProduct & {
   colors: string[]
-  inStock: boolean
+  characters: PublicCharacter[]
   variants: PublicProductVariant[]
   images: PublicProductImage[]
 }
@@ -95,10 +96,9 @@ export type PublicSort = "newest" | "price_asc" | "price_desc"
 
 export type PublicProductListParams = {
   search?: string
-  type?: string
+  character?: string
   color?: string
   size?: string
-  inStockOnly?: boolean
   minPrice?: number
   maxPrice?: number
   sort?: PublicSort
@@ -134,8 +134,21 @@ function activeProductFilters(params: PublicProductListParams) {
     if (searchCondition) conditions.push(searchCondition)
   }
 
-  if (params.type) {
-    conditions.push(eq(products.productType, params.type))
+  if (params.character) {
+    conditions.push(
+      exists(
+        db
+          .select({ one: sql`1` })
+          .from(productCharacters)
+          .innerJoin(characters, eq(characters.id, productCharacters.characterId))
+          .where(
+            and(
+              eq(productCharacters.productId, products.id),
+              eq(characters.slug, params.character)
+            )
+          )
+      )
+    )
   }
 
   if (params.minPrice != null) {
@@ -171,22 +184,6 @@ function activeProductFilters(params: PublicProductListParams) {
             and(
               eq(productVariants.productId, products.id),
               eq(productVariants.size, params.size)
-            )
-          )
-      )
-    )
-  }
-
-  if (params.inStockOnly) {
-    conditions.push(
-      exists(
-        db
-          .select({ one: sql`1` })
-          .from(productVariants)
-          .where(
-            and(
-              eq(productVariants.productId, products.id),
-              sql`${productVariants.quantity} > 0`
             )
           )
       )
@@ -245,7 +242,7 @@ export async function getPublicProducts(
 
 /**
  * Batch-fetches variants + images for a page of products and folds them
- * into the list-view summary shape (cover image, colours, inStock boolean).
+ * into the list-view summary shape (cover image, colours, characters).
  * Deliberately a second, id-scoped query rather than one joined/aggregated
  * query: it keeps the statement count predictable, and
  * this keeps every selected column's type traceable back to
@@ -257,12 +254,11 @@ async function attachSummaryRelations(
   if (rows.length === 0) return []
   const ids = rows.map((r) => r.id)
 
-  const [variantRows, imageRows] = await Promise.all([
+  const [variantRows, imageRows, characterRows] = await Promise.all([
     db
       .select({
         productId: productVariants.productId,
         color: productVariants.color,
-        quantity: productVariants.quantity,
       })
       .from(productVariants)
       .where(inArray(productVariants.productId, ids)),
@@ -275,10 +271,23 @@ async function attachSummaryRelations(
       .from(productImages)
       .where(inArray(productImages.productId, ids))
       .orderBy(asc(productImages.sortOrder)),
+    db
+      .select({
+        productId: productCharacters.productId,
+        id: characters.id,
+        slug: characters.slug,
+        name: characters.name,
+        nameEn: characters.nameEn,
+      })
+      .from(productCharacters)
+      .innerJoin(characters, eq(characters.id, productCharacters.characterId))
+      .where(inArray(productCharacters.productId, ids))
+      .orderBy(asc(characters.sortOrder)),
   ])
 
   const variantsByProduct = groupBy(variantRows, (v) => v.productId)
   const imagesByProduct = groupBy(imageRows, (i) => i.productId)
+  const charactersByProduct = groupBy(characterRows, (character) => character.productId)
 
   return rows.map((row) => {
     const variants = variantsByProduct.get(row.id) ?? []
@@ -287,7 +296,12 @@ async function attachSummaryRelations(
       ...row,
       coverImageUrl: images[0]?.url ?? null,
       colors: distinctColors(variants.map((v) => v.color)),
-      inStock: variants.some((v) => v.quantity > 0),
+      characters: (charactersByProduct.get(row.id) ?? []).map((character) => ({
+        id: character.id,
+        slug: character.slug,
+        name: character.name,
+        nameEn: character.nameEn,
+      })),
     }
   })
 }
@@ -331,13 +345,12 @@ export async function getPublicProductByCode(
 
   if (!row) return null
 
-  const [variantRows, imageRows] = await Promise.all([
+  const [variantRows, imageRows, characterRows] = await Promise.all([
     db
       .select({
         id: productVariants.id,
         color: productVariants.color,
         size: productVariants.size,
-        quantity: productVariants.quantity,
         sortOrder: productVariants.sortOrder,
       })
       .from(productVariants)
@@ -354,47 +367,65 @@ export async function getPublicProductByCode(
       .from(productImages)
       .where(eq(productImages.productId, row.id))
       .orderBy(asc(productImages.sortOrder)),
+    db
+      .select({
+        id: characters.id,
+        slug: characters.slug,
+        name: characters.name,
+        nameEn: characters.nameEn,
+      })
+      .from(productCharacters)
+      .innerJoin(characters, eq(characters.id, productCharacters.characterId))
+      .where(eq(productCharacters.productId, row.id))
+      .orderBy(asc(characters.sortOrder)),
   ])
 
   const variants: PublicProductVariant[] = variantRows.map((v) => ({
     id: v.id,
     color: v.color,
     size: v.size,
-    inStock: v.quantity > 0,
     sortOrder: v.sortOrder,
   }))
 
   return {
     ...row,
     colors: distinctColors(variants.map((v) => v.color)),
-    inStock: variants.some((v) => v.inStock),
+    characters: characterRows,
     variants,
     images: imageRows,
   }
 }
 
-export type PublicProductType = { name: string; count: number }
+export type PublicCharacter = {
+  id: string
+  slug: string
+  name: string
+  nameEn: string | null
+}
+
+export type PublicCharacterFacet = PublicCharacter & { count: number }
 
 /**
- * Distinct product types actually present among active products, for the
- * `/shop` filter rail. NOT the managed reference list — that's
- * `queries/product-types.ts` (admin-only, includes types with zero live
- * products so the owner can still see/rename them).
+ * Character facets actually present among active products, for the
+ * customer-facing collection strip and `/shop` filter rail.
  */
-export async function getPublicTypes(): Promise<PublicProductType[]> {
+export async function getPublicCharacters(): Promise<PublicCharacterFacet[]> {
   const rows = await db
     .select({
-      name: products.productType,
-      value: count(products.id),
+      id: characters.id,
+      slug: characters.slug,
+      name: characters.name,
+      nameEn: characters.nameEn,
+      value: count(productCharacters.productId),
     })
-    .from(products)
-    .where(and(eq(products.status, "active"), sql`${products.productType} is not null`))
-    .groupBy(products.productType)
-    .orderBy(asc(products.productType))
+    .from(characters)
+    .innerJoin(productCharacters, eq(productCharacters.characterId, characters.id))
+    .innerJoin(products, eq(products.id, productCharacters.productId))
+    .where(eq(products.status, "active"))
+    .groupBy(characters.id)
+    .orderBy(asc(characters.sortOrder), asc(characters.name))
 
-  return rows
-    .filter((r): r is { name: string; value: number } => !!r.name)
-    .map((r) => ({ name: r.name, count: r.value }))
+  return rows.map(({ value, ...character }) => ({ ...character, count: value }))
 }
 
 /**

@@ -5,9 +5,9 @@ import { getTranslations, setRequestLocale } from "next-intl/server"
 import { routing } from "@/i18n/routing"
 import {
   getPublicProducts,
-  getPublicTypes,
+  getPublicCharacters,
   type PublicProductListResult,
-  type PublicProductType,
+  type PublicCharacterFacet,
 } from "@/db/queries/storefront"
 import { ShopBrowser } from "@/components/shop/shop-browser"
 
@@ -65,11 +65,11 @@ async function safeGetPublicProducts(
   }
 }
 
-async function safeGetPublicTypes(): Promise<PublicProductType[]> {
+async function safeGetPublicCharacters(): Promise<PublicCharacterFacet[]> {
   try {
-    return await getPublicTypes()
+    return await getPublicCharacters()
   } catch (error) {
-    console.error("[shop] getPublicTypes failed during prerender", error)
+    console.error("[shop] getPublicCharacters failed during prerender", error)
     return []
   }
 }
@@ -82,10 +82,10 @@ export default async function ShopPage({
   const { locale } = await params
   setRequestLocale(locale)
 
-  const [page1, colorFacetSample, types] = await Promise.all([
+  const [page1, colorFacetSample, characters] = await Promise.all([
     safeGetPublicProducts({ page: 1, pageSize: PAGE_SIZE, sort: "newest" }),
     safeGetPublicProducts({ page: 1, pageSize: COLOR_FACET_SAMPLE_SIZE, sort: "newest" }),
-    safeGetPublicTypes(),
+    safeGetPublicCharacters(),
   ])
 
   // `PublicProductSummary` carries `colors` but there is no "distinct
@@ -109,7 +109,7 @@ export default async function ShopPage({
     // to the SSR grid, so the fallback here never actually shows on a
     // normal (query-string-less) visit.
     <Suspense>
-      <ShopBrowser initialResult={page1} types={types} colorOptions={colorOptions} />
+      <ShopBrowser initialResult={page1} characters={characters} colorOptions={colorOptions} />
     </Suspense>
   )
 }

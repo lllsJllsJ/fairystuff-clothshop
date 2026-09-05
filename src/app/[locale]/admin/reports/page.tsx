@@ -1,6 +1,7 @@
 import { setRequestLocale } from "next-intl/server"
 
 import { getReportsData, type ReportsParams } from "@/db/queries/reports"
+import { getOrderStatusLabels } from "@/db/queries/settings"
 import { ReportView, type ReportTab } from "@/components/reports/report-view"
 
 const REPORT_TABS: ReportTab[] = ["monthly", "annual", "profitByProduct", "inventory"]
@@ -52,7 +53,19 @@ export default async function AdminReportsPage({
         ? {}
         : { dateFrom: `${year}-01-01`, dateTo: `${year}-12-31` }
 
-  const data = await getReportsData(range)
+  const [data, statusLabels] = await Promise.all([
+    getReportsData(range),
+    getOrderStatusLabels(),
+  ])
 
-  return <ReportView data={data} tab={tab} year={year} month={month} />
+  return (
+    <ReportView
+      data={data}
+      tab={tab}
+      year={year}
+      month={month}
+      statusLabels={statusLabels}
+      locale={locale}
+    />
+  )
 }

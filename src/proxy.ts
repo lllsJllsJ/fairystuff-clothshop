@@ -49,7 +49,7 @@ import { routing } from "@/i18n/routing"
  * `/th/admin`) for page requests, and against the raw path for `/api/**`
  * requests (which never carry a locale segment).
  */
-const PROTECTED_PREFIXES = ["/admin", "/api/admin", "/api/uploads"]
+const PROTECTED_PREFIXES = ["/admin", "/account", "/checkout", "/api/admin", "/api/uploads"]
 
 function isProtected(pathname: string): boolean {
   return PROTECTED_PREFIXES.some(
@@ -107,7 +107,11 @@ export const proxy = auth((req) => {
 
   if (req.auth && bare === "/login") {
     const url = req.nextUrl.clone()
-    url.pathname = `/${locale}/admin`
+    url.pathname = req.auth.user.role === "owner"
+      ? `/${locale}/admin`
+      : req.auth.user.role === "customer"
+        ? `/${locale}/account/orders`
+        : `/${locale}`
     url.search = ""
     return NextResponse.redirect(url)
   }

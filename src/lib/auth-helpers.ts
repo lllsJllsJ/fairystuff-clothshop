@@ -5,7 +5,7 @@ import { getLocale } from "next-intl/server"
 
 import { auth } from "@/auth"
 import { redirect } from "@/i18n/navigation"
-import { isOwner } from "@/lib/roles"
+import { isCustomer, isOwner } from "@/lib/roles"
 
 /** Returns the signed-in user (id, role, email, name), or null. */
 export async function getCurrentUser(): Promise<Session["user"] | null> {
@@ -36,6 +36,21 @@ export async function requireOwner(): Promise<Session["user"]> {
     return redirect({ href: "/login", locale })
   }
   if (!isOwner(user.role)) {
+    return redirect({ href: "/", locale })
+  }
+  return user
+}
+
+export async function requireCustomer(returnTo = "/account/orders"): Promise<Session["user"]> {
+  const locale = await getLocale()
+  const user = await getCurrentUser()
+  if (!user) {
+    return redirect({
+      href: { pathname: "/login", query: { redirect: `/${locale}${returnTo}` } },
+      locale,
+    })
+  }
+  if (!isCustomer(user.role)) {
     return redirect({ href: "/", locale })
   }
   return user

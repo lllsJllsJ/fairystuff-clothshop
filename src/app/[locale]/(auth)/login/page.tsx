@@ -4,6 +4,7 @@ import { Shirt } from "lucide-react"
 
 import { LoginForm } from "@/components/auth/login-form"
 import { LocaleToggle } from "@/components/layout/locale-toggle"
+import { emailEnabled } from "@/lib/email"
 
 export default async function LoginPage({
   params,
@@ -34,7 +35,7 @@ export default async function LoginPage({
 
         <div className="border border-border bg-card p-6">
           <Suspense>
-            <LoginForm />
+            <LoginForm emailEnabled={emailEnabled()} />
           </Suspense>
         </div>
       </div>

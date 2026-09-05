@@ -1,20 +1,18 @@
-import { useTranslations } from "next-intl"
+import { getTranslations } from "next-intl/server"
 import { MessageCircle, Camera } from "lucide-react"
 
 import {
   CONTACT_COPY_EN,
   CONTACT_COPY_TH,
-  INSTAGRAM_URL,
-  LINE_URL,
 } from "@/lib/brand"
+import { contactLinks, getShopSettings } from "@/db/queries/settings"
 import { Button } from "@/components/ui/button"
 
 /**
- * The conversion surface — there is no checkout (plan: "Order CTA = LINE +
- * Instagram DM, no checkout"). `src/lib/brand.ts` owns the placeholder
- * handles; this component only ever reads them, never invents its own.
+ * Contact surface backed by owner-managed shop settings. Checkout uses the
+ * same contacts when asking customers to send their generated order number.
  */
-export function ContactCta({
+export async function ContactCta({
   locale,
   className,
   variant = "section",
@@ -23,15 +21,17 @@ export function ContactCta({
   className?: string
   variant?: "section" | "inline"
 }) {
-  const t = useTranslations()
+  const [t, settings] = await Promise.all([getTranslations(), getShopSettings()])
+  const links = contactLinks(settings)
   const copy = locale === "th" ? CONTACT_COPY_TH : CONTACT_COPY_EN
+  if (!links.lineUrl && !links.instagramUrl) return null
 
   if (variant === "inline") {
     return (
       <div className={className}>
         <p className="mb-3 text-body text-foreground">{copy}</p>
         <div className="flex flex-wrap gap-3">
-          <ContactButtons />
+          <ContactButtons lineUrl={links.lineUrl} instagramUrl={links.instagramUrl} />
         </div>
       </div>
     )
@@ -45,33 +45,33 @@ export function ContactCta({
         </h2>
         <p className="max-w-md text-body text-muted-foreground">{copy}</p>
         <div className="flex flex-wrap justify-center gap-3 pt-2">
-          <ContactButtons />
+          <ContactButtons lineUrl={links.lineUrl} instagramUrl={links.instagramUrl} />
         </div>
       </div>
     </section>
   )
 }
 
-function ContactButtons() {
+function ContactButtons({ lineUrl, instagramUrl }: { lineUrl: string | null; instagramUrl: string | null }) {
   return (
     <>
-      <Button
+      {lineUrl && <Button
         size="lg"
         nativeButton={false}
-        render={<a href={LINE_URL} target="_blank" rel="noopener noreferrer" />}
+        render={<a href={lineUrl} target="_blank" rel="noopener noreferrer" />}
       >
         <MessageCircle />
         LINE
-      </Button>
-      <Button
+      </Button>}
+      {instagramUrl && <Button
         size="lg"
         variant="outline"
         nativeButton={false}
-        render={<a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer" />}
+        render={<a href={instagramUrl} target="_blank" rel="noopener noreferrer" />}
       >
         <Camera />
         Instagram
-      </Button>
+      </Button>}
     </>
   )
 }

@@ -34,6 +34,11 @@ const count = z.preprocess(
 
 const emptyString = z.literal("").transform(() => "")
 
+const optionalDays = z.preprocess(
+  (v) => (v === "" || v === null || v === undefined ? undefined : Number(v)),
+  z.number().int("required").min(1, "min").max(3650, "max").optional()
+)
+
 // ---------------------------------------------------------------------------
 // Variants — one row per colour x size combination.
 // ---------------------------------------------------------------------------
@@ -63,8 +68,10 @@ function variantDedupeKey(v: { color: string; size: string }): string {
 // roles — that enforcement lives in the server action (see plan Risk 1).
 // ---------------------------------------------------------------------------
 
-export const productFormSchema = z.object({
-  productCode: z.string().trim().min(1, "required").max(40),
+const productFormObject = z.object({
+  // A create generates its code server-side. The preview may still be empty
+  // when the owner submits, so it must never block an otherwise valid form.
+  productCode: z.string().trim().max(40),
   productName: z.string().trim().min(1, "required").max(160),
   productType: z.string().trim().max(60).optional().or(emptyString),
   description: z.string().trim().max(2000).optional().or(emptyString),
@@ -72,6 +79,9 @@ export const productFormSchema = z.object({
   originalPrice: money,
   buyingSource: z.string().trim().max(160).optional().or(emptyString),
   sourceLink: z.union([z.url().max(500), emptyString]).optional(),
+  preorderMinDays: optionalDays,
+  preorderMaxDays: optionalDays,
+  characterIds: z.array(z.uuid()).max(30).default([]),
   status: z.enum(["draft", "active", "archived"]).default("active"),
   variants: z
     .array(productVariantSchema)
@@ -84,6 +94,21 @@ export const productFormSchema = z.object({
     ),
 })
 
+function validatePreorderRange(
+  value: { preorderMinDays?: number; preorderMaxDays?: number },
+  context: z.RefinementCtx
+) {
+  const hasMin = value.preorderMinDays !== undefined
+  const hasMax = value.preorderMaxDays !== undefined
+  if (hasMin !== hasMax) {
+    context.addIssue({ code: "custom", path: [hasMin ? "preorderMaxDays" : "preorderMinDays"], message: "required" })
+  } else if (hasMin && hasMax && value.preorderMinDays! > value.preorderMaxDays!) {
+    context.addIssue({ code: "custom", path: ["preorderMaxDays"], message: "range" })
+  }
+}
+
+export const productFormSchema = productFormObject.superRefine(validatePreorderRange)
+
 export type ProductFormValues = z.input<typeof productFormSchema>
 export type ProductFormParsed = z.output<typeof productFormSchema>
 
@@ -94,14 +119,16 @@ export type ProductFormParsed = z.output<typeof productFormSchema>
 // and `sourceLink` — those stay on the full edit form.
 // ---------------------------------------------------------------------------
 
-export const productInlineUpdateSchema = productFormSchema.pick({
+export const productInlineUpdateSchema = productFormObject.pick({
   productCode: true,
   productName: true,
   productType: true,
   sellPrice: true,
   originalPrice: true,
+  preorderMinDays: true,
+  preorderMaxDays: true,
   status: true,
-})
+}).superRefine(validatePreorderRange)
 
 export type ProductInlineUpdateValues = z.input<typeof productInlineUpdateSchema>
 export type ProductInlineUpdateParsed = z.output<typeof productInlineUpdateSchema>
@@ -139,11 +166,21 @@ export const productImportSchema = z
 // ---------------------------------------------------------------------------
 
 export const productImageSchema = z.object({
-  url: z.url(),
-  storageKey: z.string().trim().min(1).max(500),
+  // Product images are served through the same-origin private-bucket proxy.
+  // Do not accept an arbitrary client-supplied URL here: the storage key is
+  // the source of truth and the URL must point to that exact key.
+  url: z.string().trim().max(600),
+  storageKey: z.string().trim().regex(
+    /^products\/[0-9a-f-]{36}\/[a-zA-Z0-9-]+-(?:480|800|1600)\.webp$/,
+    "invalid"
+  ),
   alt: z.string().trim().max(200).optional().or(emptyString),
   color: z.string().trim().max(40).optional().or(emptyString),
   sortOrder: z.number().int().min(0),
+}).superRefine((image, context) => {
+  if (image.url !== `/api/images/${image.storageKey}`) {
+    context.addIssue({ code: "custom", path: ["url"], message: "invalid" })
+  }
 })
 
 export type ProductImageInput = z.infer<typeof productImageSchema>

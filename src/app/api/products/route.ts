@@ -28,10 +28,9 @@ export async function GET(request: NextRequest) {
   try {
     const params: PublicProductListParams = {
       search: clampString(sp.get("search"), MAX_SEARCH_LENGTH),
-      type: clampString(sp.get("type"), MAX_SEARCH_LENGTH),
+      character: clampString(sp.get("character"), MAX_SEARCH_LENGTH),
       color: clampString(sp.get("color"), MAX_SEARCH_LENGTH),
       size: clampString(sp.get("size"), MAX_SEARCH_LENGTH),
-      inStockOnly: sp.get("inStock") === "true",
       minPrice: clampPrice(sp.get("minPrice")),
       maxPrice: clampPrice(sp.get("maxPrice")),
       sort: parseSort(sp.get("sort")),

@@ -32,8 +32,8 @@ insert into product_variants (product_id, color, size, quantity)
 select id, c, s, q from products, (values ('ดำ','S',3),('ดำ','M',0),('เบจ','S',5)) v(c,s,q)
 where product_code = 'SMOKE-1';
 
-insert into orders (customer_name, shipping_cost, packing_cost, status)
-values ('smoke customer', 50, 20, 'new');
+insert into orders (customer_name, shipping_cost, packing_cost, advertising_cost, status)
+values ('smoke customer', 50, 20, 30, 'new');
 
 insert into order_items (order_id, product_id, product_code, product_name, color, size, product_cost, sell_price, quantity)
 select o.id, p.id, 'SMOKE-1', 'smoke test product', 'ดำ', 'S', 350, 890, 2
@@ -50,14 +50,14 @@ from order_items where product_code = 'SMOKE-1';
 
 -- 3. orders totals: trigger-maintained items_*, generated total_cost/profit
 select case when items_total = 1780.00 and items_cost = 700.00
-             and total_cost = 770.00 and profit = 1010.00
+             and total_cost = 800.00 and profit = 980.00
             then 'PASS' else 'FAIL' end
   || '  items_total=' || items_total || ' total_cost=' || total_cost || ' profit=' || profit
 from orders;
 
 -- 4. changing a line quantity recomputes the order
 update order_items set quantity = 5 where product_code = 'SMOKE-1';
-select case when items_total = 4450.00 and profit = 2630.00 then 'PASS' else 'FAIL' end
+select case when items_total = 4450.00 and profit = 2600.00 then 'PASS' else 'FAIL' end
   || '  after qty change: items_total=' || items_total || ' profit=' || profit
 from orders;
 
@@ -74,12 +74,12 @@ select case when count(*) = 1 and bool_and(product_id is null) then 'PASS' else 
   || '  order line survived product delete, product_id nulled'
 from order_items where product_code = 'SMOKE-1';
 
--- 7. cancelled orders are excluded from revenue
+-- 7. cancelled and fully refunded orders are excluded from revenue
 update orders set status = 'cancelled';
 select case when coalesce(sum(oi.line_total), 0) = 0 then 'PASS' else 'FAIL' end
-  || '  revenue excluding cancelled = ' || coalesce(sum(oi.line_total), 0)
+  || '  revenue excluding cancelled/refund = ' || coalesce(sum(oi.line_total), 0)
 from order_items oi join orders o on o.id = oi.order_id
-where o.status <> 'cancelled';
+where o.status not in ('cancelled', 'refund');
 
 -- 8. deleting an order cascades to its line items
 delete from orders;

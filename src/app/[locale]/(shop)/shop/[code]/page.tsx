@@ -5,6 +5,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server"
 import { routing } from "@/i18n/routing"
 import {
   getActiveProductCodes,
+  getPublicCharacters,
   getPublicProductByCode,
   getPublicProducts,
 } from "@/db/queries/storefront"
@@ -31,6 +32,10 @@ export const dynamic = "force-static"
  */
 export async function generateStaticParams() {
   try {
+    // Probes the new public taxonomy too. A deployment that builds before
+    // running the latest migration must return no static product paths;
+    // dynamicParams then renders them on demand after migration.
+    await getPublicCharacters()
     const codes = await getActiveProductCodes()
     return routing.locales.flatMap((locale) => codes.map((code) => ({ locale, code })))
   } catch (error) {
@@ -81,8 +86,8 @@ export default async function ProductDetailPage({
   if (!product) notFound()
 
   const t = await getTranslations()
-  const related = product.productType
-    ? await getPublicProducts({ type: product.productType, pageSize: 5, sort: "newest" })
+  const related = product.characters[0]
+    ? await getPublicProducts({ character: product.characters[0].slug, pageSize: 5, sort: "newest" })
     : { rows: [], count: 0, page: 1, pageSize: 5 }
   const relatedRows = related.rows.filter((p) => p.productCode !== product.productCode).slice(0, 4)
 

@@ -1,6 +1,6 @@
 import "server-only"
 
-import { count, ne } from "drizzle-orm"
+import { count, notInArray } from "drizzle-orm"
 
 import { db } from "@/db"
 import { orders, productImages, products, productVariants } from "@/db/schema"
@@ -13,20 +13,15 @@ import { monthKey } from "@/lib/format"
  * aggregation into SQL. Swaps:
  *   - cars -> products, sales -> orders
  *   - brand distribution -> product-type distribution
- *   - stock-aging buckets (days held) -> stock-level buckets (units held),
- *     since clothing has no purchase date to age against — variants are a
- *     quantity matrix, not a single held-since car row
  *   - alert set -> no photo / no price / no variants / all sizes sold out
  *
  * Business-logic call this file makes that the plan doesn't spell out
- * verbatim: `status = 'cancelled'` orders are excluded from every
- * revenue/profit/count aggregate below (a cancelled order was never
+ * verbatim: `cancelled` and fully `refund` orders are excluded from every
+ * revenue/profit/count aggregate below (neither is fulfilled revenue,
  * fulfilled, so it shouldn't inflate "this month's" numbers). Adjust here
  * if that assumption turns out wrong — it's centralised in `isCountedOrder`.
  */
 
-const LOW_STOCK_THRESHOLD = 5
-const MID_STOCK_THRESHOLD = 20
 const MONTHS_OF_HISTORY = 6
 
 type ProductRow = {
@@ -43,22 +38,35 @@ type ProductRow = {
 type OrderRow = {
   orderDate: string
   itemsTotal: string
+  itemsCost: string
+  shippingCost: string
+  packingCost: string
+  advertisingCost: string
+  totalCost: string | null
   profit: string | null
   status: (typeof orders.$inferSelect)["status"]
 }
 
 export type MonthPoint = { month: string; value: number }
 export type TypeSlice = { type: string; count: number }
-export type StockBucket = { bucket: string; count: number }
 export type ProductRef = { id: string; label: string }
 
 export type DashboardData = {
+  totalSkus: number
+  readyToShipSkus: number
   totalProducts: number
   activeProducts: number
   draftProducts: number
   archivedProducts: number
   totalStockUnits: number
   soldOutVariantCount: number
+  totalOrders: number
+  totalRevenue: number
+  totalProfit: number
+  advertisingCost: number
+  shippingCost: number
+  packagingCost: number
+  netProfit: number
   ordersThisMonth: number
   revenueThisMonth: number
   profitThisMonth: number
@@ -67,11 +75,10 @@ export type DashboardData = {
   revenue: number
   profit: number
   avgOrderProfit: number
-  monthlyRevenue: MonthPoint[]
+  monthlyCost: MonthPoint[]
   monthlyProfit: MonthPoint[]
   monthlyOrders: MonthPoint[]
   typeDistribution: TypeSlice[]
-  stockBuckets: StockBucket[]
   alerts: {
     noPhoto: ProductRef[]
     noPrice: ProductRef[]
@@ -119,15 +126,20 @@ export async function getDashboardData(): Promise<DashboardData> {
       .select({
         orderDate: orders.orderDate,
         itemsTotal: orders.itemsTotal,
+        itemsCost: orders.itemsCost,
+        shippingCost: orders.shippingCost,
+        packingCost: orders.packingCost,
+        advertisingCost: orders.advertisingCost,
+        totalCost: orders.totalCost,
         profit: orders.profit,
         status: orders.status,
       })
       .from(orders)
-      .where(ne(orders.status, "cancelled")),
+      .where(notInArray(orders.status, ["cancelled", "refund"])),
   ])
 
   const productsList: ProductRow[] = productRows
-  // Already filtered to `status != 'cancelled'` at the SQL level above.
+  // Already filtered to exclude cancelled/full-refund orders in SQL above.
   const countedOrders: OrderRow[] = orderRows
 
   const imageCountByProduct = new Map(imageCountRows.map((r) => [r.productId, r.value]))
@@ -146,6 +158,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   const allVariants = [...variantsByProduct.values()].flat()
   const totalStockUnits = allVariants.reduce((sum, v) => sum + v.quantity, 0)
   const soldOutVariantCount = allVariants.filter((v) => v.quantity <= 0).length
+  const readyToShipSkus = allVariants.filter((v) => v.quantity > 0).length
 
   const inventoryValueAtCost = nonArchivedProducts.reduce((sum, p) => {
     const variants = variantsByProduct.get(p.id) ?? []
@@ -154,8 +167,15 @@ export async function getDashboardData(): Promise<DashboardData> {
   }, 0)
 
   const revenue = countedOrders.reduce((s, o) => s + Number(o.itemsTotal || 0), 0)
-  const profit = countedOrders.reduce((s, o) => s + Number(o.profit || 0), 0)
-  const avgOrderProfit = countedOrders.length ? profit / countedOrders.length : 0
+  const grossProfit = countedOrders.reduce(
+    (s, o) => s + Number(o.itemsTotal || 0) - Number(o.itemsCost || 0),
+    0
+  )
+  const netProfit = countedOrders.reduce((s, o) => s + Number(o.profit || 0), 0)
+  const advertisingCost = countedOrders.reduce((s, o) => s + Number(o.advertisingCost || 0), 0)
+  const shippingCost = countedOrders.reduce((s, o) => s + Number(o.shippingCost || 0), 0)
+  const packagingCost = countedOrders.reduce((s, o) => s + Number(o.packingCost || 0), 0)
+  const avgOrderProfit = countedOrders.length ? netProfit / countedOrders.length : 0
 
   const thisMonth = monthKey(new Date())
   const monthOrders = countedOrders.filter((o) => monthKey(o.orderDate) === thisMonth)
@@ -164,19 +184,19 @@ export async function getDashboardData(): Promise<DashboardData> {
   const profitThisMonth = monthOrders.reduce((s, o) => s + Number(o.profit || 0), 0)
 
   const months = lastMonths(MONTHS_OF_HISTORY)
-  const revenueByMonth = new Map(months.map((m) => [m, 0]))
+  const costByMonth = new Map(months.map((m) => [m, 0]))
   const profitByMonth = new Map(months.map((m) => [m, 0]))
   const ordersByMonth = new Map(months.map((m) => [m, 0]))
   for (const o of countedOrders) {
     const m = monthKey(o.orderDate)
-    if (!revenueByMonth.has(m)) continue
-    revenueByMonth.set(m, (revenueByMonth.get(m) ?? 0) + Number(o.itemsTotal || 0))
+    if (!costByMonth.has(m)) continue
+    costByMonth.set(m, (costByMonth.get(m) ?? 0) + Number(o.totalCost || 0))
     profitByMonth.set(m, (profitByMonth.get(m) ?? 0) + Number(o.profit || 0))
     ordersByMonth.set(m, (ordersByMonth.get(m) ?? 0) + 1)
   }
 
   const label = (m: string) => m.slice(5) // "MM"
-  const monthlyRevenue = months.map((m) => ({ month: label(m), value: revenueByMonth.get(m) ?? 0 }))
+  const monthlyCost = months.map((m) => ({ month: label(m), value: costByMonth.get(m) ?? 0 }))
   const monthlyProfit = months.map((m) => ({ month: label(m), value: profitByMonth.get(m) ?? 0 }))
   const monthlyOrders = months.map((m) => ({ month: label(m), value: ordersByMonth.get(m) ?? 0 }))
 
@@ -189,20 +209,6 @@ export async function getDashboardData(): Promise<DashboardData> {
     .map(([type, value]) => ({ type, count: value }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 8)
-
-  const buckets = { sold_out: 0, low: 0, medium: 0, high: 0 }
-  for (const p of activeProducts) {
-    const variants = variantsByProduct.get(p.id) ?? []
-    const productUnits = variants.reduce((s, v) => s + v.quantity, 0)
-    if (productUnits <= 0) buckets.sold_out++
-    else if (productUnits <= LOW_STOCK_THRESHOLD) buckets.low++
-    else if (productUnits <= MID_STOCK_THRESHOLD) buckets.medium++
-    else buckets.high++
-  }
-  const stockBuckets = Object.entries(buckets).map(([bucket, value]) => ({
-    bucket,
-    count: value,
-  }))
 
   const ref = (p: ProductRow): ProductRef => ({
     id: p.id,
@@ -225,24 +231,32 @@ export async function getDashboardData(): Promise<DashboardData> {
   }
 
   return {
+    totalSkus: allVariants.length,
+    readyToShipSkus,
     totalProducts: productsList.length,
     activeProducts: activeProducts.length,
     draftProducts: draftProducts.length,
     archivedProducts: archivedProducts.length,
     totalStockUnits,
     soldOutVariantCount,
+    totalOrders: countedOrders.length,
+    totalRevenue: revenue,
+    totalProfit: grossProfit,
+    advertisingCost,
+    shippingCost,
+    packagingCost,
+    netProfit,
     ordersThisMonth,
     revenueThisMonth,
     profitThisMonth,
     inventoryValueAtCost,
     revenue,
-    profit,
+    profit: netProfit,
     avgOrderProfit,
-    monthlyRevenue,
+    monthlyCost,
     monthlyProfit,
     monthlyOrders,
     typeDistribution,
-    stockBuckets,
     alerts,
   }
 }

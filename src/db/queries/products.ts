@@ -4,7 +4,14 @@ import type { Column } from "drizzle-orm"
 import { and, asc, count, desc, eq, ilike, inArray, or } from "drizzle-orm"
 
 import { db } from "@/db"
-import { productImages, productStatus, products, productVariants } from "@/db/schema"
+import {
+  characters,
+  productCharacters,
+  productImages,
+  productStatus,
+  products,
+  productVariants,
+} from "@/db/schema"
 
 /**
  * Admin reads — full columns, INCLUDING `margin`, `originalPrice`,
@@ -26,10 +33,15 @@ export type ProductStatusValue = (typeof productStatus.enumValues)[number]
 export type ProductRow = typeof products.$inferSelect
 export type ProductVariantRow = typeof productVariants.$inferSelect
 export type ProductImageRow = typeof productImages.$inferSelect
+export type ProductCharacterRow = Pick<
+  typeof characters.$inferSelect,
+  "id" | "name" | "nameEn" | "slug" | "sortOrder"
+>
 
 export type ProductWithRelations = ProductRow & {
   variants: ProductVariantRow[]
   images: ProductImageRow[]
+  characters: ProductCharacterRow[]
 }
 
 export type ProductSort =
@@ -125,7 +137,7 @@ async function attachRelations(rows: ProductRow[]): Promise<ProductWithRelations
   if (rows.length === 0) return []
   const ids = rows.map((r) => r.id)
 
-  const [variantRows, imageRows] = await Promise.all([
+  const [variantRows, imageRows, characterRows] = await Promise.all([
     db
       .select()
       .from(productVariants)
@@ -136,6 +148,19 @@ async function attachRelations(rows: ProductRow[]): Promise<ProductWithRelations
       .from(productImages)
       .where(inArray(productImages.productId, ids))
       .orderBy(asc(productImages.sortOrder)),
+    db
+      .select({
+        productId: productCharacters.productId,
+        id: characters.id,
+        name: characters.name,
+        nameEn: characters.nameEn,
+        slug: characters.slug,
+        sortOrder: characters.sortOrder,
+      })
+      .from(productCharacters)
+      .innerJoin(characters, eq(characters.id, productCharacters.characterId))
+      .where(inArray(productCharacters.productId, ids))
+      .orderBy(asc(characters.sortOrder)),
   ])
 
   const variantsByProduct = new Map<string, ProductVariantRow[]>()
@@ -152,10 +177,18 @@ async function attachRelations(rows: ProductRow[]): Promise<ProductWithRelations
     else imagesByProduct.set(img.productId, [img])
   }
 
+  const charactersByProduct = new Map<string, ProductCharacterRow[]>()
+  for (const { productId, ...character } of characterRows) {
+    const bucket = charactersByProduct.get(productId)
+    if (bucket) bucket.push(character)
+    else charactersByProduct.set(productId, [character])
+  }
+
   return rows.map((row) => ({
     ...row,
     variants: variantsByProduct.get(row.id) ?? [],
     images: imagesByProduct.get(row.id) ?? [],
+    characters: charactersByProduct.get(row.id) ?? [],
   }))
 }
 

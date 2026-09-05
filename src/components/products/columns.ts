@@ -3,6 +3,8 @@ export type ProductColumnKey =
   | "code"
   | "name"
   | "type"
+  | "characters"
+  | "preorder"
   | "sell_price"
   | "original_price"
   | "margin"
@@ -16,6 +18,8 @@ export const ALL_COLUMNS: ProductColumnKey[] = [
   "code",
   "name",
   "type",
+  "characters",
+  "preorder",
   "sell_price",
   "original_price",
   "margin",
@@ -38,6 +42,8 @@ export const COLUMN_LABEL_KEY: Record<ProductColumnKey, string> = {
   code: "product.code",
   name: "product.name",
   type: "product.type",
+  characters: "product.characters",
+  preorder: "product.preorderLeadTime",
   sell_price: "product.sellPrice",
   original_price: "product.originalPrice",
   margin: "product.margin",

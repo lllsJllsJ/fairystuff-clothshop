@@ -27,6 +27,9 @@ const PUBLIC_NAMESPACES = new Set([
   "home",
   "footer",
   "shop",
+  "cart",
+  "checkout",
+  "account",
   "errors",
 ]);
 

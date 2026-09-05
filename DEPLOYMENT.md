@@ -45,8 +45,9 @@ This second step is not optional and is not run by `db:migrate` —
 **not listed in `drizzle/meta/_journal.json`**, so Drizzle's own migration
 runner has no way to know it exists. It adds:
 
-- the generated columns (`products.margin`, `orders.total_cost`,
-  `orders.profit`, `order_items.line_total`, `order_items.line_cost`),
+- the generated columns (`products.margin`, advertising-aware
+  `orders.total_cost`/`orders.profit`, `order_items.line_total`,
+  `order_items.line_cost`),
 - the `pg_trgm` extension and its two GIN search indexes on `products`,
 - `updated_at` triggers on `products`, `product_variants`, `orders`,
 - the `recalc_order()` function and its trigger on `order_items`,
@@ -70,7 +71,7 @@ below or by noticing the numbers are wrong.
 npm run db:seed
 ```
 
-Seeds the 10 Thai product types (idempotent — matched by unique `name`, safe
+Seeds the 13 Thai product types (idempotent — matched by unique `name`, safe
 to re-run).
 
 ## 4. Create the first owner account
@@ -80,8 +81,8 @@ npm run create-owner
 ```
 
 Interactive prompt — email + password (min 8 characters), confirmed twice.
-This is the **only** way an `owner` row is ever created; there is no signup
-route in the app. Run this against the target environment's `DATABASE_URL`
+This is the **only** way an `owner` row is ever created; public registration
+always creates a `customer`. Run this against the target environment's `DATABASE_URL`
 (i.e. with the right `.env` loaded, or the variable exported directly) —
 running it against your local dev database does not create an account on
 production.
@@ -127,6 +128,9 @@ production.
 | `STORAGE_BUCKET` | reference to prod `BUCKET` | reference to staging `BUCKET` | Use the S3 bucket name, not `RAILWAY_BUCKET_NAME` |
 | `STORAGE_FORCE_PATH_STYLE` | `false` | `false` | Set `true` only when the Bucket Credentials tab explicitly reports path style |
 | `NEXT_PUBLIC_SITE_URL` | `https://your-production-domain` | `https://your-staging-domain` | Feeds sitemap/robots/JSON-LD/canonical URLs |
+| `EMAIL_ENABLED` | `false` until email is ready | `false` or `true` for email testing | With `false`, new customers are auto-verified and verification/reset controls make no Resend calls |
+| `RESEND_API_KEY` | Resend secret when enabled | separate/test Resend secret | Leave empty while `EMAIL_ENABLED=false` |
+| `RESEND_FROM_EMAIL` | verified sender when enabled | verified test sender | Resend requires a valid sender; leave empty while disabled |
 
 Never commit real values for any of these — `.env.example` holds only
 placeholders, and every environment's real values live in the host's own
@@ -143,9 +147,15 @@ secret/environment-variable store.
    `DATABASE_URL` into the app service automatically once they're linked.
 3. Set every remaining variable from step 6 in the app service's
    **Variables** tab, for Production and any Staging environment
-   separately. `AUTH_URL` and `NEXT_PUBLIC_SITE_URL` differ per environment
+separately. `AUTH_URL` and `NEXT_PUBLIC_SITE_URL` differ per environment
    — an environment pointed at the Production `AUTH_URL` will fail its auth
-   callback.
+callback.
+
+If no public domain is available yet, keep `EMAIL_ENABLED=false`. The account,
+cart, checkout, generated order number, LINE/Instagram handoff, and tracking
+flows still work; only verification and password-reset delivery are disabled.
+When a domain/sender is ready, set `AUTH_URL`, `NEXT_PUBLIC_SITE_URL`, the two
+Resend values, then switch `EMAIL_ENABLED=true` in one deployment.
 4. Give the Staging environment its **own** Postgres service, not a copy of
    the production one connected to both. An environment that can write to
    production is one bad click from real data loss.
@@ -178,6 +188,14 @@ Railway build log:
 - [ ] An owner account exists for this environment (`npm run create-owner` was run against the right `DATABASE_URL`) and sign-in works at `/<locale>/login`.
 - [ ] `/api/images/<valid-storage-key>` serves an uploaded test image without exposing a signed bucket URL.
 - [ ] Bucket CORS is configured — uploading a product photo in `/admin/products/new` succeeds end to end (resize → presign → PUT).
+- [ ] The latest generated migration is applied so customer accounts,
+  characters, preorder lead times, checkout orders, workflow labels, line-item
+  statuses, and refund metadata exist (along with advertising-aware profit).
+- [ ] Admin Settings has at least one LINE or Instagram contact; checkout is
+  intentionally blocked without a handoff channel.
+- [ ] `EMAIL_ENABLED=false` is set while there is no verified sending domain,
+  or (when true) a registration verification and password-reset email both
+  succeed through Resend.
 - [ ] `sitemap.xml` and `robots.txt` resolve and reference the correct `NEXT_PUBLIC_SITE_URL`.
 - [ ] Run the full [`docs/health-check.md`](docs/health-check.md) security block against this environment's real URL — every check must pass (empty greps on 1/2/3/5, `401` on both checks in 4) before treating the environment as live.
 - [ ] Edit a product's price in admin, then hard-reload `/shop` in an incognito window — the new price must appear without waiting out the 300s ISR window (the storefront-revalidation check called out in step 7 above).
