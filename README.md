@@ -1,6 +1,6 @@
 # clothshop
 
-[![Node Version](https://img.shields.io/badge/node-24-339933.svg)](https://nodejs.org/en/blog/release/v24.0.0)
+[![Node Version](https://img.shields.io/badge/node-26.8.1-339933.svg)](https://nodejs.org/en/blog/release/v26.8.1)
 
 A preorder clothing storefront with customer accounts and an owner-only
 admin. Public catalogue browsing, local cart, account-gated checkout, and
@@ -8,13 +8,9 @@ customer tracking (Thai/English) on the front; product, fulfillment, refund,
 order, and inventory management on the back. See
 `DESIGN.md` for the visual system.
 
-> **Node version note.** The repo actually runs on **Node 24** (confirmed via
-> `node -v` in this environment). `package.json`'s `devDependencies` still pins
-> `@types/node@^20` and there is no `engines` field — that is a real
-> divergence between the declared and actual runtime, not a documentation
-> choice. Bump `@types/node` (and add an `engines.node` field) if you want the
-> `package.json` to say what's true; until then, treat "Node 24" above as the
-> verified fact and the `^20` types package as stale.
+The runtime and package manager are pinned to Node 26.8.1 and npm 11.19.0 in
+`package.json`, keeping local and Railway dependency resolution identical.
+Node 26 is a Current release until its scheduled LTS promotion in October 2026.
 
 <!-- ai:anchor:overview -->
 
@@ -164,7 +160,7 @@ separate API service and no serverless cold start.
 
 ### Prerequisites
 
-- Node 24 (see the version note above)
+- Node 26.8.1 and npm 11.19.0
 - [Docker](https://www.docker.com/) — runs the local dev database and local
   object storage (`docker-compose.yml`), plus the throwaway database
   `npm run smoke` uses
@@ -259,7 +255,7 @@ cp .env.example .env.local   # fill in real values, see Environment Variables be
 ### Docker setup
 
 There is no Dockerfile for the app itself, and none is needed: Railway
-builds it from source with Nixpacks (`railway.json`). Docker **is** used for
+builds it from source with Railpack (`railway.json`). Docker **is** used for
 two other things:
 
 - **The local dev database and object storage** — `docker-compose.yml` at
@@ -445,8 +441,9 @@ scripts/
 ## Build & Deployment
 
 **The hosting target is Railway.** The app runs there as a long-lived Node
-container — not serverless functions — built by Nixpacks per `railway.json`
-(`npm run build` at build time, `npm run start` to serve). See
+container — not serverless functions — built by Railpack per `railway.json`
+(`npm run build` at build time, `npm run db:migrate` before deployment, and
+`npm run start` to serve). See
 [DEPLOYMENT.md](DEPLOYMENT.md) for the full setup walkthrough.
 
 ### Local build
