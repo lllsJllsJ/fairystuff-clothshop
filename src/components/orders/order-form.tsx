@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useFieldArray, useForm } from "react-hook-form"
+import { useQueryClient } from "@tanstack/react-query"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslations } from "next-intl"
 import { toast } from "sonner"
@@ -41,6 +42,8 @@ const BLANK_ITEM: OrderItemValues = {
   size: "",
   productCost: 0,
   sellPrice: 0,
+  preorderMinDays: null,
+  preorderMaxDays: null,
   quantity: 1,
   statusCode: "not_ordered",
 }
@@ -62,6 +65,7 @@ export function OrderForm({
 }) {
   const t = useTranslations()
   const router = useRouter()
+  const queryClient = useQueryClient()
   const isEdit = !!order
   const [submitting, setSubmitting] = useState(false)
 
@@ -99,6 +103,8 @@ export function OrderForm({
               size: item.size ?? "",
               productCost: Number(item.productCost),
               sellPrice: Number(item.sellPrice),
+              preorderMinDays: item.preorderMinDays,
+              preorderMaxDays: item.preorderMaxDays,
               quantity: item.quantity,
               statusCode: item.statusCode,
             }))
@@ -142,6 +148,24 @@ export function OrderForm({
       }
 
       toast.success(isEdit ? t("order.updated") : t("order.created"))
+
+      /**
+       * `router.refresh()` alone is NOT enough to un-stale the order list.
+       * `/admin/orders` renders `OrderList`, a client component whose rows
+       * come from TanStack Query (`["admin-orders", ...]`) against
+       * `/api/admin/orders` — not from the RSC payload. `router.refresh()`
+       * re-renders server components, and the server action's
+       * `revalidateOrders()` busts Next's *server* cache, but neither
+       * touches the *client* query cache. With `staleTime: 30_000`
+       * (src/components/providers.tsx) a save followed by navigating back
+       * to the list within 30s re-showed the pre-edit totals — the money
+       * columns (itemsTotal/profit) looked like the edit had silently
+       * failed. Invalidate explicitly so the list refetches on mount.
+       *
+       * Prefix-matched: every `["admin-orders", search, status, ...]` key
+       * is dropped, not just the one page/filter combination last viewed.
+       */
+      await queryClient.invalidateQueries({ queryKey: ["admin-orders"] })
       router.push(`/admin/orders/${result.id}`)
       router.refresh()
     } finally {
@@ -182,8 +206,8 @@ export function OrderForm({
         <Field label={t("order.shippingCost")}>
           <Input type="number" inputMode="decimal" step="0.01" min={0} {...register("shippingCost")} />
         </Field>
-        <label className="flex items-center gap-2 self-end pb-2 text-body">
-          <input type="checkbox" {...register("shippingConfirmed")} />
+        <label className="flex min-h-11 items-center gap-2 self-end pb-2 text-body">
+          <input type="checkbox" className="size-5" {...register("shippingConfirmed")} />
           {t("order.shippingConfirmed")}
         </label>
         <Field label={t("order.packingCost")}>

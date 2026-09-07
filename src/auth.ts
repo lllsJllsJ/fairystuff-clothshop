@@ -1,7 +1,7 @@
 import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 import bcrypt from "bcryptjs"
-import { eq } from "drizzle-orm"
+import { eq, or } from "drizzle-orm"
 
 import { db } from "@/db"
 import { users } from "@/db/schema"
@@ -28,8 +28,11 @@ import { loginSchema } from "@/lib/validations/auth"
  * config readable by Next 16's proxy, which decodes the session cookie
  * without touching the database — see src/proxy.ts).
  *
- * Public registration exists for customers only. The only way an `owner`
- * row is created is `scripts/create-owner.ts`.
+ * There is NO public registration. Accounts are owner/staff only — guest
+ * checkout needs no sign-in at all (see CLAUDE.md and the removed
+ * `account/`/`register/` trees). The only way an `owner` row is created is
+ * `scripts/create-owner.ts`; an owner can promote an existing `staff`
+ * account from `/admin/users`.
  */
 
 /**
@@ -47,7 +50,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Credentials({
       credentials: {
-        email: { label: "Email", type: "email" },
+        identifier: { label: "Email or phone", type: "text" },
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
@@ -55,24 +58,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const parsed = loginSchema.safeParse(credentials)
         if (!parsed.success) return null
 
-        const email = parsed.data.email.trim().toLowerCase()
-        const { password } = parsed.data
+        const { identifier, password } = parsed.data
 
         const [user] = await db
           .select()
           .from(users)
-          .where(eq(users.email, email))
+          .where(or(eq(users.email, identifier), eq(users.phone, identifier)))
           .limit(1)
 
-        // Never reveal whether the email exists. Returning early on a missing
+        // Never reveal whether the identifier exists. Returning early on a missing
         // row would leak it through TIMING: bcrypt.compare costs ~100ms, so a
         // fast rejection means "no such account" and a slow one means "wrong
-        // password" — enough to enumerate valid emails. Always spend the same
+        // password" — enough to enumerate valid accounts. Always spend the same
         // work by comparing against a dummy hash of the same cost factor.
         const hash = user?.passwordHash ?? DUMMY_PASSWORD_HASH
         const valid = await bcrypt.compare(password, hash)
         if (!user || !valid) return null
-        if (user.role === "customer" && !user.emailVerifiedAt) return null
 
         return {
           id: user.id,
@@ -84,18 +85,40 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       // `user` is only present on the initial sign-in call; carry its id
       // and role onto the token so subsequent requests don't need a query.
       if (user) {
         token.id = user.id
         token.role = user.role
       }
+      // `LoginForm` calls `useSession().update()` right after a successful
+      // sign-in so the persistent header reflects the new session
+      // immediately, without waiting for a full page reload. Refresh from
+      // the database rather than trusting anything the client could supply.
+      if (trigger === "update" && token.id) {
+        const [freshUser] = await db
+          .select({
+            email: users.email,
+            fullname: users.fullname,
+            role: users.role,
+          })
+          .from(users)
+          .where(eq(users.id, token.id))
+          .limit(1)
+        if (freshUser) {
+          token.email = freshUser.email
+          token.name = freshUser.fullname
+          token.role = freshUser.role
+        }
+      }
       return token
     },
     async session({ session, token }) {
       session.user.id = token.id
       session.user.role = token.role
+      session.user.name = token.name
+      session.user.email = token.email ?? ""
       return session
     },
   },

@@ -2,6 +2,7 @@ import { NoSuchKey, S3ServiceException } from "@aws-sdk/client-s3"
 
 import { getProductImage } from "@/lib/r2"
 import { isProductImageKey } from "@/lib/product-image-keys"
+import { isBrandLogoKey } from "@/lib/brand-image-keys"
 
 export const runtime = "nodejs"
 
@@ -11,7 +12,7 @@ export async function GET(
 ) {
   const { key: segments } = await context.params
   const storageKey = segments.join("/")
-  if (!isProductImageKey(storageKey)) {
+  if (!isProductImageKey(storageKey) && !isBrandLogoKey(storageKey)) {
     return new Response("Not found", { status: 404 })
   }
 

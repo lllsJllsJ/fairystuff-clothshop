@@ -22,30 +22,26 @@ platform cron, and the S3-compatible storage adapter remains portable.
    the host and disables SSL for `*.railway.internal` and `localhost`,
    enabling it (with `rejectUnauthorized: false`) for any public host — see
    `sslFor()` there. Use the **public** connection string only when you need
-   to reach the database from outside Railway (e.g. `psql` from your own
-   machine for the manual migration step below).
+   to reach the database from outside Railway (e.g. running `db:seed` or
+   `create-owner` from your own machine, or connecting with `psql` directly).
 3. The app opens one connection pool per process (`max: 10`,
    `src/db/index.ts`) — modest on purpose, since Railway Postgres plans cap
    total connections and a single-owner shop has no need for high
    concurrency. Consider creating a **separate Postgres service per
    environment** (production vs. staging) rather than sharing one database.
 
-## 2. Migrations — including the manual step
+## 2. Migrations
 
 ```bash
 npm run db:migrate
 ```
 
-Then, **manually, every environment, every time**:
-
-```bash
-psql "$DATABASE_URL" -f drizzle/0000_init_extras.sql
-```
-
-This second step is not optional and is not run by `db:migrate` —
-`drizzle/0000_init_extras.sql` is a hand-written companion migration that is
-**not listed in `drizzle/meta/_journal.json`**, so Drizzle's own migration
-runner has no way to know it exists. It adds:
+This applies both `drizzle/0000_init.sql` and the journaled
+`drizzle/0001_init_extras.sql` in one step — there is no separate manual
+`psql` command. `0001_init_extras.sql` is a hand-written `--custom`
+migration, but it **is** listed in `drizzle/meta/_journal.json`, so Drizzle's
+own migration runner applies it automatically right after `0000_init.sql`.
+It adds:
 
 - the generated columns (`products.margin`, advertising-aware
   `orders.total_cost`/`orders.profit`, `order_items.line_total`,
@@ -53,19 +49,13 @@ runner has no way to know it exists. It adds:
 - the `pg_trgm` extension and its two GIN search indexes on `products`,
 - `updated_at` triggers on `products`, `product_variants`, `orders`,
 - the `recalc_order()` function and its trigger on `order_items`,
-- check constraints on the two quantity columns.
+- check constraints on the two quantity columns,
+- reference data (`order_item_statuses`, the default `shop_settings` row,
+  `order_status_labels`, `customer_status_labels`).
 
 It is idempotent (`drop ... if exists` / `create ... if not exists`
-throughout), so re-running it against an already-migrated database is safe
-and a reasonable thing to do as part of every deploy, not just the first
-one.
-
-**Symptom if this step is skipped:** the app builds and runs without error,
-but every money figure — margin, order totals, profit, line totals — is
-silently `NULL` or `0`, and product search falls back to a slow sequential
-scan instead of using the trigram index. Nothing in application code
-detects or warns about this; it must be caught by the health-check block
-below or by noticing the numbers are wrong.
+throughout), so re-running it by hand against an already-migrated database
+(e.g. for debugging) is safe.
 
 ## 3. Seed data
 
@@ -83,11 +73,11 @@ npm run create-owner
 ```
 
 Interactive prompt — email + password (min 8 characters), confirmed twice.
-This is the **only** way an `owner` row is ever created; public registration
-always creates a `customer`. Run this against the target environment's `DATABASE_URL`
-(i.e. with the right `.env` loaded, or the variable exported directly) —
-running it against your local dev database does not create an account on
-production.
+This is the **only** way an `owner` row is ever created — there is no public
+registration at all (guest checkout needs no account; see `CLAUDE.md`). Run
+this against the target environment's `DATABASE_URL` (i.e. with the right
+`.env` loaded, or the variable exported directly) — running it against your
+local dev database does not create an account on production.
 
 ## 5. Railway Storage Bucket setup
 
@@ -130,7 +120,7 @@ production.
 | `STORAGE_BUCKET` | reference to prod `BUCKET` | reference to staging `BUCKET` | Use the S3 bucket name, not `RAILWAY_BUCKET_NAME` |
 | `STORAGE_FORCE_PATH_STYLE` | `false` | `false` | Set `true` only when the Bucket Credentials tab explicitly reports path style |
 | `NEXT_PUBLIC_SITE_URL` | `https://your-production-domain` | `https://your-staging-domain` | Feeds sitemap/robots/JSON-LD/canonical URLs |
-| `EMAIL_ENABLED` | `false` until email is ready | `false` or `true` for email testing | With `false`, new customers are auto-verified and verification/reset controls make no Resend calls |
+| `EMAIL_ENABLED` | `false` until email is ready | `false` or `true` for email testing | Owner/staff password-reset only — there is no customer registration/verification flow. With `false`, `/forgot-password` makes no Resend call |
 | `RESEND_API_KEY` | Resend secret when enabled | separate/test Resend secret | Leave empty while `EMAIL_ENABLED=false` |
 | `RESEND_FROM_EMAIL` | verified sender when enabled | verified test sender | Resend requires a valid sender; leave empty while disabled |
 
@@ -154,9 +144,10 @@ separately. `AUTH_URL` and `NEXT_PUBLIC_SITE_URL` differ per environment
    — an environment pointed at the Production `AUTH_URL` will fail its auth
 callback.
 
-If no public domain is available yet, keep `EMAIL_ENABLED=false`. The account,
-cart, checkout, generated order number, LINE/Instagram handoff, and tracking
-flows still work; only verification and password-reset delivery are disabled.
+If no public domain is available yet, keep `EMAIL_ENABLED=false`. Guest
+checkout, the local cart, the generated preorder code, the LINE/Instagram/
+Facebook handoff, and `/track/[code]` all still work with no account and no
+email required — only owner/staff password-reset delivery is disabled.
 When a domain/sender is ready, set `AUTH_URL`, `NEXT_PUBLIC_SITE_URL`, the two
 Resend values, then switch `EMAIL_ENABLED=true` in one deployment.
 4. Give the Staging environment its **own** Postgres service, not a copy of
@@ -177,29 +168,42 @@ Resend values, then switch `EMAIL_ENABLED=true` in one deployment.
 Two failure modes survive a green build and neither is visible in the
 Railway build log:
 
-- **`drizzle/0000_init_extras.sql` not applied** (step 2). Orders silently
-  report zero profit, because every monetary figure is computed by generated
-  columns and the `recalc_order` trigger, all of which live only in that file.
+- **`db:migrate` hasn't actually run against this environment yet** (step 2,
+  e.g. `preDeployCommand` failed or was skipped). Orders silently report zero
+  profit, because every monetary figure is computed by generated columns and
+  the `recalc_order` trigger, both of which live in
+  `drizzle/0001_init_extras.sql` — applied automatically by `db:migrate`
+  alongside `0000_init.sql`, so there is no separate manual step to forget
+  anymore, but a migration run that never happened still leaves the database
+  bare.
 - **Bucket CORS not configured** (step 5). The admin loads fine and image uploads
   fail only when someone actually tries one, since the browser PUTs directly
   to the Bucket.
 
 ## 8. Post-deploy checklist
 
-- [ ] `npm run db:migrate` ran, **and** `psql "$DATABASE_URL" -f drizzle/0000_init_extras.sql` ran manually against this environment's database.
+- [ ] `npm run db:migrate` ran against this environment's database (this alone applies both `0000_init.sql` and `0001_init_extras.sql` — no separate manual step).
 - [ ] `npm run db:seed` ran (product types visible in `/admin/settings`).
 - [ ] An owner account exists for this environment (`npm run create-owner` was run against the right `DATABASE_URL`) and sign-in works at `/<locale>/login`.
 - [ ] `/api/images/<valid-storage-key>` serves an uploaded test image without exposing a signed bucket URL.
 - [ ] Bucket CORS is configured — uploading a product photo in `/admin/products/new` succeeds end to end (resize → presign → PUT).
-- [ ] The latest generated migration is applied so customer accounts,
-  characters, preorder lead times, checkout orders, workflow labels, line-item
-  statuses, and refund metadata exist (along with advertising-aware profit).
+- [ ] The latest generated migration is applied so the `orders.preorderCode`
+  column, characters, preorder lead times, checkout orders, workflow labels,
+  line-item statuses, and refund metadata exist (along with advertising-aware
+  profit). There is no `customer` role or account table to seed — guest
+  checkout needs none.
 - [ ] Admin Settings has at least one LINE or Instagram contact; checkout is
   intentionally blocked without a handoff channel.
 - [ ] `EMAIL_ENABLED=false` is set while there is no verified sending domain,
-  or (when true) a registration verification and password-reset email both
-  succeed through Resend.
-- [ ] `sitemap.xml` and `robots.txt` resolve and reference the correct `NEXT_PUBLIC_SITE_URL`.
-- [ ] Run the full [`docs/health-check.md`](docs/health-check.md) security block against this environment's real URL — every check must pass (empty greps on 1/2/3/5, `401` on both checks in 4) before treating the environment as live.
+  or (when true) an owner/staff `/forgot-password` reset email succeeds
+  through Resend. There is no registration-verification email to test — it
+  no longer exists.
+- [ ] **Guest checkout end to end:** as an anonymous browser, add a product to
+  the cart, complete `/checkout` with no sign-in, and confirm the redirect
+  lands on `/track/<preorderCode>?new=1` showing the order with status
+  "Received." Then confirm the same order appears in `/admin/orders` with
+  status `new` and the same preorder code.
+- [ ] `sitemap.xml` and `robots.txt` resolve and reference the correct `NEXT_PUBLIC_SITE_URL`; `robots.txt` disallows `/*/track/` (trailing slash) while `/th/track`/`/en/track` stay crawlable.
+- [ ] Run the full [`docs/health-check.md`](docs/health-check.md) security block against this environment's real URL — every check must pass (empty greps on 1/2/3/5/6, `401` on both checks in 4, `404` on both checks in 6b) before treating the environment as live.
 - [ ] Edit a product's price in admin, then hard-reload `/shop` in an incognito window — the new price must appear without waiting out the 300s ISR window (the storefront-revalidation check called out in step 7 above).
 - [ ] Confirm `/admin` and `/api/admin/*` reject an anonymous browser session (already covered by the health-check block, but worth confirming visually too).

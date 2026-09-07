@@ -2,7 +2,6 @@ import { useTranslations } from "next-intl"
 import { ArrowRight } from "lucide-react"
 
 import { Link } from "@/i18n/navigation"
-import { BRAND_NAME, BRAND_TAGLINE_EN, BRAND_TAGLINE_TH } from "@/lib/brand"
 import { Button } from "@/components/ui/button"
 
 /**
@@ -13,17 +12,20 @@ import { Button } from "@/components/ui/button"
  * green, warm brown) reads as an intentional editorial mark rather than a
  * placeholder box. Swap the `aria-hidden` block for a real photo once one
  * exists — the layout doesn't need to change.
+ *
+ * `brandName`/`tagline` come from the parent page, which already reads
+ * `shop_settings` for `generateMetadata` — passed down as props rather
+ * than fetched again here.
  */
-export function Hero({ locale }: { locale: string }) {
+export function Hero({ brandName, tagline }: { brandName: string; tagline: string }) {
   const t = useTranslations()
-  const tagline = locale === "th" ? BRAND_TAGLINE_TH : BRAND_TAGLINE_EN
 
   return (
     <section className="relative overflow-hidden bg-primary" aria-labelledby="hero-heading">
       <div className="mx-auto grid max-w-[1440px] grid-cols-1 items-center gap-8 px-4 py-21 sm:px-6 md:py-30 lg:grid-cols-2 lg:px-8">
         <div className="relative z-[var(--z-raised)] flex flex-col items-start gap-5 text-left">
           <span className="border border-white/40 px-3 py-1 text-small font-bold text-white">
-            {BRAND_NAME}
+            {brandName}
           </span>
           <h1 id="hero-heading" className="text-h1 font-bold text-white lg:text-[56px] lg:leading-[1.1]">
             {t("home.heroTitle")}

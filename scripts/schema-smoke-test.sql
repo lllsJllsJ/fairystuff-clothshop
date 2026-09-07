@@ -4,17 +4,17 @@
 -- The generated columns and the recalc_order trigger compute every figure the
 -- owner sees: margin, line totals, order totals, and profit. TypeScript cannot
 -- verify any of it — Drizzle does not model GENERATED ALWAYS columns, and the
--- trigger lives only in drizzle/0000_init_extras.sql. This file executes them.
+-- trigger lives only in drizzle/0001_init_extras.sql. This file executes them.
 --
 -- Run against a THROWAWAY database. It inserts and then deletes rows.
 --
 --   docker run -d --name pgtest -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=clothshop \
 --     -p 55433:5432 postgres:16-alpine
---   docker cp drizzle/0000_init.sql        pgtest:/tmp/
---   docker cp drizzle/0000_init_extras.sql pgtest:/tmp/
+--   docker cp drizzle/0000_init.sql         pgtest:/tmp/
+--   docker cp drizzle/0001_init_extras.sql  pgtest:/tmp/
 --   docker cp scripts/schema-smoke-test.sql pgtest:/tmp/
 --   docker exec pgtest psql -U postgres -d clothshop -v ON_ERROR_STOP=1 -f /tmp/0000_init.sql
---   docker exec pgtest psql -U postgres -d clothshop -v ON_ERROR_STOP=1 -f /tmp/0000_init_extras.sql
+--   docker exec pgtest psql -U postgres -d clothshop -v ON_ERROR_STOP=1 -f /tmp/0001_init_extras.sql
 --   docker exec pgtest psql -U postgres -d clothshop -f /tmp/schema-smoke-test.sql
 --   docker rm -f pgtest
 --
@@ -32,8 +32,8 @@ insert into product_variants (product_id, color, size, quantity)
 select id, c, s, q from products, (values ('ดำ','S',3),('ดำ','M',0),('เบจ','S',5)) v(c,s,q)
 where product_code = 'SMOKE-1';
 
-insert into orders (customer_name, shipping_cost, packing_cost, advertising_cost, status)
-values ('smoke customer', 50, 20, 30, 'new');
+insert into orders (customer_name, preorder_code, shipping_cost, packing_cost, advertising_cost, status)
+values ('smoke customer', 'PO-SMOKE00001', 50, 20, 30, 'new');
 
 insert into order_items (order_id, product_id, product_code, product_name, color, size, product_cost, sell_price, quantity)
 select o.id, p.id, 'SMOKE-1', 'smoke test product', 'ดำ', 'S', 350, 890, 2

@@ -1,6 +1,7 @@
 import { getTranslations, setRequestLocale } from "next-intl/server"
 
 import { routing } from "@/i18n/routing"
+import { getShopSettings, resolvedBrandName } from "@/db/queries/settings"
 import { SiteHeader } from "@/components/shop/site-header"
 import { SiteFooter } from "@/components/shop/site-footer"
 
@@ -30,7 +31,7 @@ export default async function ShopLayout({
   // is what keeps every page under this layout eligible for static
   // rendering (see the equivalent comment in src/app/[locale]/layout.tsx).
   setRequestLocale(locale)
-  const t = await getTranslations()
+  const [t, settings] = await Promise.all([getTranslations(), getShopSettings()])
 
   return (
     <>
@@ -40,7 +41,7 @@ export default async function ShopLayout({
       >
         {t("common.skipToContent")}
       </a>
-      <SiteHeader />
+      <SiteHeader brandName={resolvedBrandName(settings)} logoUrl={settings.logoUrl} />
       <main id="main-content" className="min-h-[60vh]">
         {children}
       </main>

@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useRouter } from "@/i18n/navigation"
 import { formatBaht } from "@/lib/format"
 
-export function CheckoutForm({ name, email, contactReady }: { name: string; email: string; contactReady: boolean }) {
+export function CheckoutForm({ contactReady }: { contactReady: boolean }) {
   const t = useTranslations("checkout")
   const cart = useCart()
   const router = useRouter()
@@ -26,6 +26,8 @@ export function CheckoutForm({ name, email, contactReady }: { name: string; emai
     const data = new FormData(event.currentTarget)
     const result = await submitCheckout({
       checkoutKey,
+      customerFirstName: String(data.get("firstName") ?? ""),
+      customerLastName: String(data.get("lastName") ?? ""),
       customerPhone: String(data.get("phone") ?? ""),
       customerAddress: String(data.get("address") ?? ""),
       note: String(data.get("note") ?? ""),
@@ -38,11 +40,16 @@ export function CheckoutForm({ name, email, contactReady }: { name: string; emai
     })
     setPending(false)
     if (!result.ok) {
-      setError(t(result.error === "cart_changed" ? "cartChanged" : result.error === "contact_missing" ? "contactMissing" : "failed"))
+      setError(t(
+        result.error === "cart_changed" ? "cartChanged"
+          : result.error === "contact_missing" ? "contactMissing"
+            : result.error === "invalid" ? "invalid"
+              : "failed"
+      ))
       return
     }
     cart.clear()
-    router.push(`/checkout/success/${result.id}`)
+    router.push(`/track/${result.preorderCode}?new=1`)
   }
 
   if (!cart.hydrated) return <p>{t("loading")}</p>
@@ -52,10 +59,14 @@ export function CheckoutForm({ name, email, contactReady }: { name: string; emai
     <section className="space-y-4 border border-border bg-card p-5">
       <h2 className="text-subtitle font-bold">{t("delivery")}</h2>
       <div className="grid gap-4 sm:grid-cols-2">
-        <ReadOnlyField label={t("name")} value={name} />
-        <ReadOnlyField label={t("email")} value={email} />
-        <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="phone">{t("phone")}</Label><Input id="phone" name="phone" type="tel" required minLength={5} maxLength={30} /></div>
-        <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="address">{t("address")}</Label><Textarea id="address" name="address" required minLength={5} maxLength={500} rows={4} /></div>
+        <div className="space-y-1.5"><Label htmlFor="firstName">{t("firstName")}</Label><Input id="firstName" name="firstName" autoComplete="given-name" required minLength={1} maxLength={60} /></div>
+        <div className="space-y-1.5"><Label htmlFor="lastName">{t("lastName")}</Label><Input id="lastName" name="lastName" autoComplete="family-name" required minLength={1} maxLength={60} /></div>
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label htmlFor="phone">{t("phone")}</Label>
+          <Input id="phone" name="phone" type="tel" autoComplete="tel" required minLength={5} maxLength={30} />
+          <p className="text-small text-muted-foreground">{t("phoneHint")}</p>
+        </div>
+        <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="address">{t("address")}</Label><Textarea id="address" name="address" autoComplete="street-address" required minLength={5} maxLength={500} rows={4} /></div>
         <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="note">{t("note")}</Label><Textarea id="note" name="note" maxLength={2000} rows={2} /></div>
       </div>
     </section>
@@ -69,8 +80,4 @@ export function CheckoutForm({ name, email, contactReady }: { name: string; emai
       <Button type="submit" size="lg" className="mt-5 w-full" disabled={pending || !contactReady}>{pending && <Loader2 className="animate-spin" />}{t("placeOrder")}</Button>
     </aside>
   </form>
-}
-
-function ReadOnlyField({ label, value }: { label: string; value: string }) {
-  return <div className="space-y-1.5"><Label>{label}</Label><div className="min-h-10 border border-input bg-muted px-3 py-2 text-body">{value}</div></div>
 }

@@ -8,10 +8,11 @@ import {
   type PublicProductListResult,
   type PublicCharacterFacet,
 } from "@/db/queries/storefront"
-import { BRAND_NAME, BRAND_TAGLINE_EN, BRAND_TAGLINE_TH } from "@/lib/brand"
+import { getShopSettings, resolvedBrandDescription, resolvedBrandName } from "@/db/queries/settings"
 import { Hero } from "@/components/shop/hero"
 import { ProductGrid } from "@/components/shop/product-grid"
 import { CollectionStrip } from "@/components/shop/collection-strip"
+import { QuickFilterRail } from "@/components/shop/quick-filter-rail"
 import { ContactCta } from "@/components/shop/contact-cta"
 import { Link } from "@/i18n/navigation"
 
@@ -30,10 +31,10 @@ export async function generateMetadata({
   params: Promise<{ locale: string }>
 }): Promise<Metadata> {
   const { locale } = await params
-  const tagline = locale === "th" ? BRAND_TAGLINE_TH : BRAND_TAGLINE_EN
+  const settings = await getShopSettings()
   return {
-    title: BRAND_NAME,
-    description: tagline,
+    title: resolvedBrandName(settings),
+    description: resolvedBrandDescription(settings, locale),
     alternates: {
       languages: Object.fromEntries(routing.locales.map((l) => [l, `/${l}`])),
     },
@@ -41,7 +42,7 @@ export async function generateMetadata({
 }
 
 /**
- * `getPublicProducts`/`getPublicTypes` run at prerender time for both
+ * `getPublicProducts`/`getPublicCharacters` run at prerender time for both
  * locales (this page has no dynamic segment beyond `[locale]`, which
  * `generateStaticParams` above already covers). In this verification
  * environment `DATABASE_URL` points at nothing, so those calls would throw
@@ -77,16 +78,16 @@ export default async function HomePage({
 }) {
   const { locale } = await params
   setRequestLocale(locale)
-  const t = await getTranslations()
-
-  const [newIn, characters] = await Promise.all([
+  const [t, settings, newIn, characters] = await Promise.all([
+    getTranslations(),
+    getShopSettings(),
     safeGetPublicProducts({ page: 1, pageSize: NEW_IN_COUNT, sort: "newest" }),
     safeGetPublicCharacters(),
   ])
 
   return (
     <>
-      <Hero locale={locale} />
+      <Hero brandName={resolvedBrandName(settings)} tagline={resolvedBrandDescription(settings, locale)} />
 
       <section aria-labelledby="new-in-heading" className="bg-background">
         <div className="mx-auto max-w-[1440px] px-4 py-17 sm:px-6 lg:px-8">
@@ -104,6 +105,8 @@ export default async function HomePage({
               {t("shop.allProducts")}
             </Link>
           </div>
+          <QuickFilterRail characters={characters} />
+
           <ProductGrid
             products={newIn.rows}
             newCodes={new Set(newIn.rows.map((p) => p.productCode))}

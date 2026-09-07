@@ -9,6 +9,7 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 
 import { PRODUCT_IMAGE_WIDTHS, productImageRenditionKeys } from "@/lib/product-image-keys"
+import { brandLogoRenditionKeys } from "@/lib/brand-image-keys"
 
 /**
  * S3-compatible object-storage client. Server-only — this reads secret
@@ -139,6 +140,12 @@ export async function putProductImage(
   )
 }
 
+async function deleteObjectByKey(storageKey: string): Promise<void> {
+  const bucket = bucketName()
+  const client = r2Client()
+  await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: storageKey }))
+}
+
 /**
  * Deletes one product image from object storage by its key. Best-effort —
  * callers (e.g. `deleteProduct`/`updateProduct` in the action layer) should
@@ -147,9 +154,7 @@ export async function putProductImage(
  * more.
  */
 export async function deleteProductImage(storageKey: string): Promise<void> {
-  const bucket = bucketName()
-  const client = r2Client()
-  await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: storageKey }))
+  await deleteObjectByKey(storageKey)
 }
 
 export async function getProductImage(storageKey: string) {
@@ -161,5 +166,40 @@ export { PRODUCT_IMAGE_WIDTHS as PRODUCT_IMAGE_WIDTHS_SERVER, productImageRendit
 
 /** Deletes every width behind the canonical 1600w database key. */
 export async function deleteProductImageRenditions(storageKey: string): Promise<void> {
-  await Promise.all(productImageRenditionKeys(storageKey).map(deleteProductImage))
+  await Promise.all(productImageRenditionKeys(storageKey).map(deleteObjectByKey))
+}
+
+/**
+ * Presigns PUT URLs for brand-logo storage keys the browser has already
+ * computed under `brand/logo-...` (lib/image-resize.ts#buildBrandLogoKey).
+ * Mirrors `presignProductImagePut`'s shape — same defense-in-depth
+ * rationale, scoped to the `brand/` prefix instead of a per-product one
+ * since there is only ever one logo.
+ */
+export async function presignBrandLogoPut(keys: string[]): Promise<PresignedUpload[]> {
+  const prefix = "brand/logo-"
+  const bucket = bucketName()
+  const client = r2Client()
+
+  return Promise.all(
+    keys.map(async (key) => {
+      if (!key.startsWith(prefix)) {
+        throw new Error(`Refusing to presign "${key}" — it is not a brand logo key.`)
+      }
+      const command = new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        ContentType: "image/webp",
+      })
+      const url = await getSignedUrl(client, command, {
+        expiresIn: PRESIGN_EXPIRY_SECONDS,
+      })
+      return { key, url }
+    })
+  )
+}
+
+/** Deletes every width behind a brand logo's canonical database key. */
+export async function deleteBrandLogoRenditions(storageKey: string): Promise<void> {
+  await Promise.all(brandLogoRenditionKeys(storageKey).map(deleteObjectByKey))
 }

@@ -21,7 +21,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/+$/, "")
   const now = new Date()
 
-  const staticPaths = ["", "/shop", "/about"]
+  const staticPaths = ["", "/shop", "/about", "/track"]
   const staticEntries: MetadataRoute.Sitemap = staticPaths.flatMap((path) =>
     routing.locales.map((locale) => ({
       url: `${siteUrl}/${locale}${path}`,

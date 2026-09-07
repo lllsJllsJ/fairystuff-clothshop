@@ -320,13 +320,13 @@ export function ProductForm({
                   aria-label={t("product.setCover")}
                   title={isCover ? t("product.cover") : t("product.setCover")}
                   className={cn(
-                    "absolute top-1 left-1 flex size-6 items-center justify-center",
+                    "absolute top-1 left-1 flex size-11 items-center justify-center",
                     isCover
                       ? "bg-primary text-primary-foreground"
                       : "bg-background/80 text-foreground"
                   )}
                 >
-                  <Star className={cn("size-3.5", isCover && "fill-current")} />
+                  <Star className={cn("size-4", isCover && "fill-current")} />
                 </button>
                 {isCover && (
                   <span className="absolute bottom-1 left-1 bg-primary px-1.5 py-0.5 text-small font-bold text-primary-foreground">
@@ -336,7 +336,7 @@ export function ProductForm({
                 <button
                   type="button"
                   onClick={() => handleRemoveImage(img)}
-                  className="absolute top-1 right-1 flex size-6 items-center justify-center bg-background/80"
+                  className="absolute top-1 right-1 flex size-11 items-center justify-center bg-background/80"
                   aria-label={t("common.delete")}
                 >
                   <X className="size-3.5" />

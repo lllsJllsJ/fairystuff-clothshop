@@ -20,10 +20,21 @@ the bottom.
   it is the design: there is no RLS in this stack (see `CLAUDE.md`), so a
   route handler's own check is what stops an anonymous or non-owner caller if
   the proxy's matcher is ever narrowed or the route is ever moved.
-- **Customer-gated pages/actions:** `/checkout` and `/account/**` require a
-  signed-in `customer`; order reads additionally filter on `customerId` so an
-  authenticated customer cannot fetch another customer's order. These flows
-  use Server Actions rather than separate JSON endpoints.
+- **Public, unguessable-URL:** `submitCheckout` (the `/checkout` Server
+  Action) and `GET /[locale]/track/[code]` require no session at all — guest
+  checkout removed the `customer` role and every account gate on these flows
+  entirely (see `CLAUDE.md`). Their security instead rests on a random,
+  unguessable `preorderCode` (`src/lib/preorder-code.ts`: 50 bits of entropy,
+  no database read needed to generate one) standing in for a session:
+  knowing the code is what proves the request is the customer who placed
+  that order. **Rate limiting is not implemented at the application layer
+  for either flow** — a deliberately accepted gap (anti-abuse work was
+  explicitly out of scope for this migration), noted here so it isn't
+  mistaken for an oversight. `submitCheckout` is consequently an
+  **unauthenticated write**: anyone can place a guest order, which is the
+  intended trade-off for removing the account wall — the order still lands
+  in `new` and requires the owner's manual acceptance before anything ships
+  (see `docs/application-flow.md`'s Checkout + Order Creation flow).
 
 ---
 
@@ -171,10 +182,9 @@ date-range filters resolved in SQL (not filtered in memory).
     {
       "id": "o_...",
       "orderNo": 1042,
+      "preorderCode": "PO-4F7K9XW2QA",
       "orderDate": "2026-08-01",
       "customerName": "คุณสมชาย",
-      "customerEmail": "customer@example.com",
-      "customerId": "u_...",
       "customerAddress": null,
       "customerPhone": "081...",
       "shippingCost": "50.00",
@@ -200,6 +210,58 @@ date-range filters resolved in SQL (not filtered in memory).
   "pageSize": 20
 }
 ```
+
+**Status codes:** same shape as `GET /api/admin/products` — `200` / `401` /
+`403` / `500`, identical meanings.
+
+---
+
+## `GET /api/admin/users`
+
+Owner-gated. Paginated account list backing `/admin/users`, with search and
+role/verification filters resolved in SQL (not filtered in memory).
+
+**Never returns `passwordHash`.** The query derives its select list from
+`ADMIN_USER_COLUMNS` in `src/db/queries/users.ts` — the same structural
+defense `PUBLIC_PRODUCT_COLUMNS` provides for the storefront. The hash is
+never selected out of the database on this path, so it cannot reach an RSC
+payload or this JSON body even by accident.
+
+**Query parameters**
+
+| Param | Type | Notes |
+|---|---|---|
+| `role` | `owner` \| `staff` \| `all` | Default `all`; an unrecognised value falls back to it. There is no `customer` role — guest checkout needs no account (see `CLAUDE.md`), so this list is owner/staff accounts only. |
+| `search` | string | Case-insensitive substring across `email`, `fullname`, and `phone`. |
+| `verified` | `all` \| `verified` \| `unverified` | Filters on `emailVerifiedAt` being set. Cosmetic as of guest checkout: `authorize()` in `src/auth.ts` no longer gates sign-in on this column (that gate only ever applied to the removed `customer` role) — an unverified owner/staff account can still sign in normally. |
+| `sort` | `newest` \| `oldest` \| `name_az` \| `name_za` | Default `newest`; an unrecognised value falls back to it. Every sort breaks ties on `users.id`, so the list paginates stably when `createdAt` ties. |
+| `page` | integer | Default `1`. |
+| `pageSize` | integer | Clamped to `[1, 100]`, default `20`. |
+
+**Example response — `200`**
+
+```json
+{
+  "rows": [
+    {
+      "id": "u_...",
+      "email": "owner@example.com",
+      "fullname": "คุณสมชาย",
+      "phone": "081...",
+      "role": "owner",
+      "emailVerifiedAt": "2026-09-01T04:12:00.000Z",
+      "createdAt": "2026-08-26T13:27:31.477Z"
+    }
+  ],
+  "count": 2,
+  "page": 1,
+  "pageSize": 20
+}
+```
+
+There is no `orderCount` field anymore — `orders` carries no account
+reference at all as of guest checkout (see `CLAUDE.md`), so there is no
+per-account order count to compute or display.
 
 **Status codes:** same shape as `GET /api/admin/products` — `200` / `401` /
 `403` / `500`, identical meanings.
@@ -266,12 +328,55 @@ validation layer are identical either way.
 
 ---
 
+## `POST /api/uploads/presign-logo`
+
+Owner-gated. Same shape and rationale as `POST /api/uploads/presign` above,
+scoped to the single brand logo instead of a per-product image matrix — see
+`src/lib/brand-image-keys.ts`. Split into its own route rather than widening
+the product one because the key shape carries no `productId` segment at all
+(there is only ever one logo).
+
+**Request body**
+
+```json
+{
+  "keys": [
+    "brand/logo-1700000000000-128.webp",
+    "brand/logo-1700000000000-256.webp",
+    "brand/logo-1700000000000-512.webp"
+  ]
+}
+```
+
+`keys`: 1–3 entries, each must match `brand/logo-<timestamp>-(128|256|512).webp`
+exactly — the request schema, the regex, and `presignBrandLogoPut()`'s own
+prefix check all re-validate this shape independently.
+
+**Example response — `200`**
+
+```json
+{
+  "uploads": [
+    { "key": "brand/logo-1700000000000-128.webp", "url": "https://..." },
+    { "key": "brand/logo-1700000000000-256.webp", "url": "https://..." },
+    { "key": "brand/logo-1700000000000-512.webp", "url": "https://..." }
+  ]
+}
+```
+
+Each `url` is valid for 300 seconds and accepts exactly one `PUT` with
+`Content-Type: image/webp`. Same status-code table as `POST
+/api/uploads/presign`.
+
+---
+
 ## `GET /api/images/[...key]`
 
-Public, read-only proxy for product images in the private Railway Bucket. It
-accepts only keys shaped as
-`products/<uuid>/<generated-name>-(480|800|1600).webp`; all other paths return
-`404`. Successful responses stream `image/webp` with `ETag`, `nosniff`, and
+Public, read-only proxy for object storage. Accepts keys matching EITHER
+`products/<uuid>/<generated-name>-(480|800|1600).webp` (product photos) or
+`brand/logo-<timestamp>-(128|256|512).webp` (the single brand logo — see
+`src/lib/brand-image-keys.ts`); all other paths return `404`. Successful
+responses stream `image/webp` with `ETag`, `nosniff`, and
 `Cache-Control: public, max-age=31536000, immutable`. A matching
 `If-None-Match` returns `304`.
 
@@ -291,9 +396,10 @@ from `src/auth.ts`). Handles the Credentials provider's sign-in POST,
 session/CSRF token endpoints, and sign-out — the standard Auth.js surface,
 not custom application logic. Configuration:
 
-- **Provider:** Credentials only (email + password). `authorize()` validates
-  the payload with `loginSchema`, looks up the user by lowercased/trimmed
-  email, and compares the password with `bcrypt.compare()` against either the
+- **Provider:** Credentials only (email-or-phone identifier + password).
+  `authorize()` validates the payload with `loginSchema`, lowercases email or
+  strips common phone formatting, looks up the user by either unique field,
+  and compares the password with `bcrypt.compare()` against either the
   real hash or a fixed dummy hash (constant-time defense against email
   enumeration — see `docs/application-flow.md`'s login flow and `CLAUDE.md`).
 - **Session strategy:** `jwt` — no database session table. The JWT carries
@@ -354,21 +460,86 @@ all."
 this contract; re-run it after any change to `queries/storefront.ts` or
 `/api/products`.
 
+### Public order data — `PUBLIC_ORDER_COLUMNS`
+
+`GET /[locale]/track/[code]` (a page route, not a JSON endpoint — see the
+Auth model section above) is the second public read of a table that also
+carries private figures, and it gets the identical structural treatment:
+`src/db/queries/track.ts`'s `PUBLIC_ORDER_COLUMNS` /
+`PUBLIC_ORDER_ITEM_COLUMNS` are the **only** column sets
+`getOrderByPreorderCode` may ever select from `orders` / `orderItems`.
+
+```ts
+const PUBLIC_ORDER_COLUMNS = {
+  id: orders.id, // internal join key only — stripped before the function returns
+  preorderCode: orders.preorderCode,
+  orderDate: orders.orderDate,
+  status: orders.status,
+  customerName: orders.customerName,
+  customerPhone: orders.customerPhone,
+  customerAddress: orders.customerAddress,
+  note: orders.note,
+  itemsTotal: orders.itemsTotal,
+  shippingCost: orders.shippingCost,
+  shippingConfirmedAt: orders.shippingConfirmedAt,
+  updatedAt: orders.updatedAt, // operational timestamp, safe — see below
+} as const
+
+const PUBLIC_ORDER_ITEM_COLUMNS = {
+  id: orderItems.id,
+  productName: orderItems.productName,
+  color: orderItems.color,
+  size: orderItems.size,
+  sellPrice: orderItems.sellPrice,
+  quantity: orderItems.quantity,
+  preorderMinDays: orderItems.preorderMinDays, // lead-time snapshot, safe
+  preorderMaxDays: orderItems.preorderMaxDays, // — see below
+} as const
+```
+
+**`itemsCost`, `totalCost`, `profit`, `advertisingCost`, `packingCost`, each
+line's `productCost`/`lineCost`, `checkoutKey`, `createdBy`, `refundReason`,
+`refundedAt`, and — the one most worth calling out — `orders.orderNo` are
+never present in this response.** `orderNo` is deliberately excluded even
+though it is not a money field: it is a sequential, enumerable bigint
+identity, and printing it on a public URL would let anyone page through
+every order in the shop by incrementing a number, defeating the entire
+reason `preorderCode` is random rather than sequential. `docs/health-check.md`
+carries the matching curl-based leak test (check 6); re-run it after any
+change to `queries/track.ts` or the track page components.
+
+`updatedAt` (added for the tracking page's 2-row timeline) and each item's
+`preorderMinDays`/`preorderMaxDays` (added for the tracking page's
+"slowest item wins" lead-time estimate) are the two newest additions to
+this allowlist. Both are deliberately safe to expose despite living on the
+same allowlist as the cost/profit fields above: `updatedAt` is an
+operational timestamp with no monetary content (it is a BEFORE UPDATE
+trigger, `set_updated_at()` in `0001_init_extras.sql`, that fires on ANY
+change to the row — not a dedicated per-status-transition log, which is why
+the track page's timeline never shows more than 2 rows), and
+`preorderMinDays`/`preorderMaxDays` are lead-time metadata snapshotted from
+`products` at order-insert time (same snapshot principle as
+`productName`/`color`/`size` above them), not a cost or profit figure.
+
 ## Internal mutation contract
 
 Application writes are Next.js **Server Actions** under the locale routes —
 there is no REST/JSON endpoint for creating or editing a product, order, or
-product type. Owner mutations live under `admin/**/actions.ts`; registration,
-email-token, and customer checkout actions live under the relevant public
-route groups. These are
-**build-internal, not a stable public API**: they are called directly from
-admin client components via Next's Server Actions RPC mechanism, are not
-versioned, and are not intended to be called from outside this application.
+product type. Owner mutations live under `admin/**/actions.ts`; password
+recovery and guest checkout actions live under the relevant public route
+groups. These are **build-internal, not a stable public API**: they are
+called directly from client components via Next's Server Actions RPC
+mechanism, are not versioned, and are not intended to be called from outside
+this application.
 
-Every action follows the same five-step shape: authenticate → re-check
-`isOwner(user.role)` independently → `zod` parse the input → write (via
-`db` for single-statement writes, `txDb().transaction()` for multi-table
-writes) → revalidate the affected paths. Return values are a discriminated
+Every owner action follows the same five-step shape: authenticate → re-check
+`isOwner(user.role)` independently → `zod` parse the input → write (via `db`
+for single-statement writes, `txDb().transaction()` for multi-table writes) →
+revalidate the affected paths. `submitCheckout` (guest checkout) is the one
+exception to the "authenticate" step — there is no session to check at all,
+by design (see the Auth model section above); it validates and re-resolves
+its input just as strictly, it simply has no identity to verify first.
+Return values are a discriminated
 union, `{ ok: true, id? } | { ok: false, error: string }`, with terse error
 codes (`"unauthorized"`, `"forbidden"`, `"invalid"`, `"duplicate_code"`,
 `"not_found"`, `"insert_failed"`, `"update_failed"`) that the UI maps through
@@ -391,22 +562,51 @@ characters, fixed admin/customer status labels, configurable line-item
 statuses, and `clearShopData`. Deleting referenced character or item-status
 rows is blocked. Exactly one line-item status may be the default.
 
-Customer checkout re-resolves active products, variants, and current prices;
-it never trusts cart snapshots. A UUID checkout key makes retries idempotent.
-The resulting order stores `customerId`, generates `orderNo`, starts at `new`,
-and receives no online payment. Customer reads always scope by the session's
-`customerId`. Internal order statuses map to `Received`, `Preparing`,
-`Shipping`, or `Complete`, with `Cancelled`/`Refunded` exceptional stages.
+`submitCheckout` re-resolves active products, variants, and current prices
+server-side; it never trusts the client's cart snapshot for anything but
+which items/quantities were requested. A UUID checkout key makes retries
+idempotent (unique globally now, not scoped to an account — there is no
+account to scope it to). The resulting order stores a server-minted, random
+`preorderCode` (see the `PUBLIC_ORDER_COLUMNS` section above), generates
+`orderNo`, starts at `new`, and receives no online payment; nothing
+auto-advances it past `new` — the owner accepts it by hand from
+`/admin/orders`. `admin/orders/actions.ts#createOrder` mints a `preorderCode`
+too, so an owner-typed phone order is trackable at the same `/track/[code]`
+URL. Both mint paths share the same retry-on-`23505` strategy (see
+`src/lib/preorder-code.ts`), bounded at 3 attempts, because a unique-index
+collision aborts the whole Postgres transaction and cannot be retried on the
+same `tx`. Public reads of an order (`getOrderByPreorderCode`) always scope
+by the code itself — there is no session to additionally scope by. Internal
+order statuses map to `Received`, `Preparing`, `Shipping`, or `Complete`,
+with `Cancelled`/`Refunded` exceptional stages.
 
 Refund actions require a reason and store a timestamp at order or line-item
 level. Moving an order to `packaging` is blocked until every line-item status
 is marked received or refunded; refunding every line automatically moves the
 order to `refund`. No payment-provider API is called.
 
-Registration always creates `customer` users. When `EMAIL_ENABLED=false`, new
-customers are auto-verified and verification/reset actions are disabled. When
-enabled, raw verification/reset tokens are emailed through Resend but only
-SHA-256 hashes are stored, with expiry and resend cooldown controls.
+The user-admin surface (`admin/users/actions.ts`) adds `setUserRole`,
+`deleteUser`, `verifyUserEmail`, and `sendUserPasswordReset`, operating on
+owner/staff accounts only — there is no public registration and no
+`customer` role to administer. It is the most privilege-sensitive action file
+in the app — `setUserRole` is the only in-app path that can mint an `owner`
+(the only other way is `scripts/create-owner.ts`, run out-of-band). Two
+lockout rails are enforced **in the actions, not just the UI**: the acting
+owner cannot change their own role or delete their own account
+(`self_role_change` / `self_delete`), and the final remaining owner cannot be
+demoted or deleted by anyone (`last_owner`) — recovery from that state would
+mean re-running `npm run create-owner` against the production database.
+`deleteUser` never touches order history either way: guest checkout stores no
+account reference on an order at all, and an admin-created order's
+`createdBy` is `ON DELETE SET NULL`. `sendUserPasswordReset` reuses the same
+`sendTokenEmail` helper (`src/lib/account-email.ts`) that
+`/forgot-password` uses, inheriting its lifetime, single-use semantics, and
+one-per-minute `cooldown`; it requires `EMAIL_ENABLED` and reports
+`email_disabled` rather than silently doing nothing, and returns `no_email`
+for an account that has no address on file. The owner never sees or sets a
+password. `verifyUserEmail` is now cosmetic — `authorize()` in `src/auth.ts`
+no longer gates sign-in on `emailVerifiedAt` — but is kept because it still
+has a real effect (dropping any outstanding verify token).
 
 The former `loadDemoShopData` Server Action has been
 removed; no Settings request can generate a mock catalogue or fake orders.

@@ -47,3 +47,40 @@ export function customerStatusLabel(
     ? (row?.labelEn ?? DEFAULT_CUSTOMER_STATUS_LABELS[stage].en)
     : (row?.labelTh ?? DEFAULT_CUSTOMER_STATUS_LABELS[stage].th)
 }
+
+/**
+ * The 4 non-terminal stages the tracking page's stepper visualizes.
+ * `cancelled`/`refunded` are exceptions outside the normal progression (see
+ * `order-status-badge.tsx`'s comment on why they get distinct treatment) and
+ * never render the stepper — only the badge plus a short explanation.
+ */
+export type ActiveCustomerStage = Exclude<CustomerOrderStage, "cancelled" | "refunded">
+
+export function isActiveStage(stage: CustomerOrderStage): stage is ActiveCustomerStage {
+  return stage !== "cancelled" && stage !== "refunded"
+}
+
+export type LeadTimeEstimate = { min: number; max: number }
+
+/**
+ * Order-level lead-time estimate: "slowest item wins". The shop can't ship
+ * until every item is ready, so the bottleneck item's range determines the
+ * whole order's estimate. `preorderMinDays`/`preorderMaxDays` are always
+ * both-null or both-set per item (snapshotted together from the product's
+ * already-constrained pair — see schema.ts), so filtering on one implies
+ * the other is present too. Returns null when no item in the order carries
+ * a lead-time range at all — never fabricate a "0-0 days" estimate.
+ */
+export function estimatedLeadTime(
+  items: { preorderMinDays: number | null; preorderMaxDays: number | null }[]
+): LeadTimeEstimate | null {
+  const withEstimate = items.filter(
+    (item): item is { preorderMinDays: number; preorderMaxDays: number } =>
+      item.preorderMinDays !== null && item.preorderMaxDays !== null
+  )
+  if (withEstimate.length === 0) return null
+  return {
+    min: Math.max(...withEstimate.map((item) => item.preorderMinDays)),
+    max: Math.max(...withEstimate.map((item) => item.preorderMaxDays)),
+  }
+}

@@ -2,7 +2,7 @@
 
 import { useTransition } from "react"
 import { useLocale } from "next-intl"
-import { Languages } from "lucide-react"
+import { Globe } from "lucide-react"
 
 import { usePathname, useRouter } from "@/i18n/navigation"
 import type { Locale } from "@/i18n/request"
@@ -38,7 +38,7 @@ export function LocaleToggle() {
       aria-label="Toggle language"
       className="gap-1.5"
     >
-      <Languages className="size-4" />
+      <Globe className="size-4" />
       <span className="font-medium">{locale === "th" ? "TH" : "EN"}</span>
     </Button>
   )

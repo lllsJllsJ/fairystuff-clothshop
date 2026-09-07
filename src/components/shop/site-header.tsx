@@ -1,13 +1,13 @@
 "use client"
 
 import { useState, useTransition } from "react"
+import Image from "next/image"
 import { useLocale, useTranslations } from "next-intl"
-import { Languages, Menu, PackageSearch, Shirt, ShoppingBag } from "lucide-react"
+import { Globe, Menu, Shirt, ShoppingBag } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Link, usePathname, useRouter } from "@/i18n/navigation"
 import type { Locale } from "@/i18n/request"
-import { BRAND_NAME } from "@/lib/brand"
 import { Button } from "@/components/ui/button"
 import { useCart } from "@/components/cart/cart-provider"
 import {
@@ -22,6 +22,7 @@ const NAV_LINKS = [
   { href: "/", labelKey: "nav.home" },
   { href: "/shop", labelKey: "nav.shop" },
   { href: "/about", labelKey: "nav.about" },
+  { href: "/track", labelKey: "nav.track" },
 ] as const
 
 /**
@@ -31,8 +32,23 @@ const NAV_LINKS = [
  * `components/layout` (those are styled for the admin's white surface and
  * would read as invisible fuchsia-on-fuchsia here), so the locale switch
  * is reimplemented inline against a white palette.
+ *
+ * No account menu here anymore — the storefront has no customer accounts
+ * (guest checkout; see CLAUDE.md). `useSession()` was removed along with it,
+ * since it existed only to drive the account menu's signed-in state.
+ *
+ * `brandName`/`logoUrl` come from the server parent (ShopLayout), which
+ * reads `shop_settings` — a client component can't call the DB-backed
+ * `getShopSettings()` itself. `logoUrl` is optional: an unconfigured shop
+ * keeps the plain Shirt icon instead of an empty image slot.
  */
-export function SiteHeader() {
+export function SiteHeader({
+  brandName,
+  logoUrl,
+}: {
+  brandName: string
+  logoUrl?: string | null
+}) {
   const t = useTranslations()
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
@@ -45,8 +61,12 @@ export function SiteHeader() {
           href="/"
           className="flex shrink-0 items-center gap-2 text-white outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-primary"
         >
-          <Shirt className="size-6" aria-hidden />
-          <span className="text-subtitle font-bold">{BRAND_NAME}</span>
+          {logoUrl ? (
+            <Image src={logoUrl} alt="" width={28} height={28} className="size-7 object-contain" />
+          ) : (
+            <Shirt className="size-6" aria-hidden />
+          )}
+          <span className="text-subtitle font-bold">{brandName}</span>
         </Link>
 
         <nav aria-label={t("nav.mainNavigation")} className="ml-4 hidden items-center gap-1 md:flex">
@@ -69,16 +89,6 @@ export function SiteHeader() {
         </nav>
 
         <div className="ml-auto flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            nativeButton={false}
-            render={<Link href="/account/orders" />}
-            aria-label={t("nav.orders")}
-            className="text-white hover:bg-white/10 hover:text-white"
-          >
-            <PackageSearch />
-          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -110,7 +120,7 @@ export function SiteHeader() {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side="left" className="flex flex-col">
           <SheetHeader>
-            <SheetTitle>{BRAND_NAME}</SheetTitle>
+            <SheetTitle>{brandName}</SheetTitle>
           </SheetHeader>
           <nav className="flex flex-1 flex-col gap-1 px-2">
             {NAV_LINKS.map((link) => (
@@ -154,7 +164,7 @@ function HeaderLocaleToggle() {
       aria-label="Toggle language"
       className="gap-1.5 text-white hover:bg-white/10 hover:text-white"
     >
-      <Languages className="size-4" />
+      <Globe className="size-4" />
       <span className="font-medium">{locale === "th" ? "TH" : "EN"}</span>
     </Button>
   )

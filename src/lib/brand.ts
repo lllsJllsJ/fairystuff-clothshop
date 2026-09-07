@@ -22,9 +22,9 @@ export const INSTAGRAM_URL = `https://instagram.com/${INSTAGRAM_HANDLE}`
 
 // TODO: replace with real contact copy for the order handoff CTA.
 export const CONTACT_COPY_TH =
-  "สนใจสั่งซื้อ ทักแชททาง LINE หรือ Instagram ได้เลยค่ะ"
+  "สนใจสั่งซื้อ ทักแชททาง LINE, Instagram หรือ Facebook ได้เลยค่ะ"
 export const CONTACT_COPY_EN =
-  "Interested in an order? Message us on LINE or Instagram."
+  "Interested in an order? Message us on LINE, Instagram, or Facebook."
 
 // TODO: replace with the real brand story once it's written — used on the
 // home hero and /about.

@@ -6,6 +6,8 @@ import { z } from "zod"
 import { db, txDb } from "@/db"
 import { orderItems, orderItemStatuses, orderStatus, orders } from "@/db/schema"
 import { getCurrentUser } from "@/lib/auth-helpers"
+import { isUniqueViolation } from "@/lib/db-errors"
+import { generatePreorderCode } from "@/lib/preorder-code"
 import { isOwner } from "@/lib/roles"
 import { orderFormSchema, type OrderFormValues } from "@/lib/validations/order"
 
@@ -55,7 +57,7 @@ import { revalidateOrders } from "./revalidate"
  * ---------------------------------------------------------------------
  * `orders.totalCost`, `orders.profit`, `orderItems.lineTotal`, and
  * `orderItems.lineCost` are `GENERATED ALWAYS AS (...) STORED` (added by
- * drizzle/0000_init_extras.sql). Postgres rejects a write that names them
+ * drizzle/0001_init_extras.sql). Postgres rejects a write that names them
  * (23P05). `orders.itemsTotal`/`orders.itemsCost` are instead
  * trigger-maintained by `recalc_order()`, firing automatically on every
  * `order_items` insert/update/delete — never set them directly either.
@@ -75,6 +77,11 @@ import { revalidateOrders } from "./revalidate"
 
 export type OrderResult = { ok: true; id: string } | { ok: false; error: string }
 export type ActionResult = { ok: true; id?: string } | { ok: false; error: string }
+
+/** A 23505 aborts the whole Postgres transaction — see preorder-code.ts's
+ * header. The retry re-runs the ENTIRE transaction with a fresh code, never
+ * just the insert statement on an already-aborted `tx`. */
+const MAX_PREORDER_CODE_ATTEMPTS = 3
 
 function toNullable(value: string | undefined | null): string | null {
   const trimmed = (value ?? "").trim()
@@ -101,6 +108,10 @@ function toItemRows(items: OrderFormValues["items"], orderId: string) {
     size: toNullable(item.size),
     productCost: toMoney(Number(item.productCost)),
     sellPrice: toMoney(Number(item.sellPrice)),
+    // Lead-time snapshot — set by the product picker (order-line-row.tsx),
+    // carried through untouched; both null is normal for a non-preorder item.
+    preorderMinDays: item.preorderMinDays ?? null,
+    preorderMaxDays: item.preorderMaxDays ?? null,
     quantity: Number(item.quantity),
     statusCode: item.statusCode ?? "not_ordered",
     sortOrder: i,
@@ -128,7 +139,8 @@ export async function createOrder(values: OrderFormValues): Promise<OrderResult>
   if (v.status === "refund" && !toNullable(v.refundReason)) return { ok: false, error: "reason_required" }
   if (v.status === "packaging" && !(await submittedItemsResolved(v.items))) return { ok: false, error: "items_pending" }
 
-  let insertedId: string
+  let insertedId: string | null = null
+  for (let attempt = 0; attempt < MAX_PREORDER_CODE_ATTEMPTS && insertedId === null; attempt += 1) {
   try {
     insertedId = await txDb().transaction(async (tx) => {
       const [row] = await tx
@@ -138,6 +150,7 @@ export async function createOrder(values: OrderFormValues): Promise<OrderResult>
           customerName: v.customerName,
           customerAddress: toNullable(v.customerAddress),
           customerPhone: toNullable(v.customerPhone),
+          preorderCode: generatePreorderCode(),
           shippingCost: toMoney(v.shippingCost),
           packingCost: toMoney(v.packingCost),
           advertisingCost: toMoney(v.advertisingCost),
@@ -157,7 +170,14 @@ export async function createOrder(values: OrderFormValues): Promise<OrderResult>
       return row.id
     })
   } catch (error) {
+    if (isUniqueViolation(error, "orders_preorder_code_unique")) continue
     console.error("createOrder failed", error)
+    return { ok: false, error: "insert_failed" }
+  }
+  }
+
+  if (insertedId === null) {
+    console.error("createOrder failed: exhausted preorder code retries")
     return { ok: false, error: "insert_failed" }
   }
 

@@ -17,6 +17,7 @@ import {
   Receipt,
   Search,
   Trash2,
+  SlidersHorizontal,
 } from "lucide-react"
 
 import { Link, usePathname, useRouter } from "@/i18n/navigation"
@@ -33,6 +34,13 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { SimpleSelect } from "@/components/ui/simple-select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 
 const PAGE_SIZE = 20
 
@@ -87,6 +95,7 @@ export function OrderList({ statusLabels, locale }: { statusLabels: OrderStatusL
     setPage(1)
   }
   const [page, setPage] = useState(1)
+  const [filtersOpen, setFiltersOpen] = useState(false)
 
   const debouncedSearch = useDebounced(search)
 
@@ -195,27 +204,50 @@ export function OrderList({ statusLabels, locale }: { statusLabels: OrderStatusL
     )
   }
 
+  const hasActiveFilters =
+    dateFrom !== "" || dateTo !== "" || status !== "all" || sort !== "newest"
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-h3 font-bold text-foreground">{t("order.list")}</h1>
+      {/* No `flex-wrap` and no `w-full` on the button group: both are what
+          previously pushed the actions onto their own line below the
+          heading on a phone. `min-w-0` + `truncate` lets the heading give
+          up width instead, so the actions stay on the heading's row,
+          right-aligned, at every width. */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="truncate text-h3 font-bold text-foreground">{t("order.list")}</h1>
           <p className="text-body text-muted-foreground">{t("order.subtitle")}</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExport} disabled={rows.length === 0}>
+        {/* Matches the product list toolbar: labels collapse to icons
+            below `sm`. */}
+        <div className="flex shrink-0 justify-end gap-2">
+          <Button
+            variant="outline"
+            onClick={handleExport}
+            disabled={rows.length === 0}
+            aria-label={t("reports.exportExcel")}
+          >
             <FileSpreadsheet />
             <span className="hidden sm:inline">{t("reports.exportExcel")}</span>
           </Button>
-          <Button render={<Link href="/admin/orders/new" />} nativeButton={false}>
+          <Button
+            render={<Link href="/admin/orders/new" />}
+            nativeButton={false}
+            aria-label={t("order.newOrder")}
+          >
             <Plus />
-            {t("order.newOrder")}
+            <span className="hidden sm:inline">{t("order.newOrder")}</span>
           </Button>
         </div>
       </div>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-        <div className="relative flex-1 sm:min-w-48">
+      {/* Search always visible; the four secondary filters are far too wide
+          for a 320px row, so below `md` they move into a bottom sheet behind
+          one button (the same pattern the storefront's ShopBrowser uses).
+          Above `md` they stay inline as before. */}
+      <div className="flex items-center gap-2">
+        <div className="relative min-w-0 flex-1">
           <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
@@ -228,48 +260,59 @@ export function OrderList({ statusLabels, locale }: { statusLabels: OrderStatusL
             type="search"
           />
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => changeDateFrom(e.target.value)}
-            className="h-11"
-            aria-label={t("order.dateFrom")}
-          />
-          <Input
-            type="date"
-            value={dateTo}
-            onChange={(e) => changeDateTo(e.target.value)}
-            className="h-11"
-            aria-label={t("order.dateTo")}
-          />
-          <SimpleSelect
-            value={status}
-            onValueChange={(v) => changeStatus(v as OrderStatusValue | "all")}
-            options={[
-              { value: "all", label: t("common.all") },
-              ...orderStatusValues.map((s) => ({ value: s, label: statusLabel(s) })),
-            ]}
-            className="h-11 min-w-32"
-          />
-          <SimpleSelect
-            value={sort}
-            onValueChange={(v) => {
-              setSort(v as OrderSort)
-              setPage(1)
-            }}
-            options={[
-              { value: "newest", label: t("order.sortNewest") },
-              { value: "oldest", label: t("order.sortOldest") },
-              { value: "orderno_high", label: t("order.sortOrderNoHigh") },
-              { value: "orderno_low", label: t("order.sortOrderNoLow") },
-              { value: "total_high", label: t("order.sortTotalHigh") },
-              { value: "total_low", label: t("order.sortTotalLow") },
-            ]}
-            className="h-11 min-w-32"
+        <Button
+          variant="outline"
+          className="h-11 shrink-0 md:hidden"
+          onClick={() => setFiltersOpen(true)}
+          aria-label={t("common.filter")}
+        >
+          <SlidersHorizontal />
+          {hasActiveFilters && (
+            <span className="ml-1 inline-flex size-2 shrink-0 bg-primary" aria-hidden />
+          )}
+        </Button>
+
+        <div className="hidden items-center gap-2 md:flex">
+          <OrderFilterFields
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            status={status}
+            sort={sort}
+            statusLabel={statusLabel}
+            onDateFrom={changeDateFrom}
+            onDateTo={changeDateTo}
+            onStatus={changeStatus}
+            onSort={(v) => { setSort(v); setPage(1) }}
+            t={t}
           />
         </div>
       </div>
+
+      <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+        <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto md:hidden">
+          <SheetHeader>
+            <SheetTitle>{t("common.filter")}</SheetTitle>
+          </SheetHeader>
+          <div className="grid gap-3 px-4 pb-4">
+            <OrderFilterFields
+              stacked
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              status={status}
+              sort={sort}
+              statusLabel={statusLabel}
+              onDateFrom={changeDateFrom}
+              onDateTo={changeDateTo}
+              onStatus={changeStatus}
+              onSort={(v) => { setSort(v); setPage(1) }}
+              t={t}
+            />
+          </div>
+          <div className="border-t border-border p-4">
+            <SheetClose render={<Button className="w-full" />}>{t("shop.applyFilters")}</SheetClose>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {query.isLoading ? (
         <div className="space-y-2">
@@ -283,7 +326,73 @@ export function OrderList({ statusLabels, locale }: { statusLabels: OrderStatusL
           <p>{t("order.empty")}</p>
         </div>
       ) : (
-        <div className="border border-border">
+        <>
+        {/* Mobile: a card per order. The table's eight columns cannot be
+            read on a phone even inside a horizontal scroller, so below `md`
+            each order becomes a card whose first line is the customer name
+            with the order number right-aligned (matching the product card).
+
+            The whole card opens the order. Rather than an onClick on the
+            list item (invisible to keyboards and screen readers), a single
+            absolutely-positioned link is stretched over the card: it stays
+            a real, focusable, middle-clickable anchor, and the status
+            select and delete button opt back out via `relative z-10`. */}
+        <ul className="space-y-2 md:hidden">
+          {rows.map((row) => (
+            <li
+              key={row.id}
+              className="relative border border-border bg-card p-3 transition-colors hover:bg-muted/40 focus-within:ring-3 focus-within:ring-ring/50"
+            >
+              <Link
+                href={`/admin/orders/${row.id}`}
+                aria-label={`${t("order.viewOrder")} #${row.orderNo}`}
+                className="absolute inset-0 z-0 focus:outline-none"
+              />
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="truncate text-body font-bold text-foreground">
+                  {row.customerName}
+                </span>
+                <span className="shrink-0 text-small text-muted-foreground tabular-nums">
+                  #{row.orderNo}
+                </span>
+              </div>
+              <p className="mt-0.5 text-small text-muted-foreground">
+                {formatDate(row.orderDate)} · {row.itemCount} {t("order.itemCount")}
+              </p>
+              <div className="mt-2 flex items-baseline justify-between gap-2">
+                <span className="text-body font-bold text-foreground tabular-nums">
+                  {formatBaht(Number(row.itemsTotal))}
+                </span>
+                <span className="text-small text-muted-foreground tabular-nums">
+                  {t("order.profit")}: {formatBaht(Number(row.profit ?? 0))}
+                </span>
+              </div>
+              {/* Sits above the stretched overlay link so the select and the
+                  delete button stay clickable inside a card that is
+                  otherwise entirely a link to the order. */}
+              <div className="relative z-10 mt-3 flex items-center gap-2">
+                <SimpleSelect
+                  value={row.status}
+                  onValueChange={(v) => handleStatusChange(row, v as OrderStatusValue)}
+                  options={orderStatusValues.map((st) => ({ value: st, label: statusLabel(st) }))}
+                  className="h-11 min-w-0 flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handleDelete(row)}
+                  aria-label={t("common.delete")}
+                  className="h-11 shrink-0 text-destructive hover:bg-destructive/10"
+                >
+                  <Trash2 />
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+
+        <div className="hidden border border-border md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -357,6 +466,7 @@ export function OrderList({ statusLabels, locale }: { statusLabels: OrderStatusL
             </TableBody>
           </Table>
         </div>
+        </>
       )}
 
       {query.isFetching && !query.isLoading && (
@@ -445,5 +555,107 @@ function SortableHead({
         )}
       </button>
     </TableHead>
+  )
+}
+
+
+/**
+ * The four secondary order filters, rendered either inline (desktop) or
+ * stacked inside the mobile filter sheet. One definition so the two
+ * layouts can never drift apart.
+ */
+function OrderFilterFields({
+  stacked = false,
+  dateFrom,
+  dateTo,
+  status,
+  sort,
+  statusLabel,
+  onDateFrom,
+  onDateTo,
+  onStatus,
+  onSort,
+  t,
+}: {
+  stacked?: boolean
+  dateFrom: string
+  dateTo: string
+  status: OrderStatusValue | "all"
+  sort: OrderSort
+  statusLabel: (s: OrderStatusValue) => string
+  onDateFrom: (v: string) => void
+  onDateTo: (v: string) => void
+  onStatus: (v: OrderStatusValue | "all") => void
+  onSort: (v: OrderSort) => void
+  t: (key: string) => string
+}) {
+  const field = stacked ? "h-11 w-full" : "h-11 w-36 shrink-0"
+  const select = stacked ? "h-11 w-full" : "h-11 w-32 shrink-0"
+  return (
+    <>
+      <Labelled stacked={stacked} label={t("order.dateFrom")}>
+        <Input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => onDateFrom(e.target.value)}
+          className={field}
+          aria-label={t("order.dateFrom")}
+        />
+      </Labelled>
+      <Labelled stacked={stacked} label={t("order.dateTo")}>
+        <Input
+          type="date"
+          value={dateTo}
+          onChange={(e) => onDateTo(e.target.value)}
+          className={field}
+          aria-label={t("order.dateTo")}
+        />
+      </Labelled>
+      <Labelled stacked={stacked} label={t("order.status")}>
+        <SimpleSelect
+          value={status}
+          onValueChange={(v) => onStatus(v as OrderStatusValue | "all")}
+          options={[
+            { value: "all", label: t("common.all") },
+            ...orderStatusValues.map((s) => ({ value: s, label: statusLabel(s) })),
+          ]}
+          className={select}
+        />
+      </Labelled>
+      <Labelled stacked={stacked} label={t("common.sort")}>
+        <SimpleSelect
+          value={sort}
+          onValueChange={(v) => onSort(v as OrderSort)}
+          options={[
+            { value: "newest", label: t("order.sortNewest") },
+            { value: "oldest", label: t("order.sortOldest") },
+            { value: "orderno_high", label: t("order.sortOrderNoHigh") },
+            { value: "orderno_low", label: t("order.sortOrderNoLow") },
+            { value: "total_high", label: t("order.sortTotalHigh") },
+            { value: "total_low", label: t("order.sortTotalLow") },
+          ]}
+          className={select}
+        />
+      </Labelled>
+    </>
+  )
+}
+
+/** Labels only appear in the stacked sheet; inline they would break the row. */
+function Labelled({
+  stacked,
+  label,
+  children,
+}: {
+  stacked: boolean
+  label: string
+  children: React.ReactNode
+}) {
+  if (!stacked) return <>{children}</>
+  return (
+    <div className="space-y-1.5">
+      <span className="block text-small font-bold text-muted-foreground">{label}</span>
+      {children}
+    </div>
   )
 }

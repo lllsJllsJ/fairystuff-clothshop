@@ -65,12 +65,12 @@ export function CreatableCombobox({
           onKeyDown={onKeyDown}
           placeholder={placeholder}
           className={cn(
-            "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent py-1 pr-8 pl-2.5 text-base transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80",
+            "h-11 w-full min-w-0 rounded-lg border border-input bg-transparent py-1 pr-8 pl-2.5 text-base transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80",
             className
           )}
         />
         <Autocomplete.Trigger
-          className="absolute inset-y-0 right-0 flex w-8 items-center justify-center text-muted-foreground outline-none disabled:opacity-50"
+          className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-muted-foreground outline-none disabled:opacity-50"
           aria-label={placeholder}
         >
           <ChevronDownIcon className="size-4" />

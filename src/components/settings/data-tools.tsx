@@ -4,13 +4,14 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { useTranslations } from "next-intl"
 import { toast } from "sonner"
-import { AlertTriangle, Trash2 } from "lucide-react"
+import { AlertTriangle, ListRestart, RotateCcw, Trash2 } from "lucide-react"
 
 import { CLEAR_CONFIRMATION } from "@/lib/data-confirm"
 import {
   clearShopData,
   type DataToolResult,
 } from "@/app/[locale]/admin/settings/actions"
+import { restoreDefaultCharacters } from "@/app/[locale]/admin/settings/workflow-actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -23,12 +24,18 @@ import {
 } from "@/components/ui/dialog"
 
 /**
- * The destructive shop-data tool is irreversible and live in production,
- * so it never fires from a single click: the dialog
- * makes the owner type a phrase (`lib/data-confirm.ts`) that the server
+ * The danger zone — every tool here changes live shop data and none of them
+ * are undoable.
+ *
+ * `clearShopData` is the heaviest, so it never fires from a single click: the
+ * dialog makes the owner type a phrase (`lib/data-confirm.ts`) that the server
  * action independently re-checks — the typed text is a real gate, not
  * decoration.
  *
+ * The character tools are one tier down (they only touch the taxonomy, and
+ * "Restore" is purely additive), so Reset gates on a `confirm()` rather than a
+ * typed phrase. Neither can detach a character from a product: the server
+ * action reports those back in `skipped` instead of deleting them.
  */
 
 export function DataTools() {
@@ -37,6 +44,7 @@ export function DataTools() {
   const [pending, startTransition] = useTransition()
   const [open, setOpen] = useState(false)
   const [typed, setTyped] = useState("")
+  const [seeding, setSeeding] = useState(false)
 
   const phrase = CLEAR_CONFIRMATION
   const matches = typed.trim() === phrase
@@ -44,6 +52,28 @@ export function DataTools() {
   function close() {
     setOpen(false)
     setTyped("")
+  }
+
+  function seedCharacters(reset: boolean) {
+    if (reset && !window.confirm(t("settings.resetCharactersConfirm"))) return
+    setSeeding(true)
+    startTransition(async () => {
+      const result = await restoreDefaultCharacters(reset)
+      if (!result.ok) {
+        setSeeding(false)
+        toast.error(result.error === "forbidden" ? t("errors.forbidden") : t("errors.generic"))
+        return
+      }
+      toast.success(t("settings.charactersRestored"))
+      if (result.deleted.length > 0) {
+        toast.info(t("settings.charactersRemoved", { count: result.deleted.length, names: result.deleted.join(", ") }))
+      }
+      if (result.skipped.length > 0) {
+        toast.warning(t("settings.charactersKept", { count: result.skipped.length, names: result.skipped.join(", ") }))
+      }
+      setSeeding(false)
+      router.refresh()
+    })
   }
 
   function handleConfirm() {
@@ -96,6 +126,35 @@ export function DataTools() {
             <Trash2 />
             {t("settings.clearData")}
           </Button>
+        </li>
+
+        <li className="flex flex-wrap items-start justify-between gap-3 py-3">
+          <div className="min-w-48 flex-1">
+            <p className="text-small font-medium text-foreground">
+              {t("settings.characters")}
+            </p>
+            <p className="text-small text-muted-foreground">
+              {t("settings.seedCharactersHint")}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() => seedCharacters(false)}
+              disabled={pending || seeding}
+            >
+              <RotateCcw />
+              {t("settings.seedCharacters")}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => seedCharacters(true)}
+              disabled={pending || seeding}
+            >
+              <ListRestart />
+              {t("settings.resetCharacters")}
+            </Button>
+          </div>
         </li>
       </ul>
 

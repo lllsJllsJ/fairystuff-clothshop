@@ -68,7 +68,7 @@ The Sanrio Gift Gate design system embodies playful charm and warm approachabili
 - Line heights are generous to maximize readability in a playful context
 - Weight variation (400/700) creates clear visual hierarchy without font proliferation
 - All sizes use px-based measurements for pixel-perfect implementation
-- Chinese character support via Noto Sans TC ensures consistent rendering across regions
+- This project is Thai/English only — Noto Sans TC is used for its Latin letterforms (see `src/lib/fonts.ts`), not for Chinese support; Noto Sans Thai covers Thai glyphs
 
 ## 4. Component Stylings
 
@@ -357,7 +357,7 @@ The design system embraces generous whitespace to create visual breathing room a
 - Don't mix font weights within a single text block unless establishing hierarchy
 - Don't use **#337AB7** as a background color on large areas; reserve it for accent text and secondary elements
 - Don't apply transforms or animations without explicit duration/easing specifications (missing from tokens)
-- Don't neglect Chinese character rendering; always specify **Noto Sans TC** as primary font
+- Don't swap the primary font away from **Noto Sans TC** without checking `src/lib/fonts.ts`'s subsetting — it intentionally loads Latin glyphs only
 
 ## 8. Responsive Behavior
 

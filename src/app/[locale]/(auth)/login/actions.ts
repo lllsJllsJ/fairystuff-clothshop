@@ -1,7 +1,7 @@
 "use server"
 
 import { AuthError } from "next-auth"
-import { eq } from "drizzle-orm"
+import { eq, or } from "drizzle-orm"
 
 import { signIn } from "@/auth"
 import { db } from "@/db"
@@ -13,9 +13,9 @@ export type LoginResult = { ok: true; role: UserRole } | { ok: false; error: "in
 
 /**
  * Signs in with the Credentials provider. Every failure — malformed input,
- * unknown email, wrong password — maps to the SAME `invalid` result. Never
+ * unknown email/phone, wrong password — maps to the SAME `invalid` result. Never
  * reveal which part was wrong; that is what makes this safe against
- * enumerating registered emails (mirrors carstockpro's
+ * enumerating registered accounts (mirrors carstockpro's
  * `loginWithIdentifier`, which preserves the same property).
  *
  * `redirect: false` because the caller (the client login form) needs the
@@ -28,11 +28,15 @@ export async function login(values: unknown): Promise<LoginResult> {
 
   try {
     await signIn("credentials", {
-      email: parsed.data.email,
+      identifier: parsed.data.identifier,
       password: parsed.data.password,
       redirect: false,
     })
-    const [user] = await db.select({ role: users.role }).from(users).where(eq(users.email, parsed.data.email.trim().toLowerCase())).limit(1)
+    const [user] = await db
+      .select({ role: users.role })
+      .from(users)
+      .where(or(eq(users.email, parsed.data.identifier), eq(users.phone, parsed.data.identifier)))
+      .limit(1)
     if (!user) return { ok: false, error: "invalid" }
     return { ok: true, role: user.role }
   } catch (error) {

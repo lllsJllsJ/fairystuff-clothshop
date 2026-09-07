@@ -45,6 +45,13 @@ export const orderItemSchema = z.object({
   size: z.string().trim().max(20).optional().or(emptyString),
   productCost: money,
   sellPrice: money,
+  // Lead-time SNAPSHOT (see schema.ts's comment on `orderItems`) — populated
+  // by the product picker in `order-line-row.tsx#selectProduct` from the
+  // chosen product's `preorderMinDays`/`preorderMaxDays`, then carried
+  // through untouched. Both null is the normal case (most items aren't
+  // preorders).
+  preorderMinDays: z.number().int().nullable().optional(),
+  preorderMaxDays: z.number().int().nullable().optional(),
   quantity: z.preprocess(
     (v) => (v === "" || v === null || v === undefined ? 1 : Number(v)),
     z.number({ message: "required" }).int("required").min(1, "min").max(9999, "max")

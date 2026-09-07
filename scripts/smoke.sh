@@ -31,21 +31,18 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 
-# Every drizzle-generated migration in journal order, THEN the hand-written
-# extras (generated columns/triggers/indexes drizzle can't model). Globbed
-# rather than listed so a new NNNN_*.sql is picked up automatically — a
-# migration missing here fails the run with a confusing "column does not
-# exist" instead of an obvious one.
-echo "==> applying schema (all migrations + extras)"
+# Every drizzle-generated migration in journal order — 0000_init.sql, then
+# the journaled 0001_init_extras.sql (generated columns/triggers/indexes
+# drizzle can't model). Globbed rather than listed so a new NNNN_*.sql is
+# picked up automatically — a migration missing here fails the run with a
+# confusing "column does not exist" instead of an obvious one.
+echo "==> applying schema (all migrations)"
 MIGRATIONS=()
 for f in drizzle/[0-9]*.sql; do
-  case "$f" in
-    *_extras.sql) continue ;;
-    *) MIGRATIONS+=("$f") ;;
-  esac
+  MIGRATIONS+=("$f")
 done
 
-for f in "${MIGRATIONS[@]}" drizzle/0000_init_extras.sql scripts/schema-smoke-test.sql; do
+for f in "${MIGRATIONS[@]}" scripts/schema-smoke-test.sql; do
   docker cp "$f" "$PG:/tmp/" >/dev/null
 done
 
@@ -53,7 +50,6 @@ for f in "${MIGRATIONS[@]}"; do
   echo "    $(basename "$f")"
   docker exec "$PG" psql -U postgres -d clothshop -q -v ON_ERROR_STOP=1 -f "/tmp/$(basename "$f")"
 done
-docker exec "$PG" psql -U postgres -d clothshop -q -v ON_ERROR_STOP=1 -f /tmp/0000_init_extras.sql 2>/dev/null
 
 echo ""
 echo "==> SCHEMA CHECKS (generated columns, triggers, constraints)"

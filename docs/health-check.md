@@ -62,11 +62,34 @@ curl -s "$BASE/th/shop/<code>" \
 
 # 4. Admin endpoints reject anonymous callers
 curl -s -o /dev/null -w '%{http_code}\n' "$BASE/api/admin/products"       # expect 401
+curl -s -o /dev/null -w '%{http_code}\n' "$BASE/api/admin/users"          # expect 401
 curl -s -o /dev/null -w '%{http_code}\n' "$BASE/api/uploads/presign"      # expect 401
+
+# 4b. The account list must never carry a password hash, even to an owner.
+#     Run signed in as the owner (paste a browser session cookie), because
+#     an anonymous caller already gets a 401 and would pass this trivially.
+curl -s -H "Cookie: $OWNER_COOKIE" "$BASE/api/admin/users" \
+  | grep -E '[$]2[aby][$]|passwordHash' \
+  && echo "FAIL: password hash leaked" || echo "PASS"
 
 # 5. Private fields never reach the client bundle (run from a local build)
 grep -rE 'buyingSource|originalPrice' .next/static/chunks/ \
   && echo "FAIL: shipped to browser" || echo "PASS"
+
+# 6. The public order-tracking page must never carry cost/profit fields or
+#    the sequential order number — `PO-<code>` is guessable-adjacent to
+#    anyone who has it, and there is no session check on this route at all
+#    (see docs/api-overview.md's "public, unguessable-URL" note). Create one
+#    real order through checkout first to get a real <code>.
+curl -s "$BASE/th/track/<code>" \
+  | grep -Ei 'itemsCost|totalCost|profit|productCost|lineCost|advertisingCost|packingCost|orderNo' \
+  && echo "FAIL: private order field leaked" || echo "PASS"
+
+# 6b. An unknown-but-well-shaped code and a malformed code must return the
+#     SAME 404 — never let the shape of the response tell an attacker which
+#     failure mode they hit.
+curl -s -o /dev/null -w '%{http_code}\n' "$BASE/th/track/PO-ZZZZZZZZZZ"  # expect 404
+curl -s -o /dev/null -w '%{http_code}\n' "$BASE/th/track/nonsense"       # expect 404
 ```
 
 Note that check 3 here targets `/th/shop/<code>` — this app's storefront
@@ -83,14 +106,35 @@ surface) — every check above targets one of this app's *own* routes.
   read, which is a CRITICAL-severity finding (see
   `~/.claude/rules/common/code-review.md`'s severity table) and must block
   any deploy until fixed.
-- Checks 4: both curls must print `401`. A `200`, a `307`/`302` redirect, or
-  any other code means an admin-only endpoint is reachable (or silently
-  redirecting instead of rejecting) an anonymous caller.
+- Checks 4: all three curls must print `401`. A `200`, a `307`/`302`
+  redirect, or any other code means an admin-only endpoint is reachable (or
+  silently redirecting instead of rejecting) an anonymous caller.
+- Check 4b: the `grep` must find **nothing**. `users` is the one table
+  carrying a credential, and `/api/admin/users` is the only route that reads
+  it for a list. Its select list is `ADMIN_USER_COLUMNS` in
+  `src/db/queries/users.ts` — the same structural defense
+  `PUBLIC_PRODUCT_COLUMNS` provides for the storefront. A match means someone
+  widened that object or replaced the select with `db.select().from(users)`,
+  which would also push the hash into the `/admin/users` RSC payload.
+- Check 6: the `grep` must find **nothing**. `getOrderByPreorderCode`'s
+  select list is `PUBLIC_ORDER_COLUMNS`/`PUBLIC_ORDER_ITEM_COLUMNS` in
+  `src/db/queries/track.ts` — the same structural defense pattern as
+  `PUBLIC_PRODUCT_COLUMNS`. A match means someone spread `orders.*` /
+  `orderItems.*` there, or passed an admin-fetched order row into a
+  `/track` component.
+- Check 6b: both curls must print `404`, and ideally byte-identical bodies —
+  `getOrderByPreorderCode` returning `null` (unknown code) and
+  `normalizePreorderCode` returning `null` (malformed code) both flow through
+  the same single `notFound()` call in `track/[code]/page.tsx`. If they ever
+  diverge, an attacker can use the difference to distinguish "this code is
+  well-formed but wrong" from "this code is nonsense" — exactly the kind of
+  oracle an enumeration attempt would use.
 
-**Re-run the whole block after any change to `queries/storefront.ts` or
-`/api/products`.** This is the single highest-value regression check in the
-codebase, because there is no database-level RLS backstop behind it — see
-`CLAUDE.md`'s security-model section for why.
+**Re-run the whole block after any change to `queries/storefront.ts`,
+`/api/products`, `queries/users.ts`, `/api/admin/users`, or
+`queries/track.ts`.** This is the single highest-value regression check in
+the codebase, because there is no database-level RLS backstop behind it —
+see `CLAUDE.md`'s security-model section for why.
 
 ## The standing schema check — does the money math still work?
 
@@ -107,10 +151,11 @@ Every monetary figure in the app is computed **in Postgres**, not in TypeScript:
 | `orders.total_cost` / `profit` | `GENERATED ALWAYS`; total cost includes item, shipping, packing, and advertising costs |
 
 None of that is visible to `tsc`. Drizzle cannot model `GENERATED ALWAYS`, and
-the trigger exists only in `drizzle/0000_init_extras.sql` — the file that is
-**not** in Drizzle's migration journal and must be applied by hand. A green
-build says nothing about whether profit is calculated correctly; a forgotten
-extras file yields orders that silently report zero profit.
+the trigger exists only in `drizzle/0001_init_extras.sql` — a journaled
+`--custom` migration that `npm run db:migrate` applies automatically right
+after `0000_init.sql`, so there is no manual step to forget anymore. A green
+build still says nothing about whether profit is calculated correctly,
+though — that's what this smoke test proves.
 
 `scripts/schema-smoke-test.sql` executes all of it against a throwaway database
 and prints PASS/FAIL per check. It runs inside a transaction and rolls back.
@@ -126,7 +171,7 @@ schema assertions, then runs the query-layer assertions against the real
 nothing else on the machine — not even the `docker compose` dev database
 (different container name and port).
 
-It has two halves, 36 checks total: 8 schema checks plus 28 query-layer and
+It has two halves, 33 checks total: 8 schema checks plus 25 query-layer and
 transaction checks (including the two rollback/commit checks below). The
 first half executes the SQL guarantees directly:
 
@@ -174,6 +219,10 @@ It asserts, among other things:
 - Admin queries *do* see cost fields (the converse check — proving the split is
   real rather than just absent everywhere)
 - Order search matches by customer name and by order number, and misses cleanly
+- `listUsers` executes and never selects `passwordHash`
+- `getOrderByPreorderCode` (the `/track/[code]` query) finds an order by its
+  random code, returns `null` for an unknown one, and — via the same
+  recursive scan technique — leaks no `orderNo`/cost/profit field
 - Dashboard SKU/gross/net/cost totals and report advertising-cost aggregates
   execute with the expected values
 - **`db.transaction()` rolls back on a thrown error** — a product inserted

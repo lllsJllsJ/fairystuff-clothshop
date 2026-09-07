@@ -1,11 +1,11 @@
 "use client"
 
 import { useTranslations } from "next-intl"
-import { LogOut, Store } from "lucide-react"
+import { Store, Users } from "lucide-react"
 
 import type { Session } from "next-auth"
 import { Link } from "@/i18n/navigation"
-import { signOutAction } from "@/components/auth/actions"
+import { SignOutButton } from "@/components/auth/sign-out-button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -42,6 +42,18 @@ export function UserMenu({ user }: { user: Session["user"] }) {
           </span>
         </div>
         <DropdownMenuSeparator />
+        {/* Account administration lives here rather than in the main nav
+            bar (see nav-items.ts): it's an occasional, account-shaped
+            errand, so it sits beside Sign out instead of competing with the
+            six day-to-day screens. */}
+        <DropdownMenuItem
+          render={
+            <Link href="/admin/users">
+              <Users className="size-4" />
+              {t("nav.users")}
+            </Link>
+          }
+        />
         <DropdownMenuItem
           render={
             <Link href="/">
@@ -51,15 +63,7 @@ export function UserMenu({ user }: { user: Session["user"] }) {
           }
         />
         <DropdownMenuSeparator />
-        <form action={signOutAction}>
-          <button
-            type="submit"
-            className="flex w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-muted"
-          >
-            <LogOut className="size-4" />
-            {t("nav.logout")}
-          </button>
-        </form>
+        <SignOutButton />
       </DropdownMenuContent>
     </DropdownMenu>
   )

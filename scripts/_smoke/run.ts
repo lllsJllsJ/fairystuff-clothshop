@@ -11,13 +11,16 @@
  * column names silently resolved to the wrong table.
  */
 import { db } from "../../src/db"
-import { characters, orderItems, orders, productCharacters, productImages, productTypes, productVariants, products } from "../../src/db/schema"
+import { characters, orderItems, orders, productCharacters, productImages, productTypes, productVariants, products, users } from "../../src/db/schema"
 import { getPublicProducts, getPublicProductByCode, getPublicCharacters, getActiveProductCodes } from "../../src/db/queries/storefront"
 import { getProducts, getProductById, getProductCodes } from "../../src/db/queries/products"
 import { getOrders, getOrderById } from "../../src/db/queries/orders"
+import { getOrderByPreorderCode } from "../../src/db/queries/track"
 import { getProductTypes } from "../../src/db/queries/product-types"
+import { listUsers } from "../../src/db/queries/users"
 import { getDashboardData } from "../../src/db/queries/dashboard"
 import { getReportsData } from "../../src/db/queries/reports"
+import { generatePreorderCode } from "../../src/lib/preorder-code"
 
 const PRIVATE = [
   "originalPrice",
@@ -29,6 +32,28 @@ const PRIVATE = [
   "preorderMinDays",
   "preorderMaxDays",
 ]
+
+/**
+ * Separate from PRIVATE above — `getOrderByPreorderCode`'s response
+ * legitimately carries an item's `quantity` (how many the customer ordered,
+ * a public fact), which PRIVATE also lists (there it means stock depth, a
+ * product-side private field). Reusing one list across both shapes would
+ * false-positive on every track-page check.
+ */
+const ORDER_PRIVATE = [
+  "orderNo",
+  "checkoutKey",
+  "createdBy",
+  "refundReason",
+  "refundedAt",
+  "itemsCost",
+  "totalCost",
+  "profit",
+  "advertisingCost",
+  "packingCost",
+  "productCost",
+  "lineCost",
+]
 let pass = 0
 let fail = 0
 
@@ -39,13 +64,13 @@ function check(name: string, ok: boolean, detail = "") {
 }
 
 /** Deep scan for any private key name anywhere in a returned structure. */
-function scanPrivate(value: unknown, path = "$"): string[] {
+function scanPrivate(value: unknown, privateKeys: readonly string[] = PRIVATE, path = "$"): string[] {
   if (value === null || typeof value !== "object") return []
-  if (Array.isArray(value)) return value.flatMap((v, i) => scanPrivate(v, `${path}[${i}]`))
+  if (Array.isArray(value)) return value.flatMap((v, i) => scanPrivate(v, privateKeys, `${path}[${i}]`))
   const hits: string[] = []
   for (const [k, v] of Object.entries(value)) {
-    if (PRIVATE.includes(k)) hits.push(`${path}.${k}`)
-    hits.push(...scanPrivate(v, `${path}.${k}`))
+    if (privateKeys.includes(k)) hits.push(`${path}.${k}`)
+    hits.push(...scanPrivate(v, privateKeys, `${path}.${k}`))
   }
   return hits
 }
@@ -54,6 +79,11 @@ async function seed() {
   await db.delete(orderItems); await db.delete(orders)
   await db.delete(productImages); await db.delete(productVariants); await db.delete(productCharacters)
   await db.delete(products); await db.delete(productTypes)
+  await db.delete(users)
+
+  await db.insert(users).values({
+    email: "owner@example.com", passwordHash: "not-a-real-hash", fullname: "Smoke Owner", role: "owner",
+  })
 
   await db.insert(productTypes).values([
     { name: "เสื้อยืด", nameEn: "T-Shirt", slug: "t-shirt", sortOrder: 1 },
@@ -83,8 +113,9 @@ async function seed() {
     { productId: live.id, url: "https://img.example.com/b-800.webp", storageKey: "products/x/b-800.webp", color: "เบจ", sortOrder: 1 },
   ])
 
+  const preorderCode = generatePreorderCode()
   const [ord] = await db.insert(orders).values({
-    customerName: "คุณมานี", customerPhone: "0812345678",
+    customerName: "คุณมานี", customerPhone: "0812345678", preorderCode,
     shippingCost: "50", packingCost: "20", advertisingCost: "30", status: "new",
   }).returning({ id: orders.id })
 
@@ -93,7 +124,7 @@ async function seed() {
     productName: "เสื้อยืดลายดอก", productType: "เสื้อยืด", color: "ดำ", size: "S",
     productCost: "350", sellPrice: "890", quantity: 2,
   })
-  return { productId: live.id, orderId: ord.id }
+  return { productId: live.id, orderId: ord.id, preorderCode }
 }
 
 async function main() {
@@ -143,6 +174,22 @@ async function main() {
   check("getOrders search by order number", (await getOrders({ search: String(ord.rows[0].orderNo) })).rows.length === 1)
   check("getOrders search miss returns none", (await getOrders({ search: "ไม่มีอยู่จริง" })).rows.length === 0)
   check("getOrderById joins items", (await getOrderById(ids.orderId))?.items.length === 1)
+
+  const admin_users = await listUsers({})
+  check("listUsers executes and returns owner/staff accounts", admin_users.rows.length >= 1,
+    `${admin_users.rows.length} row(s)`)
+  const userLeaks = scanPrivate(admin_users.rows, ["passwordHash"])
+  check("listUsers never leaks passwordHash", userLeaks.length === 0, userLeaks.join(", ") || "clean")
+
+  console.log("--- track (public) ---")
+  const tracked = await getOrderByPreorderCode(ids.preorderCode)
+  check("getOrderByPreorderCode finds the order by its random code", tracked?.customerName === "คุณมานี",
+    `preorderCode=${ids.preorderCode}`)
+  check("getOrderByPreorderCode returns an unknown code as null",
+    (await getOrderByPreorderCode("PO-ZZZZZZZZZZ")) === null)
+  const trackLeaks = scanPrivate(tracked, ORDER_PRIVATE)
+  check("getOrderByPreorderCode leaks nothing private (no orderNo/cost/profit fields)",
+    trackLeaks.length === 0, trackLeaks.join(", ") || "clean")
 
   console.log("--- transactions (pooled driver; Risk 3 no longer applies) ---")
   const before = (await db.select().from(products)).length

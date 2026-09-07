@@ -37,6 +37,25 @@ reference.
   and never pass a full product row into anything that renders on `/` or
   `/shop`. `docs/health-check.md` carries the standing curl-based leak test
   — re-run it after touching `queries/storefront.ts` or `/api/products`.
+- **`/track/[code]` is a second public read of a table that also carries
+  private figures, and it gets the identical treatment.** Guest checkout
+  (no accounts at all — see the domain invariant below) means anyone with a
+  preorder code, or anyone who guesses one, can load `/track/<code>` with no
+  session check whatsoever. `orders` carries `profit`, `totalCost`,
+  `itemsCost`, `advertisingCost`, `packingCost`, and each line carries
+  `productCost`/`lineCost` — none of which may ever reach this path. The
+  structural defense is `src/db/queries/track.ts`'s
+  `PUBLIC_ORDER_COLUMNS`/`PUBLIC_ORDER_ITEM_COLUMNS` — the only column sets
+  `getOrderByPreorderCode` may select. Also deliberately absent from the
+  response: `orders.orderNo` — it is a sequential, enumerable bigint
+  identity, and printing it on a public URL would let anyone page through
+  every order in the shop by incrementing a number, defeating the entire
+  reason the preorder code is random rather than sequential. Never spread
+  `orders.*`/`orderItems.*` here, and never pass an admin-fetched order row
+  (e.g. from `queries/orders.ts`) into anything that renders under
+  `/track`. `docs/health-check.md`'s check 6 is the standing curl-based leak
+  test for this route — re-run it after touching `queries/track.ts` or the
+  track page components.
 
 ## Framework specifics (differ from common assumptions)
 
@@ -78,7 +97,7 @@ reference.
 - **The client message bundle is scoped — a new namespace must be classified
   or it silently fails to reach the client.** `[locale]/layout.tsx` defines
   `PUBLIC_NAMESPACES` (currently `app`, `common`, `nav`, `auth`, `home`,
-  `footer`, `shop`, `errors`) and ships **only** those to
+  `footer`, `shop`, `cart`, `checkout`, `track`, `errors`) and ships **only** those to
   `NextIntlClientProvider` on public pages — the admin vocabulary
   (`product`, `order`, `dashboard`, `reports`, `import`, `settings`,
   `variant`) would otherwise bloat every customer-facing page's RSC payload
@@ -111,7 +130,7 @@ reference.
 - **Computed fields are DB-enforced — never write them from application
   code.** `products.margin`, `orders.totalCost`/`profit`, and
   `orderItems.lineTotal`/`lineCost` are Postgres `GENERATED ALWAYS AS (...)
-  STORED` columns (added by `drizzle/0000_init_extras.sql`, not modeled as
+  STORED` columns (added by `drizzle/0001_init_extras.sql`, not modeled as
   generated in `schema.ts`'s column builders — see that file's header
   comment). Postgres rejects a write that names them (`23P05`). Separately,
   `orders.itemsTotal`/`itemsCost` are **trigger-maintained** (not generated —
@@ -166,6 +185,23 @@ reference.
   `orderItems.product_code` — reading the order lines too is what stops a
   deleted product's code being reissued and its sales silently merging into
   the new product's row in `profitByProduct`.
+- **Preorder codes are server-minted, random, and immutable — the opposite
+  of product codes on purpose.** `orders.preorderCode` (`PO-<10 random
+  chars>`, `src/lib/preorder-code.ts`) is generated with
+  `crypto.getRandomValues` and needs **no database read at all** to produce,
+  unlike `product-code.ts`'s sequential `max + 1`. Never make it sequential,
+  never derive it from `orderNo`, and never let a caller supply one — both
+  `submitCheckout` and `admin/orders/actions.ts#createOrder` always call
+  `generatePreorderCode()` themselves. It is the sole public identifier for
+  `/track/[code]` (a route with no session check at all — see the security
+  model above), so a random, unguessable code is the only thing standing
+  between "this customer's order" and "any order in the shop." Collisions
+  are handled by generate-and-insert-and-retry, exactly like product codes:
+  a pre-flight `SELECT` would be a TOCTOU race, so the
+  `orders_preorder_code_unique` index is the real authority, and a `23505`
+  against it retries the **entire** `db.transaction(...)` with a fresh code
+  (bounded at 3 attempts) — a unique-violation aborts the transaction
+  outright, so the retry can never reuse the same `tx`.
 - **Cover photo = `sortOrder` 0.** No separate "is cover" flag — whichever
   `productImages` row has `sortOrder = 0` is the cover, full stop. Setting a
   cover means reordering, not flagging.
@@ -188,18 +224,19 @@ reference.
 ## Schema changes
 
 Edit `src/db/schema.ts`, run `drizzle-kit generate` (`npm run db:generate`),
-and hand-maintain `drizzle/0000_init_extras.sql` for anything Drizzle can't
-model (generated columns, `pg_trgm` indexes, triggers, check constraints —
-see that file's own header for the full list). **Never hand-edit
-drizzle-generated SQL** (`drizzle/0000_init.sql` or any future
+and hand-maintain `drizzle/0001_init_extras.sql` for anything Drizzle can't
+model (generated columns, `pg_trgm` indexes, triggers, check constraints,
+reference data — see that file's own header for the full list). **Never
+hand-edit drizzle-generated SQL** (`drizzle/0000_init.sql` or any future
 `NNNN_*.sql` Drizzle produces) — if it's wrong, fix the schema and
-regenerate. `0000_init_extras.sql` is **not** in Drizzle's migration journal
-(`drizzle/meta/_journal.json`) on purpose — it must be applied by hand
-(`psql "$DATABASE_URL" -f drizzle/0000_init_extras.sql`) after every
-`db:migrate`, on every environment, including a fresh one. This is
-documented loudly in the README's Installation section because it's the
-single easiest step to forget, and forgetting it doesn't error — it just
-leaves every money column silently wrong.
+regenerate. `0001_init_extras.sql` is a `--custom` migration and **is**
+registered in Drizzle's migration journal (`drizzle/meta/_journal.json`), so
+`npm run db:migrate` applies it automatically right after `0000_init.sql` —
+there is no manual `psql` step, on any environment including a fresh one. If
+`drizzle/meta/` is ever deleted and `db:generate` is re-run, that regenerates
+`0000_init.sql` but not `0001_init_extras.sql` — recreate it from
+`schema.ts`'s own comments and re-register it with
+`drizzle-kit generate --custom`.
 
 ## Verify
 

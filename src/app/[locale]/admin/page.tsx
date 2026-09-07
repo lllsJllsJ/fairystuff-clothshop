@@ -43,7 +43,7 @@ export default async function AdminDashboardPage({
         <p className="text-body text-muted-foreground">{t("dashboard.subtitle")}</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <KpiCard
           label={t("dashboard.totalSkus")}
           value={formatNumber(data.totalSkus)}

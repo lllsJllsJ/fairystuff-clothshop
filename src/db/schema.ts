@@ -27,7 +27,7 @@ import {
  * ordinary columns so reads type correctly, but the actual
  * `GENERATED ALWAYS AS (...) STORED` DDL — along with triggers, the
  * pg_trgm indexes, and check constraints — lives in the hand-written
- * `drizzle/0000_init_extras.sql`, which converts them after the initial
+ * `drizzle/0001_init_extras.sql`, which converts them after the initial
  * migration. Drizzle does not model any of that; see plan §4. Consequence:
  * these columns are NOT compile-time protected from being sent on an
  * insert/update — Postgres will reject the write at runtime (23P05 /
@@ -39,7 +39,7 @@ import {
 // Enums
 // ---------------------------------------------------------------------------
 
-export const userRole = pgEnum("user_role", ["owner", "staff", "customer"])
+export const userRole = pgEnum("user_role", ["owner", "staff"])
 
 export const productStatus = pgEnum("product_status", [
   "draft",
@@ -75,17 +75,35 @@ export const authTokenType = pgEnum("auth_token_type", [
 ])
 
 // ---------------------------------------------------------------------------
-// users — Auth.js owns no tables under the JWT strategy. `staff` is the
-// fail-safe default role and has no capability in v1. Public registration
-// always writes `customer`; owners are created only by create-owner.ts.
+// users — owner/staff only. Auth.js owns no tables under the JWT strategy.
+// `staff` is the fail-safe default role and has no capability in v1. There is
+// no public registration: accounts are created only by scripts/create-owner.ts
+// (or promoted from `staff` by an owner in /admin/users). Guest checkout
+// (see src/app/[locale]/(shop)/checkout) needs no account at all — the
+// `customer` role was removed once accounts stopped gating checkout; see
+// CLAUDE.md's "preorder codes are server-minted" invariant for what replaced
+// it.
 // ---------------------------------------------------------------------------
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
-  email: text("email").notNull().unique(),
+  // Nullable: owner/staff sign-in prefers email, but the column stayed
+  // nullable through the guest-checkout migration rather than backfilling a
+  // NOT NULL constraint onto rows that predate it. Anything reading this
+  // column must still handle null.
+  email: text("email").unique(),
   passwordHash: text("password_hash").notNull(),
   fullname: text("fullname"),
+  phone: text("phone").unique(),
+  shippingAddress: text("shipping_address"),
   role: userRole("role").notNull().default("staff"),
+  // Cosmetic as of the guest-checkout migration: `authorize()` in src/auth.ts
+  // no longer gates sign-in on this column (that gate existed only for the
+  // now-removed `customer` role, which could register without ever proving
+  // an email). Kept for its historical data and because `verifyUserEmail`
+  // (admin/users/actions.ts) still writes it — do NOT re-add a login gate on
+  // this column without checking that first, since it would risk locking out
+  // an `owner`/`staff` account that never verified an email.
   emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -179,7 +197,7 @@ export const products = pgTable(
     /**
      * Generated column (sellPrice - originalPrice). See the file-level note
      * above — the GENERATED ALWAYS AS expression is added by
-     * 0000_init_extras.sql, not here.
+     * 0001_init_extras.sql, not here.
      */
     margin: numeric("margin", { precision: 12, scale: 2 }),
     status: productStatus("status").notNull().default("active"),
@@ -206,7 +224,7 @@ export const products = pgTable(
     ),
     // The pg_trgm GIN indexes on productName and productCode need the
     // gin_trgm_ops operator class, which drizzle-kit does not model
-    // portably — those two live in 0000_init_extras.sql (plan §4).
+    // portably — those two live in 0001_init_extras.sql (plan §4).
   ]
 )
 
@@ -243,7 +261,7 @@ export const productVariants = pgTable(
     /** "-" = a one-colour item (no real colour axis). */
     color: text("color").notNull().default("-"),
     size: text("size").notNull(),
-    /** Check (quantity >= 0) is added in 0000_init_extras.sql. */
+    /** Check (quantity >= 0) is added in 0001_init_extras.sql. */
     quantity: integer("quantity").notNull().default(0),
     sku: text("sku"),
     sortOrder: integer("sort_order").notNull().default(0),
@@ -327,6 +345,25 @@ export const shopSettings = pgTable("shop_settings", {
   id: text("id").primaryKey().default("default"),
   lineId: text("line_id"),
   instagramHandle: text("instagram_handle"),
+  facebookUrl: text("facebook_url"),
+  /**
+   * Brand identity, editable from Admin -> Settings -> Brand. Null means
+   * "not set yet" — every reader falls back to the src/lib/brand.ts
+   * placeholder constants (see resolvedBrandName/resolvedBrandDescription
+   * in src/db/queries/settings.ts), so an unconfigured shop still renders
+   * sensible copy instead of blank text. brandName is a single value
+   * (brand names aren't translated); the description is a TH/EN pair,
+   * mirroring BRAND_TAGLINE_TH/EN.
+   */
+  brandName: text("brand_name"),
+  brandDescriptionTh: text("brand_description_th"),
+  brandDescriptionEn: text("brand_description_en"),
+  /** Canonical stored URL (same-origin /api/images/... proxy, see
+   * src/lib/brand-image-keys.ts) and the underlying object-storage key —
+   * the key is kept so a replaced/removed logo's old object can be
+   * deleted, mirroring productImages.storageKey. */
+  logoUrl: text("logo_url"),
+  logoStorageKey: text("logo_storage_key"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -334,7 +371,7 @@ export const shopSettings = pgTable("shop_settings", {
 
 // ---------------------------------------------------------------------------
 // orders — itemsTotal / itemsCost are trigger-maintained (recalc_order(),
-// see 0000_init_extras.sql) rather than generated, because a stored
+// see 0001_init_extras.sql) rather than generated, because a stored
 // generated column may not reference another generated column and
 // totalCost/profit below need to be generated from them. totalCost and
 // profit are themselves generated columns.
@@ -352,12 +389,19 @@ export const orders = pgTable(
       .notNull()
       .default(sql`CURRENT_DATE`),
     customerName: text("customer_name").notNull(),
-    customerEmail: text("customer_email"),
     customerAddress: text("customer_address"),
     customerPhone: text("customer_phone"),
-    customerId: uuid("customer_id").references(() => users.id, {
-      onDelete: "set null",
-    }),
+    /**
+     * Random, unguessable public tracking code (see src/lib/preorder-code.ts).
+     * Server-minted, immutable once assigned — mirrors the
+     * products.productCode invariant. NOT NULL as of migration 0009
+     * (0008 added it nullable and backfilled every existing row first — an
+     * ADD COLUMN ... NOT NULL with no default fails outright on a populated
+     * table). Deliberately excludes the sequential `orderNo` from any public
+     * surface, since printing that on a guessable URL would defeat the point
+     * of a random code.
+     */
+    preorderCode: text("preorder_code").notNull().unique(),
     checkoutKey: uuid("checkout_key"),
     shippingCost: numeric("shipping_cost", { precision: 12, scale: 2 })
       .notNull()
@@ -400,7 +444,6 @@ export const orders = pgTable(
   (table) => [
     index("orders_status_idx").on(table.status),
     index("orders_order_date_idx").on(table.orderDate.desc()),
-    index("orders_customer_id_idx").on(table.customerId),
     uniqueIndex("orders_checkout_key_idx")
       .on(table.checkoutKey)
       .where(sql`${table.checkoutKey} is not null`),
@@ -440,7 +483,19 @@ export const orderItems = pgTable(
     sellPrice: numeric("sell_price", { precision: 12, scale: 2 })
       .notNull()
       .default("0"),
-    /** Check (quantity > 0) is added in 0000_init_extras.sql. */
+    /**
+     * Lead-time SNAPSHOT — copied from `products.preorderMinDays`/
+     * `preorderMaxDays` at order-insert time, same principle as
+     * `productCost`/`sellPrice`/`productName` above: a later edit to the
+     * product's preorder window must never rewrite an already-placed
+     * order's estimate. Both null is the normal case (most items aren't
+     * preorders); no check constraint here since the source columns on
+     * `products` are already constrained and a null pair is always valid
+     * on a line item.
+     */
+    preorderMinDays: integer("preorder_min_days"),
+    preorderMaxDays: integer("preorder_max_days"),
+    /** Check (quantity > 0) is added in 0001_init_extras.sql. */
     quantity: integer("quantity").notNull().default(1),
     statusCode: text("status_code")
       .notNull()

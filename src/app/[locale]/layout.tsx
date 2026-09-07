@@ -29,7 +29,7 @@ const PUBLIC_NAMESPACES = new Set([
   "shop",
   "cart",
   "checkout",
-  "account",
+  "track",
   "errors",
 ]);
 

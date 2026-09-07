@@ -4,11 +4,9 @@
 #
 #   docker compose up -d
 #
-# Then apply the schema (BOTH files — see DEPLOYMENT.md; the extras file is
-# not in Drizzle's migration journal and must be applied by hand):
+# Then apply the schema and bootstrap the app (see DEPLOYMENT.md):
 #
 #   npm run db:migrate
-#   psql "$DATABASE_URL" -f drizzle/0000_init_extras.sql
 #   npm run db:seed
 #   npm run create-owner
 #

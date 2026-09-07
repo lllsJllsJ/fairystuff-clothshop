@@ -5,26 +5,26 @@
 **Bootstrap & Auth**
 1. [Request / Proxy Bootstrap — Locale Negotiation + Auth Guard](#request--proxy-bootstrap--locale-negotiation--auth-guard)
 2. [Login](#login)
-3. [Customer Registration](#customer-registration)
-4. [Email Verification + Resend](#email-verification--resend)
-5. [Password Reset](#password-reset)
-6. [Session — JWT Callbacks](#session--jwt-callbacks)
-7. [Sign Out](#sign-out)
-8. [Locale Switch](#locale-switch)
+3. [Password Reset](#password-reset)
+4. [Session — JWT Callbacks](#session--jwt-callbacks)
+5. [Sign Out](#sign-out)
+6. [Locale Switch](#locale-switch)
 
-**Public storefront & customer commerce**
-9. [Home — ISR Render](#home--isr-render)
-10. [About — ISR Render](#about--isr-render)
-11. [Catalogue — SSR + Client Hydration (`/shop`)](#catalogue--ssr--client-hydration-shop)
-12. [`GET /api/products` — Client-Side Filter/Sort/Paginate](#get-apiproducts--client-side-filtersortpaginate)
-13. [Product Detail — Static Generation + Metadata + JSON-LD](#product-detail--static-generation--metadata--json-ld)
-14. [Colour Selection](#colour-selection)
-15. [Size Selection / Preorder](#size-selection--preorder)
-16. [Filter + Sort — URL Sync](#filter--sort--url-sync)
-17. [Local Cart](#local-cart)
-18. [Checkout + Order Creation](#checkout--order-creation)
-19. [Order-ID Contact Handoff](#order-id-contact-handoff)
-20. [Customer Order Tracking](#customer-order-tracking)
+**Public storefront & guest commerce**
+7. [Home — ISR Render](#home--isr-render)
+8. [About — ISR Render](#about--isr-render)
+9. [Catalogue — SSR + Client Hydration (`/shop`)](#catalogue--ssr--client-hydration-shop)
+10. [`GET /api/products` — Client-Side Filter/Sort/Paginate](#get-apiproducts--client-side-filtersortpaginate)
+11. [Product Detail — Static Generation + Metadata + JSON-LD](#product-detail--static-generation--metadata--json-ld)
+12. [Colour Selection](#colour-selection)
+13. [Size Selection / Preorder](#size-selection--preorder)
+14. [Filter + Sort — URL Sync](#filter--sort--url-sync)
+15. [Local Cart](#local-cart)
+16. [Checkout + Order Creation](#checkout--order-creation)
+17. [Preorder Code Generation](#preorder-code-generation)
+18. [Preorder-Code Contact Handoff](#preorder-code-contact-handoff)
+19. [Public Preorder Tracking](#public-preorder-tracking)
+20. [Preorder Code Lookup](#preorder-code-lookup)
 21. [Sitemap](#sitemap)
 22. [Robots](#robots)
 23. [404 — Draft/Archived/Unknown Product Code](#404--draftarchivedunknown-product-code)
@@ -56,22 +56,28 @@
 47. [Settings — Reorder Product Types](#settings--reorder-product-types)
 48. [Settings — Clear Shop Data](#settings--clear-shop-data)
 49. [Settings — Shop Contacts](#settings--shop-contacts)
-50. [Settings — Character Taxonomy](#settings--character-taxonomy)
-51. [Settings — Order Status Labels](#settings--order-status-labels)
-52. [Settings — Line-Item Status Lifecycle](#settings--line-item-status-lifecycle)
+50. [Settings — Brand](#settings--brand)
+51. [Settings — Character Taxonomy](#settings--character-taxonomy)
+52. [Settings — Order Status Labels](#settings--order-status-labels)
+53. [Settings — Line-Item Status Lifecycle](#settings--line-item-status-lifecycle)
+54. [Users — List + Filter](#users--list--filter)
+55. [Users — Change Role](#users--change-role)
+56. [Users — Delete Account](#users--delete-account)
+57. [Users — Mark Email Verified](#users--mark-email-verified)
+58. [Users — Send Password Reset](#users--send-password-reset)
 
 **Catalogue CLI**
-53. [Catalogue Prepare — Workbook Extraction](#catalogue-prepare--workbook-extraction)
-54. [Catalogue Prepare — Supplier Enrichment + Workbook Fallback](#catalogue-prepare--supplier-enrichment--workbook-fallback)
-55. [Catalogue Verify + Import Dry Run](#catalogue-verify--import-dry-run)
-56. [Catalogue Apply — Storage Staging](#catalogue-apply--storage-staging)
-57. [Catalogue Apply — Transactional Replacement](#catalogue-apply--transactional-replacement)
-58. [Catalogue Apply — Rollback + Object Cleanup](#catalogue-apply--rollback--object-cleanup)
+59. [Catalogue Prepare — Workbook Extraction](#catalogue-prepare--workbook-extraction)
+60. [Catalogue Prepare — Supplier Enrichment + Workbook Fallback](#catalogue-prepare--supplier-enrichment--workbook-fallback)
+61. [Catalogue Verify + Import Dry Run](#catalogue-verify--import-dry-run)
+62. [Catalogue Apply — Storage Staging](#catalogue-apply--storage-staging)
+63. [Catalogue Apply — Transactional Replacement](#catalogue-apply--transactional-replacement)
+64. [Catalogue Apply — Rollback + Object Cleanup](#catalogue-apply--rollback--object-cleanup)
 
 **Cross-cutting**
-59. [Storefront Revalidation After a Product Mutation](#storefront-revalidation-after-a-product-mutation)
-60. [Unauthorized / Forbidden Denial Paths](#unauthorized--forbidden-denial-paths)
-61. [Transaction Rollback on Mid-Write Failure](#transaction-rollback-on-mid-write-failure)
+65. [Storefront Revalidation After a Product Mutation](#storefront-revalidation-after-a-product-mutation)
+66. [Unauthorized / Forbidden Denial Paths](#unauthorized--forbidden-denial-paths)
+67. [Transaction Rollback on Mid-Write Failure](#transaction-rollback-on-mid-write-failure)
 
 ---
 
@@ -101,7 +107,7 @@ strip locale segment -> bare path
 protected prefix + no session? ──yes──▶ 307 redirect to /<locale>/login?redirect=<path>
   │no
   ▼
-already signed in + path === /login? ──yes──▶ owner -> /admin; customer -> /account/orders
+already signed in + path === /login? ──yes──▶ owner -> /admin; else -> /
   │no
   ▼
 pass through to the matched page
@@ -110,9 +116,12 @@ pass through to the matched page
 Failure/edge behavior: an `/api/**` path never gets a redirect — it fails
 with a JSON `401`, because a `fetch`/`curl` caller following a redirect would
 otherwise see a `200` HTML login page instead of a clear failure. Protected
-prefixes are a **denylist** (`/admin`, `/account`, `/checkout`, `/api/admin`,
-`/api/uploads`) — the
+prefixes are a **denylist** (`/admin`, `/api/admin`, `/api/uploads`) — the
 inverse of an allowlist — because this shop's storefront is public-by-default.
+`/checkout` and `/track` were removed from this list when guest checkout
+shipped: neither needs a session anymore, so both fall straight through to
+"pass through to the matched page" like any other public storefront route
+(see the Checkout + Order Creation and Public Preorder Tracking flows below).
 
 ## Login
 
@@ -120,14 +129,15 @@ inverse of an allowlist — because this shop's storefront is public-by-default.
 called from `LoginForm`. Triggered by submitting the sign-in form on `/login`.
 
 ```
-┌────────┐  email+password   ┌──────────────┐  safeParse   ┌────────────┐
+┌────────┐ email/phone+password ┌──────────────┐ safeParse  ┌────────────┐
 │ Browser│ ────────────────▶ │ login() action│ ───────────▶ │ loginSchema│
 └────────┘                   └──────┬────────┘              └────────────┘
                                      │ signIn("credentials", {redirect:false})
                                      ▼
                           ┌────────────────────────┐
                           │ Auth.js authorize()      │
-                          │ SELECT users WHERE email  │
+                          │ SELECT users WHERE         │
+                          │ email OR normalized phone  │
                           │ bcrypt.compare(pw, hash   │
                           │   OR dummy hash)          │
                           └──────┬────────────────────┘
@@ -140,25 +150,37 @@ called from `LoginForm`. Triggered by submitting the sign-in form on `/login`.
         { ok: true, role }         { ok:false, error:"invalid" }
                      │                      │
                      ▼                      ▼
-      role-safe redirect: owner/admin,
-      customer/account or checkout,
-      staff/home                   toast: invalidCredentials
+      safe return redirect: originating storefront page,
+      cart, or customer checkout/account flow;
+      otherwise role home         toast: invalidCredentials
 ```
 
-Failure: **every** failure mode — malformed input, unknown email, wrong
+Failure: **every** failure mode — malformed input, unknown email/phone, wrong
 password — collapses to the same `{ ok: false, error: "invalid" }` and the
 same generic UI message. This is deliberate, not an oversight: revealing
-*which* part failed would let a caller enumerate registered emails. The
+*which* part failed would let a caller enumerate registered accounts. The
 constant-time defense is in `authorize()` itself — when no user row matches,
 `bcrypt.compare()` still runs against a fixed dummy hash of the same cost
 factor, so a "no such account" rejection and a "wrong password" rejection
 cost the same wall-clock time.
 
+The proxy adds a locale-prefixed `redirect` query when an anonymous caller
+hits a protected `/admin` route. `loginDestination()` accepts only known paths
+under the current locale, then applies role checks: storefront/cart returns
+are shared by anyone, and resuming `/admin` requires `owner`. There is no
+`customer` role or checkout/account redirect branch anymore — guest checkout
+needs no sign-in at all, so `/login` only ever exists to get an owner/staff
+account into `/admin`. External, cross-locale, and role-forbidden values fall
+back to the role's normal landing page (`/admin` for an owner, the storefront
+root otherwise).
+
 ## Session — JWT Callbacks
 
 Runs on every authenticated request as part of Auth.js resolving `auth()`
-(used directly by `getCurrentUser()`, and internally by the proxy's
-`req.auth`). No database round trip after initial sign-in.
+(used directly by `getCurrentUser()`, by the client `SessionProvider`, and
+internally by the proxy's `req.auth`). Normal reads do not query the database;
+`LoginForm`'s `useSession().update()` right after sign-in is the one trigger
+that forces a fresh database read (see the Login flow above).
 
 ```
 Request with session cookie
@@ -168,9 +190,12 @@ Auth.js decodes JWT
         │
         ▼
 jwt() callback: user present (sign-in only)? ──yes──▶ token.id/token.role = user.id/user.role
+        │no
+        ▼
+trigger === update? ──yes──▶ SELECT user by token.id -> refresh name/email/role
         │no (normal request)
         ▼
-session() callback: session.user.id/role = token.id/token.role
+session() callback: session.user.id/name/email/role = token fields
         │
         ▼
 req.auth / getCurrentUser() resolves { id, email, name, role }
@@ -183,21 +208,24 @@ unauthenticated branch.
 
 ## Sign Out
 
-`signOutAction` (`src/components/auth/actions.ts`), bound to a
-`<form action={signOutAction}>` in `UserMenu`. Triggered by the owner
-clicking "sign out" in the admin header.
+`SignOutButton` calls the Auth.js client `signOut()` helper from the admin
+header's `UserMenu` — the only surface it's used from now that the storefront
+has no account menu (guest checkout; see `CLAUDE.md`).
 
 ```
-┌────────┐  form submit   ┌─────────────────┐  signOut()  ┌──────────────┐
-│ Browser│ ─────────────▶ │ signOutAction()  │ ──────────▶ │ Auth.js clears│
-└────────┘                └──────┬───────────┘             │ session cookie│
-                                  │ getLocale()              └──────┬───────┘
-                                  ▼                                  ▼
-                        redirectTo: `/${locale}`          307 to /<locale>
+┌────────┐ click logout  ┌──────────────────────┐ POST    ┌──────────────┐
+│ Browser│ ────────────▶ │ next-auth/react       │ ──────▶ │ Auth.js clears│
+└────────┘               │ signOut(redirectTo)   │         │ session cookie│
+                         └──────────┬────────────┘         └──────┬───────┘
+                                    │ session broadcast            │
+                                    ▼                              ▼
+                         SessionProvider -> anonymous    window.location = /<locale>
 ```
 
-Failure: none meaningful — sign-out has no failure branch; it always clears
-the session and redirects to the locale-correct home.
+Failure: a failed sign-out request leaves the user on the current page and
+re-enables the control. A successful request broadcasts the anonymous session
+state before a hard navigation to the locale-correct home, preventing stale
+header state in the persistent layout.
 
 ## Locale Switch
 
@@ -235,6 +263,21 @@ locales at build time (`generateStaticParams`), revalidates every 300s.
                           ▼
                 cache updated, served
 ```
+
+The character facet feeds two link-only sections — `QuickFilterRail` (chips
+above the "New in" grid) and `CollectionStrip` (promo cards). Both are
+Server Components rendering plain `<Link>`s to `/shop?character=<slug>`;
+neither ships filter state to the client, which is what keeps `/` in the
+SSG column of `next build` rather than falling to dynamic (`ƒ`).
+
+Character is the storefront's only *taxonomy* filter (`ShopFilters` adds
+colour, size, and price, but those are variant/price attributes, not a
+catalogue grouping). Product type is deliberately not offered: it is an
+admin-facing attribute and `GET /api/products` exposes no `type` parameter
+for a link to point at. Both sections therefore render `null` when no active
+product has a character assigned, since every link would lead to an empty
+result — an empty home page below the hero means the character taxonomy is
+unpopulated, not that the code regressed.
 
 Failure: product/character reads are wrapped in try/catch — a database error during
 prerender (e.g. a database-less CI build) falls back to an empty result
@@ -282,6 +325,11 @@ for SEO, and an `initialData` seed so the client doesn't refetch on load.
                                  ProductGrid: 2 columns on mobile,
                                  3 on large, 4 on extra-large screens
 ```
+
+`ShopBrowser` seeds its filter state from the query string on mount, so a
+`/shop?character=…` link — the home page's `QuickFilterRail` chips and
+`CollectionStrip` cards are exactly this — lands with that character filter
+already applied and reflected in the filter rail.
 
 Failure: same try/catch fallback pattern as the home page — a database
 error during prerender yields an empty grid rather than a failed build;
@@ -514,7 +562,9 @@ is one variant row: quantity above zero is ready to ship, and zero is sold out.
 ## Product Browse
 
 `GET /admin/products`, `ProductBrowser` client component + `GET
-/api/admin/products`. Card/table view toggle, URL-synced filters.
+/api/admin/products`. The card/table view toggle sits with the page actions;
+search, status, type, sort, and the table-only column chooser occupy one
+horizontal, URL-synced filter strip.
 
 ```
 ┌────────┐ GET /<locale>/admin/products  ┌───────────────────┐
@@ -907,6 +957,7 @@ per-row zod schema is rejected before the transaction opens at all
 ## Orders List
 
 `GET /admin/orders`, `OrderList` client component + `GET /api/admin/orders`.
+Search, date range, status, and sort occupy one horizontal filter strip.
 
 ```
 ┌────────┐ GET /<locale>/admin/orders  ┌──────────────────┐
@@ -955,13 +1006,25 @@ computes `orders.itemsTotal`/`itemsCost` from the inserted line items.
 └────────┘                           └──────┬───────────────┘
                                             │ auth -> isOwner -> zod parse
                                             ▼
+                    generatePreorderCode()  (see the guest-checkout
+                       │                     Preorder Code Generation flow —
+                       │                     an owner-typed phone order gets
+                       │                     the same trackable /track/[code]
+                       │                     URL a guest checkout would)
+                       ▼
                              txDb().transaction(async tx => {
-                               insert orders (shipping/packing/advertising/
-                                 status/note)
+                               insert orders (preorderCode, shipping/packing/
+                                 advertising/status/note)
                                insert orderItems[] (snapshotted product
                                  fields: code/name/type/color/size/cost/price)
                              })
                                             │
+                             23505 on preorderCode unique index? ──yes──▶
+                             retry with a NEW code, WHOLE tx again (bounded
+                             at 3 attempts — a unique-violation aborts the
+                             transaction, so a retry can't reuse the same tx)
+                                            │no
+                                            ▼
                                      [Postgres AFTER INSERT trigger fires
                                       on order_items -> recalc_order(order_id)
                                       -> orders.items_total/items_cost updated
@@ -1243,8 +1306,9 @@ boutique shop's product-type count, not a large catalogue).
 ## Settings — Clear Shop Data
 
 `clearShopData` Server Action, `src/app/[locale]/admin/settings/actions.ts`,
-from the Shop data panel (`components/settings/data-tools.tsx`). Empties the
-shop; there is no demo-loader sibling action.
+from the Danger zone panel (`components/settings/data-tools.tsx`) — the panel
+that collects every irreversible tool, alongside the character Restore/Reset
+buttons below. Empties the shop; there is no demo-loader sibling action.
 
 ```
 ┌──────────┐  click "Clear all data"   ┌──────────────────┐
@@ -1278,8 +1342,11 @@ shop; there is no demo-loader sibling action.
 ```
 
 Kept on purpose: `users` (wiping the only owner locks you out of the admin
-that triggered the wipe) and `product_types` (reference data, re-seeded by
-`npm run db:seed`, referenced by name from products).
+that triggered the wipe), `product_types` (reference data, re-seeded by
+`npm run db:seed`, referenced by name from products) and `characters`
+(reference data too — `product_characters` rows cascade away with their
+product, but the taxonomy itself survives and is re-seeded/reset by
+`npm run db:seed:characters`).
 
 Failure: a failed check returns `unauthorized`/`forbidden`/`confirm_mismatch`
 and deletes nothing; a mid-transaction error rolls the whole delete back and
@@ -1287,6 +1354,189 @@ returns `clear_failed` with every row still present. A failed object delete
 is logged and ignored — an orphaned object costs storage, a half-committed
 wipe costs correctness. **There is no undo**: recovery means a Railway
 Postgres restore, and the deleted objects are gone.
+
+## Users — List + Filter
+
+`/admin/users` render + `GET /api/admin/users`. The owner's view of every
+account that can sign in.
+
+```
+┌────────┐  /admin/users  ┌──────────────┐  requireOwner()  ┌───────────┐
+│ Owner  │ ──────────────▶│ admin/layout │ ────────────────▶│ users/page│
+└────────┘                └──────────────┘                  └─────┬─────┘
+                                                                  │ passes ONLY
+                                                                  │ currentUserId
+                                                                  ▼
+                                                            ┌───────────┐
+                                                            │ UserList  │
+                                                            │ (client)  │
+                                                            └─────┬─────┘
+                                     debounced search / role /    │
+                                     verified / sort / page       │
+                                                                  ▼
+                                              GET /api/admin/users?...
+                                                                  │
+                                            auth -> isOwner -> listUsers()
+                                                                  │
+                                              select ADMIN_USER_COLUMNS
+                                              (owner/staff accounts only —
+                                               no `customer` role exists)
+                                                                  │
+                                                                  ▼
+                                                     { rows, count, page }
+```
+
+The page passes **only** `currentUserId` to the client, never a user row —
+the rows arrive over the JSON route, whose select list is
+`ADMIN_USER_COLUMNS`. `passwordHash` is therefore never selected on this
+path and cannot reach an RSC payload. Filtering and paging happen in SQL;
+an in-memory filter over a capped fetch would silently truncate as the
+account list grows. Every sort breaks ties on `users.id` so pages don't
+drop or repeat rows. There is no orders column or orders-sort option
+anymore — `orders` carries no account reference at all as of guest
+checkout, so there is no per-account order count to show.
+
+Failure: unauthenticated → `401` JSON (never a redirect — see the proxy
+bootstrap flow); authenticated non-owner → `403`; query error → `500` and
+the client renders its empty state.
+
+## Users — Change Role
+
+`setUserRole` Server Action, from the row menu's role dialog.
+
+```
+┌────────┐ pick role  ┌──────────────────────┐
+│ Owner  │ ──────────▶│ setUserRole(id, role)│
+└────────┘            └──────────┬───────────┘
+                                 │ auth -> isOwner -> zod(uuid, enum)
+                                 ▼
+                        id === actor.id ? ──yes──▶ self_role_change
+                                 │no
+                                 ▼
+                      target.role === "owner"
+                      && newRole !== "owner" ?
+                                 │yes
+                                 ▼
+                      countOtherOwners(id) === 0 ? ──yes──▶ last_owner
+                                 │no
+                                 ▼
+                      db.update(users).set({ role })
+                      revalidateUsers()
+```
+
+This is the only **in-app** path that can mint an `owner` — there is no
+public registration at all (guest checkout needs no account; see
+`CLAUDE.md`), and `scripts/create-owner.ts` needs shell access. Both
+refusals are enforced **in the action**, not just by a hidden menu item: a
+direct action invocation fails identically.
+
+Failure: unknown id → `not_found`; a no-op role change returns `ok` without
+a write; a write error → `update_failed`.
+
+## Users — Delete Account
+
+`deleteUser` Server Action, from the row menu's confirm dialog.
+
+```
+┌────────┐ confirm  ┌────────────────┐
+│ Owner  │ ────────▶│ deleteUser(id) │
+└────────┘          └───────┬────────┘
+                            │ auth -> isOwner -> zod(uuid)
+                            ▼
+                   id === actor.id ? ──yes──▶ self_delete
+                            │no
+                            ▼
+                   owner && countOtherOwners === 0 ? ──yes──▶ last_owner
+                            │no
+                            ▼
+                   db.transaction:
+                     delete authTokens where userId   (kills pending links)
+                     delete users where id
+                            │
+                            ▼
+                   orders.created_by ──▶ NULL   (FK ON DELETE SET NULL,
+                                          only for orders THIS account typed
+                                          in by hand — a guest order never
+                                          referenced any account at all)
+                   revalidateUsers()
+```
+
+**Order history survives — trivially now.** Guest checkout stores no account
+reference on an order at all (see `CLAUDE.md`'s guest-checkout invariant), so
+deleting an owner/staff account has nothing to unlink there. The only FK is
+`orders.createdBy` (an admin-created order's author), which is `ON DELETE SET
+NULL`; every order's customer name/phone/address and every product field were
+already snapshotted at order time regardless. Reports — which group on
+`orderItems.productCode`, never a live FK — are unaffected either way.
+
+Failure: unknown id → `not_found`; a mid-transaction error rolls back both
+deletes, leaving the account and its tokens intact.
+
+## Users — Mark Email Verified
+
+`verifyUserEmail` Server Action, offered only on rows whose
+`emailVerifiedAt` is null.
+
+```
+┌────────┐  ┌─────────────────────┐
+│ Owner  │ ▶│ verifyUserEmail(id) │
+└────────┘  └──────────┬──────────┘
+                       │ auth -> isOwner -> zod(uuid)
+                       ▼
+             already verified ? ──yes──▶ ok (no write)
+                       │no
+                       ▼
+             db.transaction:
+               update users set emailVerifiedAt = now()
+               delete authTokens where userId
+             revalidateUsers()
+```
+
+**Cosmetic as of guest checkout.** `authorize()` in `src/auth.ts` no longer
+gates sign-in on `emailVerifiedAt` at all — that gate only ever existed for
+the now-removed `customer` role, which could self-register without proving
+an email. An owner/staff account signs in whether or not this is set. This
+action is kept because it still has a real effect (dropping any outstanding
+verify token) and removing it outright would be more churn than value; its
+continued existence is not evidence that a login gate on this column still
+exists.
+
+Failure: unknown id → `not_found`; write error → `update_failed` and the
+transaction rolls back, so the token is not deleted without the flag being
+set.
+
+## Users — Send Password Reset
+
+`sendUserPasswordReset` Server Action, offered only when `EMAIL_ENABLED`.
+
+```
+┌────────┐  ┌────────────────────────────────┐
+│ Owner  │ ▶│ sendUserPasswordReset(id, loc) │
+└────────┘  └───────────────┬────────────────┘
+                            │ auth -> isOwner
+                            ▼
+                  emailEnabled() ? ──no──▶ email_disabled
+                            │yes
+                            ▼
+                  zod(uuid, locale enum) -> load target
+                            ▼
+                  sendTokenEmail(user, locale, "reset")
+                    │  issueAuthToken(reset_password, 1h)
+                    │    └─ token issued < 60s ago ? ──▶ cooldown
+                    │  Resend ──▶ /<locale>/reset-password?token=...
+                    ▼
+                  ok   (no revalidate — nothing on screen changed)
+```
+
+Reuses the **same** `sendTokenEmail` helper (`src/lib/account-email.ts`)
+`/forgot-password` uses, so token lifetime, single-use semantics, and the
+one-per-minute cooldown are identical rather than a second implementation
+that can drift. The owner never sees or sets the new password — this issues
+exactly the link the account holder would have requested themselves.
+
+Failure: no delivery channel → `email_disabled` (stated, never silently
+skipped); too soon after a previous link → `cooldown`; a Resend error →
+`email_failed`, logged server-side.
 
 ## Catalogue Prepare — Workbook Extraction
 
@@ -1614,6 +1864,14 @@ does not save it — a route moved outside `/api/admin/*`, or a proxy matcher
 edited to exclude it, would leave that single missing check as the entire
 remaining defense.
 
+**`/checkout` and `/track/**` are deliberately absent from this diagram.**
+`src/proxy.ts`'s `PROTECTED_PREFIXES` is now exactly `["/admin", "/api/admin",
+"/api/uploads"]` — checkout and order tracking need no session at all (guest
+checkout; see `CLAUDE.md`), so there is no "unauthenticated" branch for them
+to fall into. Their security instead rests on possession of a random,
+unguessable `preorderCode` rather than a session — see the Preorder Code
+Generation and Public Preorder Tracking flows below.
+
 ## Transaction Rollback on Mid-Write Failure
 
 Cross-cutting — applies to every action that opens `txDb().transaction(...)`:
@@ -1673,53 +1931,10 @@ On laptop/desktop breakpoints, the 4:5 gallery width is clamped from the
 viewport height (360–560px wide). This keeps the main photo and thumbnail rail
 inside a typical laptop viewport; mobile retains the full-width gallery.
 
-## Customer Registration
-
-`/register` submits name, normalized email, and password to
-`registerCustomer`. The only role this public action can create is `customer`.
-
-```
-Customer -> signupSchema -> email already exists?
-                              | yes -> generic success (no enumeration)
-                              | no
-                              v
-                    bcrypt hash -> INSERT users(role=customer)
-                              |
-                 EMAIL_ENABLED=false? --yes--> email_verified_at=now()
-                              | no
-                              v
-                    issue hashed token -> Resend verification email
-```
-
-Failure: malformed input writes nothing. With email enabled, an email-send
-failure is reported while the safely hashed account remains available for the
-resend flow. With email disabled (the default), no Resend call is attempted and
-the new account can sign in immediately.
-
-## Email Verification + Resend
-
-`/verify-email?token=...` consumes a one-time verification token;
-`/resend-verification` requests a replacement when email is enabled.
-
-```
-Resend form -> normalized email -> user exists and unverified?
-                                      | no -> generic success
-                                      | yes
-                                      v
-                           cooldown -> replace hashed token -> Resend
-
-Verification link -> SHA-256 token lookup + expiry check
-                                      | valid
-                                      v
-                      transaction: verify user + delete verify tokens
-```
-
-Failure: raw tokens are never stored. Invalid/expired links show a generic
-message. When `EMAIL_ENABLED=false`, the resend page explains that email is
-unavailable and performs no external call.
-
 ## Password Reset
 
+Owner/staff-only now — there is no public registration and no customer email
+verification (both were removed with the `customer` role; see `CLAUDE.md`).
 `/forgot-password` issues a one-hour token and `/reset-password?token=...`
 consumes it.
 
@@ -1731,7 +1946,10 @@ Reset link -> validate token/expiry -> bcrypt new password
 
 Failure: reset requests never reveal whether an email exists. Invalid or
 expired tokens do not update the password. The entire feature is disabled in
-UI and server actions while `EMAIL_ENABLED=false`.
+UI and server actions while `EMAIL_ENABLED=false`. `verifyUserEmail`
+(`admin/users/actions.ts`) is a separate, owner-only escape hatch covered
+under Users — Mark Email Verified below; it is now cosmetic (no login gate
+reads `emailVerifiedAt` anymore) but still has a real effect.
 
 ## Local Cart
 
@@ -1749,66 +1967,249 @@ Product detail -> choose colour/size + quantity -> addItem()
 
 Failure: malformed stored JSON is discarded. Quantity is clamped to `1..99`.
 The server does not trust cart prices or product availability at checkout.
+There is deliberately no server-side "my orders in this browser" list backing
+the cart or a post-checkout view — see Public Preorder Tracking below for why
+a preorder code, not a browser-scoped list, is the durable link back to an
+order.
 
 ## Checkout + Order Creation
 
-`/checkout` requires a signed-in customer. `submitCheckout` creates the durable
-order; no online payment or stock decrement occurs.
+`/checkout` requires **no session at all** — guest checkout removed the
+account wall entirely (see `CLAUDE.md`'s security model). `submitCheckout`
+creates the durable order from the form's own fields plus the local cart; no
+online payment or stock decrement occurs, and nothing here advances the order
+past `new` — the owner accepts it by hand later (see the Orders List /
+Quick Order Status Change flows).
 
 ```
-Customer -> phone/address + local cart -> checkoutSchema
-             |                               |
-             |                    LINE/Instagram configured?
-             |                               | no -> contact_missing
-             v                               v
+Guest -> fill first/last name, phone, address, note + local cart -> checkoutSchema
+                              |
+              LINE/Instagram/Facebook configured?
+                              | no -> contact_missing
+                              v
      reload active products + variants; compare ids and current prices
                          | changed -> cart_changed
                          v
- transaction: INSERT order(status=new, customerId, checkoutKey)
-              INSERT snapshot line items(status=default configured status)
+     idempotency check: SELECT orders WHERE checkout_key = key
+                         | found (retry of a completed checkout) -> return it
+                         v (not found)
+     generate a random preorder code (see Preorder Code Generation below)
                          |
                          v
-         Postgres total trigger -> generated order number -> clear local cart
+ transaction: INSERT order(status=new, preorderCode, checkoutKey)
+              INSERT snapshot line items(status=default configured status)
+                         |
+              23505 on preorderCode unique index? --yes--> retry with a NEW
+                         |                                  code, whole tx
+                         no                                 (bounded, 3x)
+                         v
+         Postgres total trigger -> generated order number (never shown to
+                         |            the customer — see Preorder Code
+                         v            Generation) -> clear local cart
+         redirect to /track/<preorderCode>?new=1
 ```
 
-Failure: `checkoutKey` makes retries idempotent. A missing/inactive product,
-invalid variant, or changed price rejects the entire checkout. Shipping stays
-unconfirmed and excluded from the customer total until the owner confirms it.
+Failure: `checkoutKey` makes retries idempotent — global uniqueness now, not
+scoped to an account, since there is no account to scope it to. A
+missing/inactive product, invalid variant, or changed price rejects the
+entire checkout (`cart_changed`). Shipping stays unconfirmed and excluded
+from the customer total until the owner confirms it. `admin/orders/
+actions.ts#createOrder` mints a `preorderCode` through the identical
+generate-and-retry loop, so an order the owner types in by hand from a phone
+call is trackable at the same URL.
 
-## Order-ID Contact Handoff
+## Preorder Code Generation
 
-`/checkout/success/[id]` is customer-scoped and shows the generated order
-number plus configured LINE/Instagram links.
-
-```
-Created order -> scoped lookup(customerId + orderId) -> copy order number
-                                                    -> open LINE / Instagram
-                                                    -> customer sends number
-                                                    -> owner accepts order
-```
-
-Failure: another customer's id returns 404. Missing contacts prevent checkout
-earlier, so a successfully created order always has at least one handoff path.
-
-## Customer Order Tracking
-
-`/account/orders` and `/account/orders/[id]` list/read only the signed-in
-customer's orders.
+Pure, synchronous, client-safe — `src/lib/preorder-code.ts` has no `db`
+import and no `server-only`, unlike `src/lib/product-code.ts`'s sequential
+codes (which must read `max + 1` from the database). A preorder code needs
+no database read at all: it is `crypto.getRandomValues` mapped onto a
+32-character alphabet, called from both `submitCheckout` and
+`admin/orders/actions.ts#createOrder`.
 
 ```
-Customer session -> WHERE orders.customer_id = session.user.id
+generatePreorderCode()
+        │
+        ▼
+crypto.getRandomValues(Uint8Array(10))
+        │
+        ▼
+each byte & 31 -> index into "23456789ABCDEFGHJKLMNPQRSTUVWXYZ" (32 chars,
+        │          excludes 0/1/I/O; byte&31 is exactly uniform over 32
+        │          buckets since 256 is a multiple of 32 — no rejection
+        │          sampling, no modulo bias)
+        ▼
+"PO-" + 10 characters = 50 bits of entropy (~1.13e15 possible codes)
+        │
+        ▼
+caller INSERTs it; on a 23505 against orders_preorder_code_unique,
+the WHOLE db.transaction(...) is retried with a fresh code (bounded at 3
+attempts) — a unique-violation aborts the transaction outright, so a
+retry cannot reuse the same `tx`
+```
+
+`normalizePreorderCode(input)` is the client-safe inverse: uppercases,
+strips whitespace/dashes, re-adds a missing `PO-` prefix, then validates
+against the exact alphabet and length — used both by the `/track` lookup
+form (before any server round trip) and internally by the track page itself.
+
+Failure: a `23505` on any other constraint (e.g. the idempotency check
+racing itself) is not retried here — see the Checkout + Order Creation flow
+above for that separate path. Exhausting all 3 preorder-code attempts (astronomically unlikely at 50 bits of
+entropy) returns a generic `failed` result rather than looping forever.
+
+## Preorder-Code Contact Handoff
+
+`/track/[code]` (both the post-checkout `?new=1` view and a return visit)
+renders a "contact the shop" button that opens a prefilled LINE chat.
+
+```
+Track page -> lineMessageUrl(settings, t("lineMessage", {code}))
+                (built SERVER-SIDE so the message matches the request's
+                 locale segment)
                               |
-                 internal status mapped to customer stage
+                              v
+        https://line.me/R/oaMessage/<percent-encoded lineId>/?<percent-encoded text>
+                              |
+              ContactAdminButton: real <a target="_blank"> (NOT a click
+              handler that awaits the clipboard then calls window.open —
+              that would consume the click's user-gesture token and get the
+              popup blocked)
+                              |
+              onClick fire-and-forget: navigator.clipboard?.writeText(code)
+                              |
+                              v
+              LINE opens with the message prefilled (mobile) — or, on
+              LINE for PC (prefill unsupported there), the code is already
+              in the clipboard to paste
+                              |
+                              v
+                    customer sends -> owner accepts order
+```
+
+Failure: `navigator.clipboard` is guarded (`?.`) since it is `undefined`
+outside a secure context (plain HTTP); the copy failing never blocks or
+delays the LINE navigation. If no LINE ID is configured, the button degrades
+to Instagram/Facebook links only (`links.instagramUrl`/`links.facebookUrl`
+from `contactLinks()`) with the large, always-visible `PreorderCodeCopy`
+control as the fallback contact method — `submitCheckout` already refused to
+create the order at all if none of LINE/Instagram/Facebook were configured
+(see Checkout + Order Creation), so a successfully created order always has
+at least one handoff path.
+
+## Public Preorder Tracking
+
+`/track/[code]` — **no session, no `customerId` scope, reachable by anyone
+who has or guesses the code.** This is the one page in the app where "who is
+allowed to read this order" is decided entirely by possession of a random
+string rather than a session, which is exactly why
+`src/db/queries/track.ts`'s column discipline matters as much as
+`PUBLIC_PRODUCT_COLUMNS` does for the storefront (see
+`docs/api-overview.md`'s `PUBLIC_ORDER_COLUMNS` section).
+
+```
+GET /[locale]/track/[code]  (dynamic = "force-dynamic" — see below)
+                │
+                ▼
+normalizePreorderCode(code) -> null (malformed)? ──yes──▶ notFound()
+                │ well-shaped
+                ▼
+getOrderByPreorderCode(code): SELECT PUBLIC_ORDER_COLUMNS
+                              WHERE preorder_code = code
+                │ not found? ──yes──▶ notFound()  (SAME 404 as malformed —
+                │                      never let the response shape tell an
+                │                      attacker which failure mode they hit)
+                │ found
+                ▼
+SELECT PUBLIC_ORDER_ITEM_COLUMNS WHERE order_id = <internal id,
+                                       stripped before the function returns>
+                │
+                ▼
+internal status mapped to customer stage (customerStageFor)
  new -> Received; accepted/preorder/packaging -> Preparing
  shipping -> Shipping; complete -> Complete
  cancelled -> Cancelled; refund -> Refunded
-                              |
-                              v
-                 list/detail (view only; no mutation control)
+                │
+                ▼
+isActiveStage(stage)?
+  ├─ yes (received/preparing/shipping/complete) ──▶ render StatusStepper
+  │      (4-step horizontal indicator) + a highlighted current-stage card
+  │      (title/body copy per stage); on "preparing" ONLY, the card also
+  │      shows estimatedLeadTime(items) — "slowest item wins": the max of
+  │      each item's snapshotted preorderMinDays/preorderMaxDays, or no
+  │      estimate line at all if no item in the order carries one
+  └─ no (cancelled/refunded) ──▶ render CustomerStatusBadge alone + a short
+         explanation line — never the stepper (these are exceptions
+         outside the normal progression, see order-status-badge.tsx)
+                │
+                ▼
+render: success banner (if ?new=1) + header (order label + code + date) +
+        contact-admin handoff (LINE only — see below) + status section
+        (badge + stepper/explanation, above) + a 2-row-max OrderTimeline
+        (order-placed date always; the current stage's label + updatedAt
+        ONLY once the order has moved past "received" — there is no
+        order_status_history table, so no other row is ever fabricated) +
+        items + totals (shipping/grand total only once shippingConfirmedAt
+        is set) + delivery info + note
 ```
 
-Failure: unauthenticated visitors return to login with the intended path;
-owner/staff sessions are redirected away; cross-customer order ids return 404.
+Contact handoff is **LINE only** on this page — `ContactAdminButton` — even
+though the shop may also have Instagram/Facebook configured (those still
+appear on `contact-cta.tsx`/`site-footer.tsx` elsewhere; this route was
+narrowed deliberately so the tracking page has one unambiguous path back to
+a human, not three).
+
+Lead-time (`preorderMinDays`/`preorderMaxDays`) is a SNAPSHOT, copied from
+`products` onto each `orderItems` row at insert time in both `submitCheckout`
+(guest checkout) and the admin `createOrder`/`updateOrder` line-item builder
+— the same principle as the `productCost`/`sellPrice` snapshot already
+documented under Checkout + Order Creation, so a later edit to a product's
+preorder window never rewrites an already-placed order's estimate. See
+`src/lib/order-status.ts#estimatedLeadTime` and `#isActiveStage`.
+
+**`export const dynamic = "force-dynamic"` is the single most important
+line in this route.** `src/app/[locale]/(shop)/layout.tsx` sets
+`export const revalidate = 300` as a floor for the whole storefront
+subtree — without the override, order status here would be up to 5 minutes
+stale, defeating the only reason this page exists. The production build
+must show `ƒ` for `/[locale]/track/[code]`, not `●`.
+
+Failure: a malformed code and an unknown-but-well-shaped code return the
+identical 404 (see above). Never present: `orders.orderNo` (a sequential,
+enumerable identity — printing it here would let anyone page through every
+order by incrementing a number, exactly what the random `preorderCode`
+exists to prevent), `itemsCost`/`totalCost`/`profit`/`advertisingCost`/
+`packingCost`/`productCost`/`lineCost`, `checkoutKey`, `createdBy`,
+`refundReason`, `refundedAt`. `docs/health-check.md` carries the standing
+curl-based leak test (check 6) for this route.
+
+## Preorder Code Lookup
+
+`/track` (no `[code]` segment) — a static, crawlable entry point for a
+customer who has lost the URL but still has the code from their LINE chat.
+
+```
+GET /[locale]/track  (static — generateStaticParams + setRequestLocale,
+                       revalidate = 300 like any other storefront page)
+                │
+                ▼
+render lookup form
+                │
+                ▼
+TrackLookupForm (client): on submit, normalizePreorderCode(input)
+                │
+        null (garbage)? ──yes──▶ inline "invalid code" error, NO request sent
+                │ well-shaped
+                ▼
+        router.push(`/track/${code}`)  -- the ONLY place that actually
+                                           checks whether an order exists
+```
+
+Failure: garbage input never leaves the browser — `normalizePreorderCode`
+rejects it client-side before any navigation. `robots.ts` disallows
+`/*/track/` (trailing slash, so it blocks every `/th/track/<code>` detail
+page without touching this plain `/th/track` form, which stays crawlable
+and is listed in `sitemap.ts`).
 
 ## Line-Item Fulfillment + Partial Refund
 
@@ -1852,7 +2253,7 @@ refunded orders are excluded from dashboard/report revenue and profit.
 
 ## Settings — Shop Contacts
 
-The owner saves LINE ID and Instagram handle in the singleton
+The owner saves LINE ID, Instagram handle, and an HTTPS Facebook page URL in the singleton
 `shop_settings` row.
 
 ```
@@ -1862,9 +2263,34 @@ Owner -> Settings form -> validate + normalize -> UPSERT shop_settings(default)
 ```
 
 Failure: empty values are allowed for maintenance, but checkout remains
-disabled until at least one contact is configured.
+disabled until at least one contact is configured. Facebook links are accepted
+only for `facebook.com` or `fb.com` (including their subdomains), preventing an
+owner typo from rendering an unsafe or lookalike URL.
 
-## Settings — Character Taxonomy
+## Settings — Brand
+
+The owner sets the brand name, a TH/EN description, and a logo in the same
+singleton `shop_settings` row as shop contacts. Every reader falls back to the
+`src/lib/brand.ts` placeholder constants when a field is null, so an
+unconfigured shop never renders blank copy.
+
+```
+Owner picks logo file -> resizeBrandLogo() (browser, 3 widths: 128/256/512)
+                       -> POST /api/uploads/presign-logo -> signed PUT URLs
+                       -> browser PUTs each rendition to object storage
+Owner clicks Save -> saveBrandSettings(name, descTh, descEn, logoUrl, logoKey)
+                   -> validate + isBrandLogoKey() re-check -> UPSERT shop_settings(default)
+                   -> delete old logo renditions from storage (best-effort, if replaced/removed)
+                   -> revalidate storefront/settings/about
+                   -> header/footer/home/about read via resolvedBrandName()/resolvedBrandDescription()
+```
+
+Failure: an upload that fails presign or PUT leaves the previous logo
+untouched (the form only swaps `logoUrl`/`logoStorageKey` after a successful
+upload); a save with an invalid `logoStorageKey` (anything not matching
+`brand/logo-<timestamp>-(128|256|512).webp`) is rejected before it reaches the
+database, mirroring the product-image key defense in `POST
+/api/uploads/presign`.
 
 Character create/update/delete actions maintain the many-to-many taxonomy used
 instead of product type on customer pages.
@@ -1879,6 +2305,40 @@ Owner -> delete character -> links exist? --yes--> in_use
 Failure: duplicate names/slugs and invalid ids are rejected. Product types stay
 available in admin only; public collection/filter/detail/card queries select
 characters through the join table.
+
+### Restore / Reset defaults
+
+`restoreDefaultCharacters(reset)` re-applies the canonical list in
+`src/lib/character-seed.ts` — the same list and the same code path as
+`npm run db:seed:characters`, so the button and the CLI can never drift. Both
+buttons live in the **Danger zone** panel (`components/settings/data-tools.tsx`)
+next to `clearShopData`, not in the Characters editor above it: they rewrite
+the taxonomy wholesale rather than edit one row.
+
+```
+Owner -> Restore defaults ──▶ upsert every canonical character (by name)
+                              nameEn + sortOrder refreshed, slug left alone
+                              (it is already live in /shop?character= URLs)
+                                         │
+Owner -> Reset to defaults ──▶ upsert, then for each NON-canonical character:
+                                         │
+                              product_characters link exists?
+                                         │
+                    ┌──── yes ───────────┴────────── no ────┐
+                    ▼                                        ▼
+        kept + reported in `skipped`                    DELETE character
+        (FK is ON DELETE RESTRICT)                             │
+                    └───────────────┬───────────────────────────┘
+                                    ▼
+                          revalidateSettings()
+```
+
+Everything above runs in ONE transaction — a half-applied reset is never left
+behind. The CLI's `--force` (which deletes the `product_characters` links
+first) is deliberately **not** exposed on the button: a click must never
+silently detach a character from live products. Failure: a non-owner gets
+`forbidden`, a database error rolls the whole thing back and returns
+`seed_failed` with the list untouched.
 
 ## Settings — Order Status Labels
 

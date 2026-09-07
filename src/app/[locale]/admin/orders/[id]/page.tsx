@@ -8,6 +8,7 @@ import { OrderReceipt } from "@/components/orders/order-receipt"
 import { OrderStatusBadge } from "@/components/orders/order-status-badge"
 import { PrintOrderButton } from "@/components/orders/print-order-button"
 import { OrderFulfillment } from "@/components/orders/order-fulfillment"
+import { BackLink } from "@/components/layout/back-link"
 import { getOrderItemStatuses, getOrderStatusLabels } from "@/db/queries/settings"
 import { DEFAULT_ADMIN_STATUS_LABELS } from "@/lib/order-status"
 
@@ -44,14 +45,26 @@ export default async function OrderDetailPage({
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-        <div className="flex items-center gap-3">
-          <h1 className="text-h3 font-bold text-foreground">
-            {t("order.detail")} #{order.orderNo}
-          </h1>
-          <OrderStatusBadge status={order.status} label={statusLabel} />
+      <div className="space-y-3 print:hidden">
+        <BackLink fallbackHref="/admin/orders" />
+        {/* Status badge sits directly beside the order number — it's the
+            first thing the owner looks for, so it reads as part of the
+            heading rather than as a separate line. The pair wraps together
+            on a narrow screen; Print stays right-aligned on the same row. */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+            <h1 className="truncate text-h3 font-bold text-foreground">
+              {t("order.detail")} #{order.orderNo}
+            </h1>
+            <OrderStatusBadge status={order.status} label={statusLabel} />
+          </div>
+          <div className="flex shrink-0 justify-end">
+            <PrintOrderButton />
+          </div>
         </div>
-        <PrintOrderButton />
+        <p className="text-small text-muted-foreground">
+          {t("order.preorderCode")}: <span className="font-mono font-medium text-foreground">{order.preorderCode}</span>
+        </p>
       </div>
 
       <OrderReceipt order={order} statusLabel={statusLabel} />

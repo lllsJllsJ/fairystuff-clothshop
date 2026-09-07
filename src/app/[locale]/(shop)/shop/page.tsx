@@ -46,7 +46,7 @@ export async function generateMetadata({
 /**
  * `/shop`'s server render exists for two reasons: a crawlable page-1 grid
  * for SEO, and an `initialData` seed for `ShopBrowser` so hydration doesn't
- * refetch. Both `getPublicProducts` and `getPublicTypes` run at prerender
+ * refetch. Both `getPublicProducts` and `getPublicCharacters` run at prerender
  * time (no dynamic segment gates this route beyond `[locale]`, which
  * `generateStaticParams` above fully covers) — in this verification
  * environment `DATABASE_URL` points at nothing, so they're wrapped the same

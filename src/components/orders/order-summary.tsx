@@ -10,7 +10,7 @@ import type { OrderItemValues } from "@/lib/validations/order"
  * as `product-form.tsx`'s margin preview (`sellPrice - originalPrice`
  * recomputed live from `watch()`). Nothing here is persisted: `itemsTotal`/
  * `itemsCost` are trigger-maintained by `recalc_order()` and `totalCost`/
- * `profit` are `GENERATED ALWAYS` columns (drizzle/0000_init_extras.sql) —
+ * `profit` are `GENERATED ALWAYS` columns (drizzle/0001_init_extras.sql) —
  * the real values only exist once the row round-trips through Postgres.
  * The formulas below are written to match those definitions exactly:
  *

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { useTranslations } from "next-intl"
 import { toast } from "sonner"
 
@@ -36,6 +37,7 @@ export function OrderFulfillment({
 }) {
   const t = useTranslations("order")
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [working, setWorking] = useState<string | null>(null)
   const statusMap = new Map(statuses.map((status) => [status.code, status]))
   const allResolved = items.length > 0 && items.every((item) => {
@@ -58,6 +60,10 @@ export function OrderFulfillment({
       return
     }
     toast.success(t("statusUpdated"))
+    // Same client-cache staleness as the order form: the list at
+    // /admin/orders reads TanStack Query, which router.refresh() does not
+    // touch. See the long note in order-form.tsx#onSubmit.
+    await queryClient.invalidateQueries({ queryKey: ["admin-orders"] })
     router.refresh()
   }
 
@@ -70,6 +76,10 @@ export function OrderFulfillment({
       return
     }
     toast.success(t("statusUpdated"))
+    // Same client-cache staleness as the order form: the list at
+    // /admin/orders reads TanStack Query, which router.refresh() does not
+    // touch. See the long note in order-form.tsx#onSubmit.
+    await queryClient.invalidateQueries({ queryKey: ["admin-orders"] })
     router.refresh()
   }
 

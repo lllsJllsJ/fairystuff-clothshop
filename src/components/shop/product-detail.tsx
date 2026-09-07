@@ -13,6 +13,39 @@ import { SizeSelector } from "@/components/shop/size-selector"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useCart } from "@/components/cart/cart-provider"
+import { BackLink } from "@/components/layout/back-link"
+
+/**
+ * The sizes offered for a given colour, in the owner's configured order.
+ * Module-level and pure so both the initial state and `handleColorChange`
+ * call exactly the same logic — the "auto-select when there's only one"
+ * rule below must never apply on first render but not on a later colour
+ * switch.
+ */
+function sizesForColor(
+  variants: PublicProductDetail["variants"],
+  color: string | null
+): string[] {
+  return [...variants]
+    .filter((v) => (color ? v.color === color : true))
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((v) => v.size)
+}
+
+/**
+ * A size the customer has no choice about is not a decision worth making
+ * them tap. When exactly one size exists for the current colour it is
+ * pre-selected, so a one-colour/one-size product goes straight to Add to
+ * cart. With two or more this returns null and lets them choose — guessing
+ * would silently put the wrong size in the basket.
+ */
+function onlySizeFor(
+  variants: PublicProductDetail["variants"],
+  color: string | null
+): string | null {
+  const options = sizesForColor(variants, color)
+  return options.length === 1 ? (options[0] ?? null) : null
+}
 
 /**
  * The whole `/shop/[code]` experience below the page chrome: gallery,
@@ -31,24 +64,21 @@ export function ProductDetail({
   const t = useTranslations()
   const cart = useCart()
 
-  const [selectedColor, setSelectedColor] = useState<string | null>(
-    product.colors[0] ?? null
+  const initialColor = product.colors[0] ?? null
+  const [selectedColor, setSelectedColor] = useState<string | null>(initialColor)
+  const [selectedSize, setSelectedSize] = useState<string | null>(() =>
+    onlySizeFor(product.variants, initialColor)
   )
-  const [selectedSize, setSelectedSize] = useState<string | null>(null)
   const [quantity, setQuantity] = useState(1)
 
-  const sizes = useMemo(() => {
-    const relevant = product.variants.filter((v) =>
-      selectedColor ? v.color === selectedColor : true
-    )
-    return [...relevant]
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((v) => v.size)
-  }, [product.variants, selectedColor])
+  const sizes = useMemo(
+    () => sizesForColor(product.variants, selectedColor),
+    [product.variants, selectedColor]
+  )
 
   function handleColorChange(color: string) {
     setSelectedColor(color)
-    setSelectedSize(null)
+    setSelectedSize(onlySizeFor(product.variants, color))
   }
 
   function addToCart() {
@@ -74,6 +104,17 @@ export function ProductDetail({
 
   return (
     <div className="mx-auto max-w-[1440px] px-4 py-8 sm:px-6 lg:px-8">
+      {/* Returns to the listing the customer came from — with their
+          filters, sort, page and scroll position intact — rather than a
+          fixed /shop link that would silently reset all of it. Falls back
+          to /shop when there is no history to go back to (a shared product
+          link opened cold). */}
+      <BackLink
+        fallbackHref="/shop"
+        label={t("cart.continueShopping")}
+        className="mb-5 text-body"
+      />
+
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-12">
         <ProductGallery
           images={product.images}

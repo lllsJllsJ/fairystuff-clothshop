@@ -41,6 +41,9 @@ export async function OrderReceipt({
             {t("order.orderNo")}: #{order.orderNo}
           </p>
           <p>
+            {t("order.preorderCode")}: {order.preorderCode}
+          </p>
+          <p>
             {t("order.orderDate")}: {formatDate(order.orderDate)}
           </p>
           <p>

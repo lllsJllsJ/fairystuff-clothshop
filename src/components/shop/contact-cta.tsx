@@ -1,5 +1,5 @@
 import { getTranslations } from "next-intl/server"
-import { MessageCircle, Camera } from "lucide-react"
+import { MessageCircle, Camera, ExternalLink } from "lucide-react"
 
 import {
   CONTACT_COPY_EN,
@@ -24,14 +24,14 @@ export async function ContactCta({
   const [t, settings] = await Promise.all([getTranslations(), getShopSettings()])
   const links = contactLinks(settings)
   const copy = locale === "th" ? CONTACT_COPY_TH : CONTACT_COPY_EN
-  if (!links.lineUrl && !links.instagramUrl) return null
+  if (!links.lineUrl && !links.instagramUrl && !links.facebookUrl) return null
 
   if (variant === "inline") {
     return (
       <div className={className}>
         <p className="mb-3 text-body text-foreground">{copy}</p>
         <div className="flex flex-wrap gap-3">
-          <ContactButtons lineUrl={links.lineUrl} instagramUrl={links.instagramUrl} />
+          <ContactButtons {...links} />
         </div>
       </div>
     )
@@ -45,14 +45,14 @@ export async function ContactCta({
         </h2>
         <p className="max-w-md text-body text-muted-foreground">{copy}</p>
         <div className="flex flex-wrap justify-center gap-3 pt-2">
-          <ContactButtons lineUrl={links.lineUrl} instagramUrl={links.instagramUrl} />
+          <ContactButtons {...links} />
         </div>
       </div>
     </section>
   )
 }
 
-function ContactButtons({ lineUrl, instagramUrl }: { lineUrl: string | null; instagramUrl: string | null }) {
+function ContactButtons({ lineUrl, instagramUrl, facebookUrl }: { lineUrl: string | null; instagramUrl: string | null; facebookUrl: string | null }) {
   return (
     <>
       {lineUrl && <Button
@@ -71,6 +71,15 @@ function ContactButtons({ lineUrl, instagramUrl }: { lineUrl: string | null; ins
       >
         <Camera />
         Instagram
+      </Button>}
+      {facebookUrl && <Button
+        size="lg"
+        variant="outline"
+        nativeButton={false}
+        render={<a href={facebookUrl} target="_blank" rel="noopener noreferrer" />}
+      >
+        <ExternalLink />
+        Facebook
       </Button>}
     </>
   )

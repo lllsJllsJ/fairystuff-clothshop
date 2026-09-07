@@ -2,11 +2,11 @@
 
 [![Node Version](https://img.shields.io/badge/node-26.8.1-339933.svg)](https://nodejs.org/en/blog/release/v26.8.1)
 
-A preorder clothing storefront with customer accounts and an owner-only
-admin. Public catalogue browsing, local cart, account-gated checkout, and
-customer tracking (Thai/English) on the front; product, fulfillment, refund,
-order, and inventory management on the back. See
-`DESIGN.md` for the visual system.
+A preorder clothing storefront with **guest checkout** — no customer accounts
+at all — and an owner-only admin. Public catalogue browsing, local cart,
+account-free checkout, and public preorder-code order tracking (Thai/English)
+on the front; product, fulfillment, refund, order, and inventory management
+on the back. See `DESIGN.md` for the visual system.
 
 The runtime and package manager are pinned to Node 26.8.1 and npm 11.19.0 in
 `package.json`, keeping local and Railway dependency resolution identical.
@@ -16,35 +16,38 @@ Node 26 is a Current release until its scheduled LTS promotion in October 2026.
 
 ## Overview
 
-**Three access levels, one codebase.** The public storefront (`/`, `/shop`,
-`/shop/[code]`, `/about`, `/cart`) needs no session and is ISR-cached where
-appropriate; checkout and tracking require a `customer`; the admin
-(`/admin/*`) needs an `owner` session and renders dynamically. Both sides
-share one Postgres database (Railway Postgres) and one Next.js 16 app,
+**Two access levels, one codebase.** The public storefront (`/`, `/shop`,
+`/shop/[code]`, `/about`, `/cart`, `/checkout`, `/track`) needs **no
+session at all** and is ISR-cached where appropriate — guest checkout and
+public preorder-code tracking removed the account wall entirely; the admin
+(`/admin/*`) needs an `owner`/`staff` session and renders dynamically. Both
+sides share one Postgres database (Railway Postgres) and one Next.js 16 app,
 running as a single long-lived Node container on Railway — there is no
 separate API service and no serverless cold start.
 
 ### Architecture
 
 ```
- PUBLIC / CUSTOMER (optional session)        OWNER (session)
+ PUBLIC / GUEST (no session)                 OWNER (session)
 ┌────────────────────────────────┐   ┌────────────────────────────────┐
-│ Browser / crawler / customer   │   │ Browser (signed in)            │
+│ Browser / crawler / guest      │   │ Browser (signed in)            │
 └───────────────┬────────────────┘   └───────────────┬────────────────┘
                 │                                    │
                 ▼                                    ▼
 ┌────────────────────────────────┐   ┌────────────────────────────────┐
 │ src/proxy.ts                   │   │ src/proxy.ts                   │
 │ next-intl locale routing       │   │ next-intl locale routing       │
-│ auth for checkout/account only │   │ -> auth() denylist check       │
+│ denylist: /admin, /api/admin,  │   │ -> auth() denylist check       │
+│ /api/uploads only              │   │                                │
 └───────────────┬────────────────┘   └───────────────┬────────────────┘
                 │                                    │
                 ▼                                    ▼
 ┌────────────────────────────────┐   ┌────────────────────────────────┐
 │ ISR catalogue + local cart     │   │ Next.js - dynamic (f)          │
-│ customer checkout/tracking     │   │ requireOwner() in layout       │
-│ PUBLIC_PRODUCT_COLUMNS only    │   │ + per-action isOwner() check   │
-│ customerId-scoped order reads  │   │ full admin columns/workflows   │
+│ guest checkout + preorder-code │   │ requireOwner() in layout       │
+│   tracking (/track/[code])     │   │ + per-action isOwner() check   │
+│ PUBLIC_PRODUCT_COLUMNS /       │   │ full admin columns/workflows   │
+│   PUBLIC_ORDER_COLUMNS only    │   │                                │
 └───────────────┬────────────────┘   └───────────────┬────────────────┘
                 │                                    │
                 └─────────────────┬──────────────────┘
@@ -60,8 +63,9 @@ separate API service and no serverless cold start.
 
 1. **Public request** hits `src/proxy.ts`, which lets next-intl resolve/redirect
    the locale segment (`/` → `/th`), then checks the locale-stripped path
-   against a *denylist* of protected prefixes (`/admin`, `/account`,
-   `/checkout`, `/api/admin`, `/api/uploads`) — everything else passes through.
+   against a *denylist* of protected prefixes (`/admin`, `/api/admin`,
+   `/api/uploads`) — everything else, including `/checkout` and `/track`,
+   passes through with no session required.
 2. **Public pages** (`/`, `/shop`, `/shop/[code]`, `/about`) read exclusively
    through `src/db/queries/storefront.ts`, whose `PUBLIC_PRODUCT_COLUMNS`
    constant is the only column set the public may ever see. Pages render at
@@ -94,14 +98,19 @@ separate API service and no serverless cold start.
    workbook into a manifest. Supplier photos are copied into Railway Bucket/MinIO (never
    hotlinked), and replacement stays a dry run unless all destructive CLI
    guards are supplied.
-9. **Cart and checkout** keep the cart in browser storage, then revalidate all
-   product/variant/price data server-side before creating an idempotent order.
-   No payment is taken; the customer copies the generated order number to the
-   configured LINE/Instagram contact.
+9. **Cart and checkout** keep the cart in browser storage; checkout needs no
+   account. `submitCheckout` revalidates all product/variant/price data
+   server-side, mints a random, unguessable `preorderCode`
+   (`src/lib/preorder-code.ts`), and creates an idempotent order. No payment
+   is taken; the customer is routed to `/track/<preorderCode>`, where a
+   prefilled LINE deep link (with a clipboard-copy fallback for LINE for PC)
+   sends the code to the shop.
 10. **Fulfillment** tracks each order item independently. Only received or
    refunded lines count as resolved; the owner explicitly advances a resolved
-   order to packaging. Customer tracking maps the richer internal statuses to
-   Received, Preparing, Shipping, and Complete (plus Cancelled/Refunded).
+   order to packaging. The public `/track/[code]` page maps the richer
+   internal statuses to Received, Preparing, Shipping, and Complete (plus
+   Cancelled/Refunded) — reachable by anyone with the code, no session
+   required.
 
 <!-- ai:anchor:features -->
 
@@ -116,25 +125,44 @@ separate API service and no serverless cold start.
 - Owner-only admin: dashboard (SKU/order totals, gross and net profit,
   advertising/shipping/packaging costs, monthly cost-versus-profit chart,
   product-type chart, and alerts), product
-  CRUD with a card/table toggle and inline table editing, a per-colour stock
+  CRUD with a page-action card/table toggle, single-line filters, inline table
+  editing, and a per-colour stock
   grid (one click adds a colourway with every size at 0), drag-free cover-photo selection, Excel import with
   a preview/confirm step, order management with a multi-line builder
-  and a sortable order list (order no. and order date),
+  and a sortable order list with single-line filters (order no. and order date),
   Excel/print reports (monthly and annual reports include advertising cost;
   plus profit-by-product and inventory snapshots), and a product-type
   reference-list manager, character manager, workflow-label settings, and
   configurable supplier/item statuses.
-- Customer checkout creates a durable order number without taking payment,
-  then links to the shop's configured LINE/Instagram handoff. Account pages
-  provide customer-scoped, view-only order tracking.
+- Owner-only user management (`/admin/users`): a searchable, filterable list
+  of every account that can sign in, with role changes (`owner`/`staff` —
+  there is no `customer` role), account deletion, manual email verification
+  (cosmetic; see below), and password-reset links. The list never selects
+  `passwordHash`. Deleting an account never touches order history — guest
+  checkout stores no account reference on an order at all. Two refusals are
+  enforced in the actions themselves, not just the UI: you cannot demote or
+  delete your own account, and the last remaining owner cannot be demoted or
+  deleted by anyone.
+- **Guest checkout, no accounts.** Checkout collects first/last name, phone,
+  and address inline — no sign-in, no registration, ever. `submitCheckout`
+  mints a random, unguessable preorder code (`src/lib/preorder-code.ts`, 50
+  bits of entropy, no database read needed to generate one) and routes the
+  customer to `/track/<code>`: a public, session-free page showing order
+  status, items, and totals, plus a one-tap button that copies the code and
+  opens a prefilled LINE chat with the shop (with a clipboard-copy fallback
+  for LINE for PC, where the deep-link prefill doesn't work). A lost code can
+  be re-entered at `/track`. The storefront header carries no account
+  menu — there is nothing to sign into.
 - Order fulfillment uses fixed owner states (`new`, `accepted`, `preorder`,
   `packaging`, `shipping`, `complete`, `cancelled`, `refund`) and configurable
   per-line preorder states. Partial/full operational refunds preserve reasons
-  and timestamps.
-- Credentials auth supports owner/staff/customer roles. Public registration
-  can use Resend verification and password reset when enabled; email is off by
-  default and new customers are auto-verified until a sending domain exists.
-  Owner accounts are still created only through `npm run create-owner`.
+  and timestamps. A guest order always starts at `new` and stays there until
+  the owner accepts it by hand — nothing auto-advances it.
+- Credentials auth (email-or-phone + password) covers owner/staff accounts
+  only — there is no public registration. `/forgot-password` and
+  `/reset-password` can use Resend when `EMAIL_ENABLED=true`; owner accounts
+  are created only through `npm run create-owner`, and an owner can promote
+  an existing `staff` account from `/admin/users`.
 - Browser-side image pipeline: canvas resize → WebP → presigned bucket PUT, so no
   file ever passes through the app server and no host's image-optimization
   service sits in the critical path.
@@ -199,40 +227,44 @@ cp .env.example .env.local   # fill in real values, see Environment Variables be
    ```
    The endpoint points the S3 client at MinIO; path-style addressing is enabled
    explicitly. Reads still go through `/api/images/*`, matching production.
-3. **Run the Drizzle-generated migration:**
+3. **Run migrations:**
    ```bash
    npm run db:migrate
    ```
-4. **Apply the hand-written extras migration manually.** This is the step
-   people forget: `drizzle/0000_init_extras.sql` is **not** in Drizzle's
-   migration journal (which contains the generated migrations, including the
-   advertising-cost migration), so
-   `db:migrate` will never run it for you. It adds the generated columns
-   (`products.margin`, advertising-aware `orders.total_cost`/`orders.profit`,
+   This applies `drizzle/0000_init.sql` (the drizzle-generated baseline) and
+   the journaled `drizzle/0001_init_extras.sql` in one step — there is no
+   separate manual `psql` command. `0001_init_extras.sql` is a hand-written
+   `--custom` migration, but it **is** registered in Drizzle's migration
+   journal, so `db:migrate` applies it automatically right after
+   `0000_init.sql`. It adds the generated columns (`products.margin`,
+   advertising-aware `orders.total_cost`/`orders.profit`,
    `order_items.line_total`, `order_items.line_cost`), the `pg_trgm` search
-   indexes, the `updated_at` triggers, and the order-totals recalculation
-   trigger. Without this step the app will build and run but every money
-   column will silently be wrong (NULL/zero) and product search will be much
-   slower.
-   ```bash
-   psql "$DATABASE_URL" -f drizzle/0000_init_extras.sql
-   ```
-   It's idempotent — safe to re-run.
-5. **Seed the reference data** (13 Thai product types):
+   indexes, the `updated_at` triggers, the order-totals recalculation
+   trigger, and workflow reference data (order-item statuses, status labels,
+   the default shop-settings row).
+4. **Seed the reference data** (13 Thai product types + the character
+   taxonomy behind the storefront filter chips):
    ```bash
    npm run db:seed
    ```
-6. **Create the owner account** (the only way an owner is ever created;
-   public registration creates customers only):
+   Idempotent — safe to re-run any time to restore the reference rows after
+   a data wipe, or to reset a character list that drifted while testing
+   locally (`npm run db:seed:characters -- --reset`). The same two actions are
+   also buttons in **Admin → Settings → Danger zone** ("Restore defaults" /
+   "Reset to defaults"), so this step never needs a terminal after the first
+   install.
+5. **Create the owner account** (the only way an owner is ever created —
+   there is no public registration at all; guest checkout needs no
+   account):
    ```bash
    npm run create-owner
    ```
-7. **Set up Railway Bucket — deployment only.** Add a Bucket in the same
+6. **Set up Railway Bucket — deployment only.** Add a Bucket in the same
    Railway project, then reference its `ENDPOINT`, `ACCESS_KEY_ID`,
    `SECRET_ACCESS_KEY`, `BUCKET`, and `REGION` values using the `STORAGE_*`
    names shown in `.env.example`. Set `STORAGE_FORCE_PATH_STYLE=false` and
    configure bucket CORS for `PUT` from the storefront origin.
-8. **Prepare and review the FairyStuff catalogue** (no database/storage writes):
+7. **Prepare and review the FairyStuff catalogue** (no database/storage writes):
    ```bash
    npm run catalog:prepare
    npm run catalog:verify
@@ -247,7 +279,7 @@ cp .env.example .env.local   # fill in real values, see Environment Variables be
    Workbook row 77 is explicitly approved as a temporary no-image product and
    uses the storefront/admin placeholder; no fake image is stored. Supply its
    real photo later with `catalog:prepare -- --image=77:<local-path>`.
-9. **Run the app:**
+8. **Run the app:**
    ```bash
    npm run dev
    ```
@@ -299,7 +331,7 @@ credentials are never exposed to the browser and no public bucket URL is needed.
 
 | Variable | Purpose |
 |---|---|
-| `EMAIL_ENABLED` | Defaults to `false`; set `true` only after configuring both Resend variables. Disabled mode auto-verifies new customer accounts and hides verification/reset controls. |
+| `EMAIL_ENABLED` | Defaults to `false`; set `true` only after configuring both Resend variables. Controls owner/staff password-reset delivery only — there is no customer email flow to gate anymore (guest checkout needs no account). |
 | `RESEND_API_KEY` | Required only when `EMAIL_ENABLED=true`; server-only Resend API key. |
 | `RESEND_FROM_EMAIL` | Required only when `EMAIL_ENABLED=true`; verified Resend sender address. |
 | Legacy `R2_*` variables | Accepted as fallbacks for an existing Cloudflare R2 deployment; new Railway deployments should use `STORAGE_*` |
@@ -320,6 +352,7 @@ src/
 │   │   ├── products/route.ts              # public product list JSON
 │   │   ├── admin/products/route.ts        # owner-gated product list JSON
 │   │   ├── admin/orders/route.ts          # owner-gated order list JSON
+│   │   ├── admin/users/route.ts           # owner-gated account list JSON
 │   │   ├── uploads/presign/route.ts       # owner-gated bucket PUT presign
 │   │   ├── images/[...key]/route.ts       # cached public proxy to private bucket
 │   │   └── auth/[...nextauth]/route.ts    # Auth.js handlers
@@ -328,17 +361,19 @@ src/
 │   │   │   ├── page.tsx                   # home
 │   │   │   ├── shop/page.tsx              # catalogue
 │   │   │   ├── shop/[code]/page.tsx       # product detail
-│   │   │   ├── cart/ + checkout/           # local cart + customer order creation
-│   │   │   ├── account/orders/             # customer-scoped tracking
+│   │   │   ├── cart/ + checkout/           # local cart + guest order creation (no account)
+│   │   │   ├── track/page.tsx             # preorder-code lookup form (static)
+│   │   │   ├── track/[code]/page.tsx      # public, session-free order tracking
 │   │   │   └── about/page.tsx
-│   │   ├── (auth)/                        # login/register/verify/reset flows
+│   │   ├── (auth)/                        # login + owner/staff password reset only
 │   │   ├── admin/                         # owner-only, dynamic
 │   │   │   ├── layout.tsx                 # requireOwner() gate
 │   │   │   ├── page.tsx                   # dashboard
 │   │   │   ├── products/                  # browse/new/edit/import
 │   │   │   ├── orders/                    # list/new/detail-edit
 │   │   │   ├── reports/                   # monthly/annual/profit/inventory
-│   │   │   └── settings/                  # contacts, characters, workflows, data tools
+│   │   │   ├── users/                     # account list, roles, verify, reset, delete
+│   │   │   └── settings/                  # contacts, characters, workflows, danger zone
 │   │   └── layout.tsx                     # owns <html lang>, PUBLIC_NAMESPACES
 │   ├── layout.tsx                         # passthrough root layout
 │   ├── sitemap.ts / robots.ts / not-found.tsx
@@ -352,17 +387,22 @@ src/
 │       ├── storefront.ts                  # PUBLIC_PRODUCT_COLUMNS + public reads
 │       ├── products.ts / orders.ts        # admin (full-column) reads
 │       ├── characters.ts / settings.ts    # taxonomy + workflow configuration
-│       ├── customer-orders.ts             # customer-id-scoped order reads
+│       ├── track.ts                       # PUBLIC_ORDER_COLUMNS + public preorder-code reads
+│       ├── users.ts                       # ADMIN_USER_COLUMNS + account reads (no hash)
 │       ├── dashboard.ts / reports.ts      # aggregation queries
 │       └── product-types.ts
 ├── lib/
-│   ├── auth-helpers.ts / roles.ts         # owner/customer guards and role checks
+│   ├── auth-helpers.ts / roles.ts         # owner/staff guards and role checks
 │   ├── email.ts / auth-tokens.ts          # optional Resend + hashed expiring tokens
-│   ├── order-status.ts                    # internal -> customer status mapping
+│   ├── account-email.ts                   # shared reset-link issuing (owner/staff)
+│   ├── order-status.ts                    # internal -> customer-facing status mapping
+│   ├── preorder-code.ts                   # random PO-XXXXXXXXXX code generate/normalize (no db import)
+│   ├── db-errors.ts                       # shared 23505 (unique-violation) detection
 │   ├── r2.ts                              # S3 read/presign/put/delete adapter
 │   ├── product-code.ts                    # type -> prefix -> next code (server-owned)
 │   ├── catalog/                           # FairyStuff parser, manifest, images, replacement
 │   ├── shop-data.ts                       # owner-only transactional clear
+│   ├── character-seed.ts                  # canonical character list + seed/reset (CLI + admin button)
 │   ├── image-resize.ts / image-loader.ts  # browser resize + next/image loader
 │   ├── import/parse-products.ts           # Excel/XLSX parsing
 │   ├── validations/                       # Zod schemas (product, order, auth, checkout)
@@ -370,11 +410,8 @@ src/
 ├── i18n/                                  # next-intl routing/navigation/request config
 └── messages/{th,en}.json                  # translation bundles
 drizzle/
-├── 0000_init.sql                          # initial generated schema
-├── 0000_init_extras.sql                   # hand-written — apply manually, see above
-├── 0001_black_patriot.sql                 # product-type code prefixes
-├── 0002_lazy_blob.sql                     # advertising cost + net-profit formulas
-└── 0003_red_joshua_kane.sql               # customer commerce + preorder workflows
+├── 0000_init.sql                          # drizzle-generated baseline schema — never hand-edit
+└── 0001_init_extras.sql                   # hand-written --custom migration, journaled — applied automatically by db:migrate
 scripts/
 ├── catalog-{prepare,verify,import}.ts      # reviewed catalogue CLI
 ├── seed.ts                                # product-type reference data
@@ -425,16 +462,19 @@ scripts/
   480/800/1600 widths and copied into Railway Bucket/MinIO during apply; storefront URLs
   always point at owned storage, never at supplier hosts.
 - **Auth.js v5** (Credentials provider, JWT session strategy, no database
-  adapter) authenticates owner, reserved staff, and customer accounts.
-- **Resend** is implemented for customer verification and password reset but
+  adapter) authenticates owner and staff accounts only — there is no
+  `customer` role or public registration; guest checkout needs no account at
+  all.
+- **Resend** is implemented for owner/staff password reset but
   gated by `EMAIL_ENABLED=false` by default. Enabling it requires an API key,
   verified sender, and canonical app URL; no request is sent while disabled.
-- **LINE / Instagram** handles are database-backed owner settings used by the
-  footer, contact CTA, and post-checkout order-number handoff.
-- **No payment processor.** Checkout records a preorder and generates an order
-  number; acceptance, shipping confirmation, and operational refunds are
-  managed by the owner. The out-of-band catalogue preparation may read
-  supplier pages; no analytics SDK is installed.
+- **LINE / Instagram / Facebook** contacts are database-backed owner settings
+  used by the footer, contact CTA, and the `/track/[code]` page's prefilled
+  LINE deep-link handoff (`src/db/queries/settings.ts#lineMessageUrl`).
+- **No payment processor.** Checkout records a preorder and generates both an
+  order number and a random preorder code; acceptance, shipping confirmation,
+  and operational refunds are managed by the owner. The out-of-band catalogue
+  preparation may read supplier pages; no analytics SDK is installed.
 
 <!-- ai:anchor:deployment -->
 
@@ -524,11 +564,12 @@ npm run dev            # next dev (Turbopack)
 npm run build           # next build
 npm run start            # next start
 npm run lint              # eslint
-npm run db:generate      # regenerate drizzle/*.sql from src/db/schema.ts
-npm run db:migrate       # apply the drizzle-generated migration
-npm run db:push          # push schema directly (dev convenience)
+npm run db:generate      # regenerate drizzle/0000_init.sql from src/db/schema.ts
+npm run db:migrate       # apply 0000_init.sql + the journaled 0001_init_extras.sql
 npm run db:studio        # Drizzle Studio
-npm run db:seed          # seed the 13 Thai product types
+npm run db:seed          # seed all reference data (product types + characters)
+npm run db:seed:types    # seed the 13 Thai product types only
+npm run db:seed:characters # seed the characters; -- --reset drops extras, --force unlinks in-use ones
 npm run catalog:prepare  # build/refresh the review manifest (no DB writes)
 npm run catalog:verify   # validate all entries and cached image hashes
 npm run catalog:import   # dry run; apply requires explicit replacement guards

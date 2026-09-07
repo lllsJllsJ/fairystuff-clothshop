@@ -57,7 +57,7 @@ import { revalidateStorefront } from "./revalidate"
  * GENERATED COLUMNS — never write these
  * ---------------------------------------------------------------------
  * `products.margin` is `GENERATED ALWAYS AS (...) STORED` (added by
- * drizzle/0000_init_extras.sql, not modeled in schema.ts's column
+ * drizzle/0001_init_extras.sql, not modeled in schema.ts's column
  * builders). Postgres rejects an insert/update that names it (23P05).
  * None of the writes below ever set it.
  */

@@ -44,8 +44,12 @@ export function ProductAdminCard({ product }: { product: ProductWithRelations })
       </div>
 
       <div className="flex flex-1 flex-col gap-1 p-3">
-        <p className="truncate text-body font-bold text-foreground">{product.productName}</p>
-        <p className="text-small text-muted-foreground">{product.productCode}</p>
+        {/* Name and code share one line: the name truncates, the code is
+            shrink-0 and right-aligned so it stays readable at any width. */}
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="truncate text-body font-bold text-foreground">{product.productName}</p>
+          <p className="shrink-0 text-small text-muted-foreground">{product.productCode}</p>
+        </div>
         {product.productType && (
           <p className="truncate text-small text-muted-foreground">{product.productType}</p>
         )}

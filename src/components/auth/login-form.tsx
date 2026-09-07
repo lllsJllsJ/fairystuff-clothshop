@@ -5,10 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useLocale, useTranslations } from "next-intl"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
+import { useSession } from "next-auth/react"
 import { Loader2 } from "lucide-react"
 
 import { login } from "@/app/[locale]/(auth)/login/actions"
 import { loginSchema, type LoginInput } from "@/lib/validations/auth"
+import { loginDestination } from "@/lib/login-redirect"
 import { Button } from "@/components/ui/button"
 import { Link } from "@/i18n/navigation"
 import { Input } from "@/components/ui/input"
@@ -35,12 +37,13 @@ export function LoginForm({ emailEnabled }: { emailEnabled: boolean }) {
   const router = useRouter()
   const params = useSearchParams()
   const requestedRedirect = params.get("redirect")
+  const { update: updateSession } = useSession()
 
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
+    defaultValues: { identifier: "", password: "" },
   })
 
   const submitting = form.formState.isSubmitting
@@ -54,16 +57,11 @@ export function LoginForm({ emailEnabled }: { emailEnabled: boolean }) {
       setSubmitError(t("invalidCredentials"))
       return
     }
-    const fallback = result.role === "owner"
-      ? `/${locale}/admin`
-      : result.role === "customer"
-        ? `/${locale}/account/orders`
-        : `/${locale}`
-    const allowedRequested = requestedRedirect && (
-      (result.role === "owner" && requestedRedirect.startsWith(`/${locale}/admin`)) ||
-      (result.role === "customer" && ["/account", "/checkout"].some((path) => requestedRedirect.startsWith(`/${locale}${path}`)))
-    )
-    router.push(allowedRequested ? requestedRedirect : fallback)
+    // The cookie is already issued by the Server Action. Session refresh makes
+    // the persistent header react immediately, but must not block navigation
+    // if that follow-up request is interrupted.
+    await updateSession().catch(() => undefined)
+    router.push(loginDestination({ requestedRedirect, locale, role: result.role }))
     router.refresh()
   }
 
@@ -75,14 +73,13 @@ export function LoginForm({ emailEnabled }: { emailEnabled: boolean }) {
       >
         <FormField
           control={form.control}
-          name="email"
+          name="identifier"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{t("email")}</FormLabel>
+              <FormLabel>{t("emailOrPhone")}</FormLabel>
               <FormControl>
                 <Input
-                  type="email"
-                  inputMode="email"
+                  type="text"
                   autoComplete="username"
                   autoCapitalize="none"
                   autoFocus
@@ -122,11 +119,11 @@ export function LoginForm({ emailEnabled }: { emailEnabled: boolean }) {
           {submitting && <Loader2 className="animate-spin" />}
           {submitting ? t("signingIn") : t("signIn")}
         </Button>
-        <div className="flex justify-between gap-3 text-small">
-          <Link href="/register" className="text-link hover:underline">{t("createAccount")}</Link>
-          {emailEnabled && <Link href="/forgot-password" className="text-link hover:underline">{t("forgotPassword")}</Link>}
-        </div>
-        {emailEnabled && <Link href="/resend-verification" className="text-center text-small text-link hover:underline">{t("resendVerification")}</Link>}
+        {emailEnabled && (
+          <div className="flex justify-end text-small">
+            <Link href="/forgot-password" className="text-link hover:underline">{t("forgotPassword")}</Link>
+          </div>
+        )}
       </form>
     </Form>
   )

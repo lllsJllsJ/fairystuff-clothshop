@@ -248,7 +248,7 @@ export function VariantRowsEditor({
                       disabled={disabled}
                       aria-label={t("variant.removeColor")}
                       onClick={() => removeColorBlock(index)}
-                      className="text-muted-foreground hover:text-destructive disabled:opacity-30"
+                      className="flex size-11 items-center justify-center text-muted-foreground hover:text-destructive disabled:opacity-30"
                     >
                       <X className="size-4" />
                     </button>

@@ -196,25 +196,43 @@ export function ProductBrowser({ types }: { types: ProductType[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-h3 font-bold text-foreground">{t("product.list")}</h1>
+      {/* No `flex-wrap` and no `w-full`: both previously pushed the actions
+          onto their own line below the heading on a phone. `min-w-0` +
+          `truncate` lets the heading give up width instead, so the actions
+          stay on the heading's row, right-aligned, at every width. The
+          card/table toggle no longer lives here — it sits under the filter
+          row (see below) so this row holds only the two page actions. */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="truncate text-h3 font-bold text-foreground">{t("product.list")}</h1>
           <p className="text-body text-muted-foreground">{t("product.subtitle")}</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" render={<Link href="/admin/products/import" />} nativeButton={false}>
+        <div className="flex shrink-0 items-center justify-end gap-2">
+          <Button
+            variant="outline"
+            render={<Link href="/admin/products/import" />}
+            nativeButton={false}
+            aria-label={t("product.import")}
+          >
             <FileSpreadsheet />
             <span className="hidden sm:inline">{t("product.import")}</span>
           </Button>
-          <Button render={<Link href="/admin/products/new" />} nativeButton={false}>
+          <Button
+            render={<Link href="/admin/products/new" />}
+            nativeButton={false}
+            aria-label={t("product.newProduct")}
+          >
             <Plus />
-            {t("product.newProduct")}
+            <span className="hidden sm:inline">{t("product.newProduct")}</span>
           </Button>
         </div>
       </div>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
+      {/* Compact filter row (h-10, narrower selects): four full-height
+          controls plus a search field did not fit a phone without the row
+          becoming a horizontal scroller the owner had to discover. */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        <div className="relative min-w-40 flex-1">
           <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
@@ -223,52 +241,61 @@ export function ProductBrowser({ types }: { types: ProductType[] }) {
               setPage(1)
             }}
             placeholder={t("product.searchPlaceholder")}
-            className="h-11 pl-9"
+            className="h-10 pl-9"
             type="search"
           />
         </div>
-        <div className="flex flex-wrap gap-2">
-          <SimpleSelect
-            value={status}
-            onValueChange={(v) => changeStatus(v as ProductStatusValue | "all")}
-            options={statusOptions}
-            className="h-11 min-w-28"
-          />
-          <SimpleSelect
-            value={type}
-            onValueChange={changeType}
-            options={typeFilterOptions}
-            className="h-11 min-w-28"
-          />
-          <SimpleSelect
-            value={sort}
-            onValueChange={(v) => {
-              setSort(v as ProductSort)
-              setPage(1)
-            }}
-            options={sortOptions}
-            className="h-11 min-w-36"
-          />
-          {view === "table" && (
-            <Button variant="outline" className="h-11 shrink-0" onClick={() => setColumnsOpen(true)}>
+        <SimpleSelect
+          value={status}
+          onValueChange={(v) => changeStatus(v as ProductStatusValue | "all")}
+          options={statusOptions}
+          className="h-10 w-24 shrink-0"
+        />
+        <SimpleSelect
+          value={type}
+          onValueChange={changeType}
+          options={typeFilterOptions}
+          className="h-10 w-24 shrink-0"
+        />
+        {/* Sort and Columns are BOTH table-view-only. The card grid has no
+            column headers to sort from and is browsed visually, so these
+            two controls follow the view they belong to rather than
+            permanently crowding the filter row. `sort` state itself is
+            preserved across a view switch — only the control is hidden. */}
+        {view === "table" && (
+          <>
+            <SimpleSelect
+              value={sort}
+              onValueChange={(v) => {
+                setSort(v as ProductSort)
+                setPage(1)
+              }}
+              options={sortOptions}
+              className="h-10 w-32 shrink-0"
+            />
+            <Button variant="outline" className="h-10 shrink-0" onClick={() => setColumnsOpen(true)}>
               <Columns3 />
               <span className="hidden sm:inline">{t("product.columns")}</span>
             </Button>
-          )}
-          <div className="flex shrink-0 items-center border border-border bg-muted p-1">
-            <ViewToggleButton
-              active={view === "card"}
-              onClick={() => changeView("card")}
-              label={t("product.viewCards")}
-              icon={LayoutGrid}
-            />
-            <ViewToggleButton
-              active={view === "table"}
-              onClick={() => changeView("table")}
-              label={t("product.viewTable")}
-              icon={Table2}
-            />
-          </div>
+          </>
+        )}
+      </div>
+
+      {/* Card/table toggle, right-aligned directly under the filter row. */}
+      <div className="flex justify-end">
+        <div className="flex shrink-0 items-center border border-border bg-muted p-1">
+          <ViewToggleButton
+            active={view === "card"}
+            onClick={() => changeView("card")}
+            label={t("product.viewCards")}
+            icon={LayoutGrid}
+          />
+          <ViewToggleButton
+            active={view === "table"}
+            onClick={() => changeView("table")}
+            label={t("product.viewTable")}
+            icon={Table2}
+          />
         </div>
       </div>
 
@@ -371,7 +398,7 @@ function ViewToggleButton({
       aria-label={label}
       aria-pressed={active}
       className={cn(
-        "flex h-9 items-center gap-1.5 px-3 text-body font-medium transition-colors",
+        "flex h-11 items-center gap-1.5 px-3 text-body font-medium transition-colors",
         active ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
       )}
     >

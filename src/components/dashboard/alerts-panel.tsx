@@ -111,7 +111,7 @@ function AlertCard({
           <li key={product.id}>
             <Link
               href={`/admin/products/${product.id}/edit`}
-              className="flex items-center justify-between gap-2 px-2 py-1.5 text-small hover:bg-muted"
+              className="flex min-h-11 items-center justify-between gap-2 px-2 py-1.5 text-small hover:bg-muted"
             >
               <span className="truncate">{product.label}</span>
               <ChevronRight className="size-4 shrink-0 text-muted-foreground" />

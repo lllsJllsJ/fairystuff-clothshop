@@ -16,11 +16,13 @@
  * sync with the loader's `AVAILABLE_WIDTHS` if this ever changes.
  */
 
+import { BRAND_LOGO_WIDTHS } from "@/lib/brand-image-keys"
+
 export const PRODUCT_IMAGE_WIDTHS = [480, 800, 1600] as const
 export type ProductImageWidth = (typeof PRODUCT_IMAGE_WIDTHS)[number]
 
-export type ResizedImage = {
-  width: ProductImageWidth
+export type ResizedImage<Width extends number = number> = {
+  width: Width
   height: number
   blob: Blob
 }
@@ -28,18 +30,22 @@ export type ResizedImage = {
 const WEBP_QUALITY = 0.82
 
 /**
- * Resizes a picked File into WebP blobs at the pre-generated widths the
- * loader and `next.config.ts`'s remote pattern expect. Never upscales — a
- * target width larger than the source image's natural width is skipped,
- * so a small source photo doesn't get blown up into a blurry "1600w" file.
- * If the source is narrower than every target, one rendition is produced
- * at its native size and filed under the smallest bucket.
+ * Resizes a picked File into WebP blobs at each of `widths`. Never
+ * upscales — a target width larger than the source image's natural width
+ * is skipped, so a small source photo doesn't get blown up into a blurry
+ * oversized file. If the source is narrower than every target, one
+ * rendition is produced at its native size and filed under the smallest
+ * bucket. Shared by `resizeProductImage` (three widths) and
+ * `resizeBrandLogo` (three smaller widths) — see brand-image-keys.ts.
  */
-export async function resizeProductImage(file: File): Promise<ResizedImage[]> {
+async function resizeToWidths<Width extends number>(
+  file: File,
+  widths: readonly Width[]
+): Promise<ResizedImage<Width>[]> {
   const bitmap = await createImageBitmap(file)
   try {
-    const results: ResizedImage[] = []
-    for (const width of PRODUCT_IMAGE_WIDTHS) {
+    const results: ResizedImage<Width>[] = []
+    for (const width of widths) {
       if (width > bitmap.width) continue
       const height = Math.round((bitmap.height / bitmap.width) * width)
       const blob = await drawToWebp(bitmap, width, height)
@@ -49,7 +55,7 @@ export async function resizeProductImage(file: File): Promise<ResizedImage[]> {
     if (results.length === 0) {
       const blob = await drawToWebp(bitmap, bitmap.width, bitmap.height)
       results.push({
-        width: PRODUCT_IMAGE_WIDTHS[0],
+        width: widths[0],
         height: bitmap.height,
         blob,
       })
@@ -59,6 +65,14 @@ export async function resizeProductImage(file: File): Promise<ResizedImage[]> {
   } finally {
     bitmap.close()
   }
+}
+
+/**
+ * Resizes a picked File into WebP blobs at the pre-generated widths the
+ * loader and `next.config.ts`'s remote pattern expect.
+ */
+export async function resizeProductImage(file: File): Promise<ResizedImage<ProductImageWidth>[]> {
+  return resizeToWidths(file, PRODUCT_IMAGE_WIDTHS)
 }
 
 function drawToWebp(
@@ -98,4 +112,29 @@ export function buildProductImageKey(
   timestamp: number = Date.now()
 ): string {
   return `products/${productId}/${timestamp}-${index}-${width}.webp`
+}
+
+/**
+ * Resizes a picked File into WebP blobs at the brand logo's pre-generated
+ * widths (src/lib/brand-image-keys.ts's BRAND_LOGO_WIDTHS) — smaller than
+ * the product widths since a logo only ever renders in a header/footer,
+ * never a full-bleed detail view.
+ */
+export async function resizeBrandLogo(
+  file: File
+): Promise<ResizedImage<(typeof BRAND_LOGO_WIDTHS)[number]>[]> {
+  return resizeToWidths(file, BRAND_LOGO_WIDTHS)
+}
+
+/**
+ * Storage key for one brand-logo rendition:
+ * `brand/logo-<timestamp>-<width>.webp`. Unlike products, there is only
+ * ever one logo, so no `index` — a fresh `timestamp` on every upload is
+ * enough to keep a replacement from colliding with the previous file.
+ */
+export function buildBrandLogoKey(
+  width: (typeof BRAND_LOGO_WIDTHS)[number],
+  timestamp: number = Date.now()
+): string {
+  return `brand/logo-${timestamp}-${width}.webp`
 }

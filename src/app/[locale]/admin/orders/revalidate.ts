@@ -10,9 +10,12 @@ import { routing } from "@/i18n/routing"
  * `admin/products/revalidate.ts`'s `revalidateStorefront`, but deliberately
  * narrower: orders never affect the public catalogue, so there is no
  * `revalidatePath` call for `/`, `/shop`, or `/shop/<code>` here — only the
- * admin and customer tracking paths. If a future phase adds a catalogue surface
- * (e.g. a "recently sold" strip), route it through its own explicit
- * revalidation rather than overloading this helper.
+ * admin paths. `/track/[code]` is deliberately NOT revalidated here either:
+ * that route is `export const dynamic = "force-dynamic"` (see its own
+ * file-level comment), so there is no cache entry for it to bust — every
+ * request there already re-reads the database. If a future phase adds a
+ * catalogue surface (e.g. a "recently sold" strip), route it through its own
+ * explicit revalidation rather than overloading this helper.
  *
  * Loops every configured locale for the same reason `revalidateStorefront`
  * does: `/admin/orders` is locale-prefixed (`/th/admin/orders`,
@@ -27,8 +30,6 @@ export function revalidateOrders(id?: string): void {
   for (const locale of routing.locales) {
     revalidatePath(`/${locale}/admin`)
     revalidatePath(`/${locale}/admin/orders`)
-    revalidatePath(`/${locale}/account/orders`)
     if (id) revalidatePath(`/${locale}/admin/orders/${id}`)
-    if (id) revalidatePath(`/${locale}/account/orders/${id}`)
   }
 }

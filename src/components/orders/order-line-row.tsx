@@ -141,6 +141,8 @@ export function OrderLineRow({
       shouldValidate: true,
     })
     setValue(`items.${index}.sellPrice`, Number(product.sellPrice), { shouldValidate: true })
+    setValue(`items.${index}.preorderMinDays`, product.preorderMinDays, { shouldValidate: true })
+    setValue(`items.${index}.preorderMaxDays`, product.preorderMaxDays, { shouldValidate: true })
 
     const meta = buildVariantMeta(product)
     setVariantMeta(meta)
@@ -177,7 +179,7 @@ export function OrderLineRow({
         <div className="flex-1 space-y-1.5">
           <Label className="text-body">{t("order.pickProduct")}</Label>
           <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-            <PopoverTrigger className="flex h-9 w-full items-center gap-2 border border-input bg-background px-2.5 text-left text-body outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50">
+            <PopoverTrigger className="flex h-11 w-full items-center gap-2 border border-input bg-background px-2.5 text-left text-body outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50">
               <Search className="size-4 shrink-0 text-muted-foreground" />
               <span className="truncate">
                 {productCode || productName

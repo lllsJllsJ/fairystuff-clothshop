@@ -1,9 +1,9 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { useTranslations } from "next-intl"
-import { FileSpreadsheet, Printer } from "lucide-react"
+import { FileSpreadsheet, Printer, SlidersHorizontal } from "lucide-react"
 
 import { Link, usePathname, useRouter } from "@/i18n/navigation"
 import { formatBaht, formatDateTime, formatNumber } from "@/lib/format"
@@ -13,6 +13,13 @@ import type { OrderStatusLabel } from "@/db/queries/settings"
 import { DEFAULT_ADMIN_STATUS_LABELS } from "@/lib/order-status"
 import { Button } from "@/components/ui/button"
 import { SimpleSelect } from "@/components/ui/simple-select"
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import {
   Table,
   TableBody,
@@ -51,6 +58,7 @@ export function ReportView({
   locale: string
 }) {
   const t = useTranslations()
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -170,50 +178,111 @@ export function ReportView({
 
   return (
     <div className="space-y-4">
-      <div className="no-print flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-h3 font-bold text-foreground">{t("reports.title")}</h1>
+      {/* Export/print live up here with the heading (right-aligned) rather
+          than trailing the filter row, so the filter row holds only the
+          controls that change what you are looking at. */}
+      <div className="no-print flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="truncate text-h3 font-bold text-foreground">{t("reports.title")}</h1>
           <p className="text-body text-muted-foreground">{t("reports.subtitle")}</p>
+        </div>
+        <div className="flex shrink-0 justify-end gap-2">
+          <Button variant="outline" onClick={handleExcel} aria-label={t("reports.exportExcel")}>
+            <FileSpreadsheet />
+            <span className="hidden sm:inline">{t("reports.exportExcel")}</span>
+          </Button>
+          <Button variant="outline" onClick={printReport} aria-label={t("reports.print")}>
+            <Printer />
+            <span className="hidden sm:inline">{t("reports.print")}</span>
+          </Button>
         </div>
       </div>
 
-      <div className="no-print flex flex-wrap items-end gap-2">
-        <div className="min-w-40">
+      {/* The report picker is the one control that must stay reachable, so
+          it keeps the full row on mobile; year/month move into the filter
+          sheet below `sm`. */}
+      <div className="no-print flex items-center gap-2">
+        <div className="min-w-0 flex-1 sm:min-w-40 sm:flex-none">
           <SimpleSelect
             value={tab}
             onValueChange={(v) => navigate({ tab: v as ReportTab })}
             options={tabOptions}
+            className="h-11"
           />
         </div>
+
+        {/* Inline period selects from `sm` up */}
         {tab !== "inventory" && (
-          <div className="w-28">
+          <div className="hidden w-28 sm:block">
             <SimpleSelect
               value={String(year)}
               onValueChange={(v) => navigate({ year: Number(v) })}
               options={years.map((y) => ({ value: String(y), label: String(y) }))}
+              className="h-11"
             />
           </div>
         )}
         {tab === "monthly" && (
-          <div className="w-24">
+          <div className="hidden w-24 sm:block">
             <SimpleSelect
               value={String(month)}
               onValueChange={(v) => navigate({ month: Number(v) })}
               options={months}
+              className="h-11"
             />
           </div>
         )}
-        <div className="ml-auto flex gap-2">
-          <Button variant="outline" onClick={handleExcel}>
-            <FileSpreadsheet />
-            {t("reports.exportExcel")}
+
+        {tab !== "inventory" && (
+          <Button
+            variant="outline"
+            className="h-11 shrink-0 sm:hidden"
+            onClick={() => setFiltersOpen(true)}
+            aria-label={t("common.filter")}
+          >
+            <SlidersHorizontal />
           </Button>
-          <Button variant="outline" onClick={printReport}>
-            <Printer />
-            {t("reports.print")}
-          </Button>
-        </div>
+        )}
       </div>
+
+      <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+        <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto sm:hidden">
+          <SheetHeader>
+            <SheetTitle>{t("common.filter")}</SheetTitle>
+          </SheetHeader>
+          <div className="grid gap-3 px-4 pb-4">
+            {tab !== "inventory" && (
+              <div className="space-y-1.5">
+                <span className="block text-small font-bold text-muted-foreground">
+                  {t("reports.year")}
+                </span>
+                <SimpleSelect
+                  value={String(year)}
+                  onValueChange={(v) => navigate({ year: Number(v) })}
+                  options={years.map((y) => ({ value: String(y), label: String(y) }))}
+                  className="h-11"
+                />
+              </div>
+            )}
+            {tab === "monthly" && (
+              <div className="space-y-1.5">
+                <span className="block text-small font-bold text-muted-foreground">
+                  {t("reports.month")}
+                </span>
+                <SimpleSelect
+                  value={String(month)}
+                  onValueChange={(v) => navigate({ month: Number(v) })}
+                  options={months}
+                  className="h-11"
+                />
+              </div>
+            )}
+          </div>
+          <div className="border-t border-border p-4">
+            <SheetClose render={<Button className="w-full" />}>{t("shop.applyFilters")}</SheetClose>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <div className="print-container space-y-4">
         <div className="hidden print:block">
@@ -233,7 +302,8 @@ export function ReportView({
           </p>
         )}
 
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        {/* Two tiles per row at every width. */}
+        <div className="grid grid-cols-2 gap-3">
           <SummaryTile
             label={tab === "inventory" ? t("product.list") : tab === "profitByProduct" ? t("variant.quantity") : t("reports.ordersCount")}
             value={formatNumber(summary.count)}
@@ -327,12 +397,17 @@ export function ReportView({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{t("order.orderNo")}</TableHead>
+                  {/* Short, report-only column labels (`reports.col*`).
+                      The `order.*` keys stay long-form — they also label
+                      the order list and the Excel export, where the extra
+                      words carry their weight; this eight-column table is
+                      the one place they cost real width. */}
+                  <TableHead>{t("reports.colNo")}</TableHead>
                   <TableHead>{t("order.orderDate")}</TableHead>
                   <TableHead>{t("order.customerName")}</TableHead>
-                  <TableHead>{t("order.status")}</TableHead>
+                  <TableHead>{t("reports.colStatus")}</TableHead>
                   <TableHead className="text-right">{t("order.itemsTotal")}</TableHead>
-                  <TableHead className="text-right">{t("order.advertisingCost")}</TableHead>
+                  <TableHead className="text-right">{t("reports.colAdvertising")}</TableHead>
                   <TableHead className="text-right">{t("order.totalCost")}</TableHead>
                   <TableHead className="text-right">{t("order.profit")}</TableHead>
                 </TableRow>
@@ -389,8 +464,11 @@ function SummaryTile({
   positive?: boolean
 }) {
   return (
-    <div className="border border-border bg-card p-4">
-      <p className="text-small text-muted-foreground">{label}</p>
+    <div className="border border-border bg-card p-3 sm:p-4">
+      {/* Labels are full phrases ("Total advertising cost"); at three
+          columns on a 320px screen they need to wrap rather than force the
+          grid wider than the viewport. */}
+      <p className="text-small leading-tight break-words text-muted-foreground">{label}</p>
       <p
         className={
           positive === undefined

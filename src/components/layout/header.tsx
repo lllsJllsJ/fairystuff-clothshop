@@ -20,7 +20,7 @@ export function Header({ user }: { user: Session["user"] }) {
 
   return (
     <header className="sticky top-0 z-[var(--z-fixed)] flex h-16 items-center gap-2 border-b border-border bg-background px-4 shadow-[var(--shadow-raised-xs)] md:px-6">
-      <Link href="/admin" className="flex items-center gap-2 md:hidden">
+      <Link href="/admin" className="flex size-11 items-center justify-center gap-2 md:hidden">
         <div className="flex size-8 items-center justify-center bg-primary text-primary-foreground">
           <Shirt className="size-4" />
         </div>

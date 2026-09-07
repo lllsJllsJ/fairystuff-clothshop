@@ -8,6 +8,9 @@ import { ImageOff } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { PublicProductImage } from "@/db/queries/storefront"
 
+const GALLERY_WIDTH_CLASS =
+  "w-[clamp(240px,44svh,100%)] justify-self-center lg:w-[clamp(360px,calc(80vh-9.6rem),560px)]"
+
 /**
  * Main image + thumbnail rail (structural port of carstockpro's
  * `car-gallery.tsx`), restyled for the storefront and extended two ways:
@@ -19,6 +22,17 @@ import type { PublicProductImage } from "@/db/queries/storefront"
  *    JS gesture handler, so touch swipe, trackpad, and the thumbnail rail
  *    all drive the same `scrollLeft`-derived active index — one state
  *    machine instead of three.
+ *
+ * **Sizing.** Both the viewer and the no-image placeholder use
+ * `GALLERY_WIDTH_CLASS` so a product with no photos reserves exactly the
+ * same box as one with photos. The 4:5 box is driven by *width*, so both
+ * breakpoints cap the width to cap the height: `44svh` wide is `55svh`
+ * tall (44 x 5/4), keeping the name, price, and pickers above the fold on
+ * a phone instead of a full screen of image. `svh` — not `vh` — because
+ * `vh` on mobile resolves to the URL-bar-hidden viewport, which would make
+ * the image taller than the cap exactly when the bar is showing. The
+ * `240px` floor keeps it sane in landscape, where `44svh` would otherwise
+ * collapse to a thumbnail.
  *
  * `GalleryViewer` is keyed by the selected colour so a colour change
  * remounts it — that's what resets `active` back to 0 and the scroller
@@ -40,7 +54,12 @@ export function ProductGallery({
 
   if (displayImages.length === 0) {
     return (
-      <div className="flex aspect-[4/5] w-full flex-col items-center justify-center gap-2 bg-muted text-muted-foreground lg:w-[clamp(360px,calc(80vh-9.6rem),560px)] lg:justify-self-center">
+      <div
+        className={cn(
+          "flex aspect-[4/5] flex-col items-center justify-center gap-2 bg-muted text-muted-foreground",
+          GALLERY_WIDTH_CLASS
+        )}
+      >
         <ImageOff className="size-10" aria-hidden />
         <p className="text-body">{t("shop.noImage")}</p>
       </div>
@@ -83,7 +102,7 @@ function GalleryViewer({
   }
 
   return (
-    <div className="w-full space-y-3 lg:w-[clamp(360px,calc(80vh-9.6rem),560px)] lg:justify-self-center">
+    <div className={cn("space-y-3", GALLERY_WIDTH_CLASS)}>
       <div
         ref={scrollerRef}
         onScroll={handleScroll}
