@@ -40,6 +40,7 @@ type OrderRow = {
   itemsTotal: string
   itemsCost: string
   shippingCost: string
+  preorderShippingCost: string
   packingCost: string
   advertisingCost: string
   totalCost: string | null
@@ -53,13 +54,14 @@ export type ProductRef = { id: string; label: string }
 
 export type DashboardData = {
   totalSkus: number
-  readyToShipSkus: number
+  /** Variants a customer can order right now (isAvailable). */
+  availableVariantCount: number
   totalProducts: number
   activeProducts: number
   draftProducts: number
   archivedProducts: number
-  totalStockUnits: number
-  soldOutVariantCount: number
+  /** Variants switched off in the product editor. */
+  unavailableVariantCount: number
   totalOrders: number
   totalRevenue: number
   totalProfit: number
@@ -70,8 +72,6 @@ export type DashboardData = {
   ordersThisMonth: number
   revenueThisMonth: number
   profitThisMonth: number
-  /** Sum of `originalPrice * quantity` across non-archived products' variants. */
-  inventoryValueAtCost: number
   revenue: number
   profit: number
   avgOrderProfit: number
@@ -83,7 +83,8 @@ export type DashboardData = {
     noPhoto: ProductRef[]
     noPrice: ProductRef[]
     noVariants: ProductRef[]
-    allSoldOut: ProductRef[]
+    /** Active products with every size switched off — unorderable. */
+    allUnavailable: ProductRef[]
   }
 }
 
@@ -119,7 +120,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     db
       .select({
         productId: productVariants.productId,
-        quantity: productVariants.quantity,
+        isAvailable: productVariants.isAvailable,
       })
       .from(productVariants),
     db
@@ -128,6 +129,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         itemsTotal: orders.itemsTotal,
         itemsCost: orders.itemsCost,
         shippingCost: orders.shippingCost,
+        preorderShippingCost: orders.preorderShippingCost,
         packingCost: orders.packingCost,
         advertisingCost: orders.advertisingCost,
         totalCost: orders.totalCost,
@@ -143,28 +145,22 @@ export async function getDashboardData(): Promise<DashboardData> {
   const countedOrders: OrderRow[] = orderRows
 
   const imageCountByProduct = new Map(imageCountRows.map((r) => [r.productId, r.value]))
-  const variantsByProduct = new Map<string, { quantity: number }[]>()
+  const variantsByProduct = new Map<string, { isAvailable: boolean }[]>()
   for (const v of variantRows) {
     const bucket = variantsByProduct.get(v.productId)
-    if (bucket) bucket.push({ quantity: v.quantity })
-    else variantsByProduct.set(v.productId, [{ quantity: v.quantity }])
+    if (bucket) bucket.push({ isAvailable: v.isAvailable })
+    else variantsByProduct.set(v.productId, [{ isAvailable: v.isAvailable }])
   }
 
   const activeProducts = productsList.filter((p) => p.status === "active")
   const draftProducts = productsList.filter((p) => p.status === "draft")
   const archivedProducts = productsList.filter((p) => p.status === "archived")
-  const nonArchivedProducts = productsList.filter((p) => p.status !== "archived")
 
   const allVariants = [...variantsByProduct.values()].flat()
-  const totalStockUnits = allVariants.reduce((sum, v) => sum + v.quantity, 0)
-  const soldOutVariantCount = allVariants.filter((v) => v.quantity <= 0).length
-  const readyToShipSkus = allVariants.filter((v) => v.quantity > 0).length
-
-  const inventoryValueAtCost = nonArchivedProducts.reduce((sum, p) => {
-    const variants = variantsByProduct.get(p.id) ?? []
-    const productUnits = variants.reduce((s, v) => s + v.quantity, 0)
-    return sum + Number(p.originalPrice) * productUnits
-  }, 0)
+  // Preorder shop: no stock units or inventory value — only whether each
+  // colour x size can be ordered.
+  const availableVariantCount = allVariants.filter((v) => v.isAvailable).length
+  const unavailableVariantCount = allVariants.length - availableVariantCount
 
   const revenue = countedOrders.reduce((s, o) => s + Number(o.itemsTotal || 0), 0)
   const grossProfit = countedOrders.reduce(
@@ -173,7 +169,11 @@ export async function getDashboardData(): Promise<DashboardData> {
   )
   const netProfit = countedOrders.reduce((s, o) => s + Number(o.profit || 0), 0)
   const advertisingCost = countedOrders.reduce((s, o) => s + Number(o.advertisingCost || 0), 0)
-  const shippingCost = countedOrders.reduce((s, o) => s + Number(o.shippingCost || 0), 0)
+  // Total shipping cost = to the customer + the preorder's inbound legs.
+  const shippingCost = countedOrders.reduce(
+    (s, o) => s + Number(o.shippingCost || 0) + Number(o.preorderShippingCost || 0),
+    0
+  )
   const packagingCost = countedOrders.reduce((s, o) => s + Number(o.packingCost || 0), 0)
   const avgOrderProfit = countedOrders.length ? netProfit / countedOrders.length : 0
 
@@ -222,23 +222,22 @@ export async function getDashboardData(): Promise<DashboardData> {
     noVariants: activeProducts
       .filter((p) => (variantsByProduct.get(p.id)?.length ?? 0) === 0)
       .map(ref),
-    allSoldOut: activeProducts
+    allUnavailable: activeProducts
       .filter((p) => {
         const variants = variantsByProduct.get(p.id) ?? []
-        return variants.length > 0 && variants.every((v) => v.quantity <= 0)
+        return variants.length > 0 && variants.every((v) => !v.isAvailable)
       })
       .map(ref),
   }
 
   return {
     totalSkus: allVariants.length,
-    readyToShipSkus,
+    availableVariantCount,
     totalProducts: productsList.length,
     activeProducts: activeProducts.length,
     draftProducts: draftProducts.length,
     archivedProducts: archivedProducts.length,
-    totalStockUnits,
-    soldOutVariantCount,
+    unavailableVariantCount,
     totalOrders: countedOrders.length,
     totalRevenue: revenue,
     totalProfit: grossProfit,
@@ -249,7 +248,6 @@ export async function getDashboardData(): Promise<DashboardData> {
     ordersThisMonth,
     revenueThisMonth,
     profitThisMonth,
-    inventoryValueAtCost,
     revenue,
     profit: netProfit,
     avgOrderProfit,

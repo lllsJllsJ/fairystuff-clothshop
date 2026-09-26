@@ -18,6 +18,7 @@ import { PreorderCodeCopy } from "@/components/track/preorder-code-copy"
 import { ContactAdminButton } from "@/components/track/contact-admin-button"
 import { ACTIVE_STAGES, StatusStepper, STAGE_BODY_KEY, STAGE_TITLE_KEY } from "@/components/track/status-stepper"
 import { OrderTimeline } from "@/components/track/order-timeline"
+import { ParcelCard } from "@/components/track/parcel-card"
 
 /**
  * `force-dynamic` is the single most important line in this file.
@@ -124,6 +125,10 @@ export default async function TrackOrderPage({
         )}
       </section>
 
+      {order.trackingNo && (
+        <ParcelCard carrier={order.shippingCarrier} trackingNo={order.trackingNo} />
+      )}
+
       <section className="mt-4 border border-border bg-card p-5">
         <h2 className="font-bold">{t("timelineTitle")}</h2>
         <div className="mt-3">
@@ -158,7 +163,9 @@ export default async function TrackOrderPage({
             <span>{t("subtotal")}</span>
             <span>{formatBaht(itemsTotal)}</span>
           </div>
-          {order.shippingConfirmedAt ? (
+          {/* The shop sets the shipping fee on the order once it's known;
+              until then (0) the customer sees "to be confirmed". */}
+          {shipping > 0 ? (
             <>
               <div className="flex justify-between">
                 <span>{t("shipping")}</span>

@@ -30,14 +30,14 @@ const GROUPS: AlertGroup[] = [
   { key: "noPhoto", icon: ImageOff, tone: "warning" },
   { key: "noPrice", icon: Wallet, tone: "danger" },
   { key: "noVariants", icon: Tags, tone: "warning" },
-  { key: "allSoldOut", icon: PackageX, tone: "muted" },
+  { key: "allUnavailable", icon: PackageX, tone: "muted" },
 ]
 
 const LABEL_KEYS: Record<AlertGroup["key"], string> = {
   noPhoto: "dashboard.alertNoPhoto",
   noPrice: "dashboard.alertNoPrice",
   noVariants: "dashboard.alertNoVariants",
-  allSoldOut: "dashboard.alertAllSoldOut",
+  allUnavailable: "dashboard.alertAllUnavailable",
 }
 
 /**

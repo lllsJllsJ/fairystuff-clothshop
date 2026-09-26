@@ -1,164 +1,58 @@
 "use server"
 
-import { eq } from "drizzle-orm"
-import { z } from "zod"
-
-import { db, txDb } from "@/db"
-import { products, productVariants } from "@/db/schema"
+import { db } from "@/db"
 import { getCurrentUser } from "@/lib/auth-helpers"
+import { importProductRow, type ImportRowResult } from "@/lib/import/import-product"
 import { learnProductType } from "@/lib/reference"
 import { isOwner } from "@/lib/roles"
-import { productImportRowSchema } from "@/lib/validations/product"
+import {
+  productImportChunkSchema,
+  type ProductImportRow,
+} from "@/lib/validations/product"
 
 import { revalidateStorefront } from "../revalidate"
 
-/**
- * `updateExisting` is NOT part of `productImportRowSchema` (src/lib/
- * validations/product.ts — out of scope for this feature, not touched).
- * It is composed on top of that schema here, at the action layer, so the
- * shared schema stays generic and this import-specific "what to do with a
- * duplicate row" flag lives only where it's used. Per plan Risk 7: the
- * owner ticks update-or-skip per duplicate row in the preview UI rather
- * than the importer silently upserting — defaults to `false` (skip) so an
- * un-reviewed duplicate row can never silently overwrite existing data.
- */
-const importRowSchema = productImportRowSchema.extend({
-  updateExisting: z.boolean().default(false),
-})
-export type ImportRowValues = z.input<typeof importRowSchema>
-
-const importRowsSchema = z.array(importRowSchema).min(1, "required").max(1000, "max")
-
-export type ImportResult =
-  | { ok: true; created: number; updated: number }
+export type ImportChunkResult =
+  | { ok: true; results: ImportRowResult[] }
   | { ok: false; error: string }
 
-function toNullable(value: string | undefined | null): string | null {
-  const trimmed = (value ?? "").trim()
-  return trimmed.length ? trimmed : null
-}
-
-function toMoney(value: number): string {
-  return value.toFixed(2)
-}
-
 /**
- * Inserts (and, for rows the owner explicitly opted into, updates) the
- * rows confirmed in the import preview. Product + variants land together
- * per row inside one transaction spanning the whole batch — plan Risk 3 —
- * so a mid-batch failure never leaves an orphaned partial import.
+ * Imports one small chunk of preview rows (IMPORT_CHUNK_SIZE). The client
+ * calls this repeatedly so a big sheet shows progress and no single
+ * request runs long while images download. Each row is its own
+ * transaction (see lib/import/import-product.ts) and its result is
+ * reported individually — nothing fails the whole batch.
+ *
+ * Duplicate codes WITHIN the file are dropped by the client before
+ * sending (first occurrence wins); this action re-guards within a chunk.
+ * Whether a row creates or updates is decided HERE from the database, not
+ * from the client's preview label.
  */
-export async function importProducts(rows: ImportRowValues[]): Promise<ImportResult> {
+export async function importProductsChunk(rows: ProductImportRow[]): Promise<ImportChunkResult> {
   const user = await getCurrentUser()
   if (!user) return { ok: false, error: "unauthorized" }
   if (!isOwner(user.role)) return { ok: false, error: "forbidden" }
 
-  const parsed = importRowsSchema.safeParse(rows)
+  const parsed = productImportChunkSchema.safeParse(rows)
   if (!parsed.success) return { ok: false, error: "invalid" }
 
-  let created = 0
-  let updated = 0
-
-  try {
-    await txDb().transaction(async (tx) => {
-      // One bulk fetch rather than one query per row (getProductCodes()'s
-      // "fetch everything" precedent in db/queries/products.ts) — a
-      // boutique shop's catalogue is small enough that this is cheap, and
-      // it avoids N sequential existence checks inside the loop below.
-      const existingRows = await tx
-        .select({ id: products.id, productCode: products.productCode })
-        .from(products)
-      const existingByCode = new Map(
-        existingRows.map((row) => [row.productCode.toLowerCase(), row.id])
-      )
-
-      for (const row of parsed.data) {
-        const existingId = existingByCode.get(row.productCode.toLowerCase())
-
-        if (existingId) {
-          if (!row.updateExisting) continue // skip, per the owner's per-row choice
-
-          await tx
-            .update(products)
-            .set({
-              productName: row.productName || row.productCode,
-              productType: toNullable(row.productType),
-              sellPrice: toMoney(row.sellPrice),
-              originalPrice: toMoney(row.originalPrice),
-              buyingSource: toNullable(row.buyingSource),
-              sourceLink: toNullable(row.sourceLink),
-              updatedAt: new Date(),
-            })
-            .where(eq(products.id, existingId))
-
-          // Import rows replace the variant matrix wholesale rather than
-          // merging — the preview shows the full picture the owner
-          // confirmed, so a simple delete + reinsert (no id-preserving
-          // upsert) keeps this path simple and matches "what's on screen
-          // is what gets written."
-          await tx.delete(productVariants).where(eq(productVariants.productId, existingId))
-          if (row.variants.length > 0) {
-            await tx.insert(productVariants).values(
-              row.variants.map((variant, i) => ({
-                productId: existingId,
-                color: variant.color,
-                size: variant.size,
-                quantity: variant.quantity,
-                sku: toNullable(variant.sku),
-                sortOrder: i,
-              }))
-            )
-          }
-          updated += 1
-          continue
-        }
-
-        const [inserted] = await tx
-          .insert(products)
-          .values({
-            productCode: row.productCode,
-            productName: row.productName || row.productCode,
-            productType: toNullable(row.productType),
-            sellPrice: toMoney(row.sellPrice),
-            originalPrice: toMoney(row.originalPrice),
-            buyingSource: toNullable(row.buyingSource),
-            sourceLink: toNullable(row.sourceLink),
-            status: "active",
-            createdBy: user.id,
-          })
-          .returning({ id: products.id })
-        if (!inserted) throw new Error("insert_failed")
-
-        if (row.variants.length > 0) {
-          await tx.insert(productVariants).values(
-            row.variants.map((variant, i) => ({
-              productId: inserted.id,
-              color: variant.color,
-              size: variant.size,
-              quantity: variant.quantity,
-              sku: toNullable(variant.sku),
-              sortOrder: i,
-            }))
-          )
-        }
-        created += 1
-      }
-    })
-  } catch (error) {
-    console.error("importProducts failed", error)
-    return { ok: false, error: "import_failed" }
-  }
-
-  // Fold newly seen product types into the reference list — deduplicated
-  // so a 200-row import of the same type doesn't issue 200 lookups.
-  const seenTypes = new Set<string>()
+  const results: ImportRowResult[] = []
+  const seenCodes = new Set<string>()
   for (const row of parsed.data) {
-    const type = row.productType?.trim()
-    if (!type || seenTypes.has(type)) continue
-    seenTypes.add(type)
-    await learnProductType(db, type)
+    const code = row.productCode.toLowerCase()
+    if (code && seenCodes.has(code)) {
+      results.push({ sourceRow: row.sourceRow, ok: false, error: "duplicate_in_file" })
+      continue
+    }
+    if (code) seenCodes.add(code)
+
+    const result = await importProductRow(row, user.id)
+    results.push(result)
+    if (result.ok) {
+      await learnProductType(db, row.productType)
+      revalidateStorefront(result.productCode)
+    }
   }
 
-  revalidateStorefront()
-  return { ok: true, created, updated }
+  return { ok: true, results }
 }

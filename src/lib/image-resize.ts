@@ -40,13 +40,22 @@ const WEBP_QUALITY = 0.82
  */
 async function resizeToWidths<Width extends number>(
   file: File,
-  widths: readonly Width[]
+  widths: readonly Width[],
+  { fillAllWidths = false }: { fillAllWidths?: boolean } = {}
 ): Promise<ResizedImage<Width>[]> {
   const bitmap = await createImageBitmap(file)
   try {
     const results: ResizedImage<Width>[] = []
     for (const width of widths) {
-      if (width > bitmap.width) continue
+      if (width > bitmap.width) {
+        if (!fillAllWidths) continue
+        // Still write a file under this width's key — at the source's own
+        // size, so nothing is upscaled — because the image loader always
+        // requests one of the fixed widths and would 404 on a gap.
+        const blob = await drawToWebp(bitmap, bitmap.width, bitmap.height)
+        results.push({ width, height: bitmap.height, blob })
+        continue
+      }
       const height = Math.round((bitmap.height / bitmap.width) * width)
       const blob = await drawToWebp(bitmap, width, height)
       results.push({ width, height, blob })
@@ -72,7 +81,9 @@ async function resizeToWidths<Width extends number>(
  * loader and `next.config.ts`'s remote pattern expect.
  */
 export async function resizeProductImage(file: File): Promise<ResizedImage<ProductImageWidth>[]> {
-  return resizeToWidths(file, PRODUCT_IMAGE_WIDTHS)
+  // Every width is always written: lib/image-loader.ts maps any render
+  // width to the nearest of 480/800/1600 and never checks which exist.
+  return resizeToWidths(file, PRODUCT_IMAGE_WIDTHS, { fillAllWidths: true })
 }
 
 function drawToWebp(

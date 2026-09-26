@@ -1,0 +1,3 @@
+ALTER TABLE "preorder_shipments" ADD COLUMN "order_item_id" uuid;--> statement-breakpoint
+ALTER TABLE "preorder_shipments" ADD CONSTRAINT "preorder_shipments_order_item_id_order_items_id_fk" FOREIGN KEY ("order_item_id") REFERENCES "public"."order_items"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "preorder_shipments_order_item_id_idx" ON "preorder_shipments" USING btree ("order_item_id");

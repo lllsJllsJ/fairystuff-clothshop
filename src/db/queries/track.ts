@@ -20,6 +20,12 @@ import { orderItems, orders } from "@/db/schema"
  * never pass a full order row (fetched elsewhere, e.g. the admin-only
  * `queries/orders.ts`) into anything that renders under `/track`.
  *
+ * Also private and never selected here: `masterCost` (lines),
+ * `itemsMasterCost` / `preorderShippingCost` (orders), and the whole
+ * `preorder_shipments` table — the preorder's inbound China -> Thailand
+ * legs, their tracking numbers and costs. The customer sees only the
+ * final parcel: `shippingCarrier` + `trackingNo`, public by design.
+ *
  * Deliberately ALSO absent from the returned shape: `checkoutKey`,
  * `createdBy`, `refundReason`, `refundedAt`, and — most importantly —
  * `orders.orderNo`. `orderNo` is a sequential, enumerable bigint identity;
@@ -40,7 +46,9 @@ const PUBLIC_ORDER_COLUMNS = {
   note: orders.note,
   itemsTotal: orders.itemsTotal,
   shippingCost: orders.shippingCost,
-  shippingConfirmedAt: orders.shippingConfirmedAt,
+  // The customer's own parcel — public by design (see the header above).
+  shippingCarrier: orders.shippingCarrier,
+  trackingNo: orders.trackingNo,
   // Operational timestamp, not sensitive — safe to expose (unlike the
   // money/profit columns above it). It's a BEFORE UPDATE trigger
   // (`set_updated_at()`, 0001_init_extras.sql) that bumps on ANY change to
@@ -87,7 +95,8 @@ export type TrackedOrder = {
   note: string | null
   itemsTotal: string
   shippingCost: string
-  shippingConfirmedAt: Date | null
+  shippingCarrier: string | null
+  trackingNo: string | null
   updatedAt: Date
   items: TrackedOrderItem[]
 }
@@ -125,7 +134,8 @@ export async function getOrderByPreorderCode(code: string): Promise<TrackedOrder
     note: row.note,
     itemsTotal: row.itemsTotal,
     shippingCost: row.shippingCost,
-    shippingConfirmedAt: row.shippingConfirmedAt,
+    shippingCarrier: row.shippingCarrier,
+    trackingNo: row.trackingNo,
     updatedAt: row.updatedAt,
     items,
   }

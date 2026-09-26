@@ -4,22 +4,30 @@ import { useLocale, useTranslations } from "next-intl"
 import { X } from "lucide-react"
 
 import type { PublicCharacterFacet } from "@/db/queries/storefront"
+import { ADULT_SIZES, KIDS_SIZES } from "@/lib/sizes"
+import type { AudienceFilter } from "@/components/shop/audience-bar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { SimpleSelect } from "@/components/ui/simple-select"
 
 /**
- * Mirrors the admin's "Add standard sizes" quick-fill (variant-matrix-editor,
- * Phase 3). `PublicProductSummary` doesn't carry a sizes facet — the public
- * data contract in `db/queries/storefront.ts` intentionally has no
- * "distinct sizes" query — so the size filter offers this fixed set rather
- * than one derived from the database. `GET /api/products` still matches
- * on the exact variant size, so this only limits which values the filter UI
- * offers, not what the API can filter on.
+ * The size filter offers the PRESET sizes for the chosen audience (adult
+ * letters, kids heights — src/lib/sizes.ts), both lists when "All" is
+ * selected. Custom free-text sizes still show on each product page; they
+ * just aren't offered here, since the public data contract has no
+ * "distinct sizes" facet. `GET /api/products` matches the exact size of an
+ * AVAILABLE variant.
  */
-export const STANDARD_SIZE_OPTIONS = ["XS", "S", "M", "L", "XL", "2XL", "Free Size"]
+export function sizeOptionsFor(audience: AudienceFilter): readonly string[] {
+  if (audience === "adult") return ADULT_SIZES
+  if (audience === "kids") return KIDS_SIZES
+  return [...ADULT_SIZES, ...KIDS_SIZES]
+}
 
 export type ShopFilterValues = {
+  audience: AudienceFilter
+  /** "sets" = set or full set only. */
+  kind: "" | "sets"
   character: string
   color: string
   size: string
@@ -58,7 +66,7 @@ export function ShopFilters({
   ]
   const sizeSelectOptions = [
     { value: "", label: t("common.all") },
-    ...STANDARD_SIZE_OPTIONS.map((size) => ({ value: size, label: size })),
+    ...sizeOptionsFor(values.audience).map((size) => ({ value: size, label: size })),
   ]
 
   return (
@@ -91,7 +99,7 @@ export function ShopFilters({
         />
       </FilterField>
 
-      <FilterField label={t("shop.sizeLabel")}>
+      <FilterField label={values.audience === "kids" ? t("shop.heightLabel") : t("shop.sizeLabel")}>
         <SimpleSelect
           value={values.size}
           onValueChange={(v) => onChange("size", v)}

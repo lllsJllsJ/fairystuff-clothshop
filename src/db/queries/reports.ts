@@ -1,6 +1,6 @@
 import "server-only"
 
-import { and, asc, desc, eq, gte, lte, max, ne, notInArray, sum } from "drizzle-orm"
+import { and, asc, count, desc, eq, gte, lte, max, ne, notInArray, sql, sum } from "drizzle-orm"
 
 import { db } from "@/db"
 import {
@@ -40,7 +40,12 @@ export type ReportOrderRow = {
   customerName: string
   itemsTotal: number
   itemsCost: number
+  /** Catalogue cost of the same lines — itemsCost minus this is how far the
+   * actual supplier prices drifted from the master. */
+  itemsMasterCost: number
   shippingCost: number
+  /** Inbound preorder legs (CN->CN, CN->TH, TH->TH). */
+  preorderShippingCost: number
   packingCost: number
   advertisingCost: number
   totalCost: number
@@ -56,8 +61,11 @@ export type ReportInventoryRow = {
   status: ProductStatusValue
   sellPrice: number
   originalPrice: number
-  totalStock: number
-  stockValueAtCost: number
+  audience: "adult" | "kids"
+  kind: "single" | "set" | "fullset"
+  /** Preorder shop: orderable colour x size combinations, not units. */
+  availableVariants: number
+  totalVariants: number
 }
 
 export type ReportProfitByProductRow = {
@@ -100,7 +108,9 @@ export async function getReportsData(params: ReportsParams = {}): Promise<Report
         customerName: orders.customerName,
         itemsTotal: orders.itemsTotal,
         itemsCost: orders.itemsCost,
+        itemsMasterCost: orders.itemsMasterCost,
         shippingCost: orders.shippingCost,
+        preorderShippingCost: orders.preorderShippingCost,
         packingCost: orders.packingCost,
         advertisingCost: orders.advertisingCost,
         totalCost: orders.totalCost,
@@ -116,6 +126,8 @@ export async function getReportsData(params: ReportsParams = {}): Promise<Report
         productCode: products.productCode,
         productName: products.productName,
         productType: products.productType,
+        audience: products.audience,
+        kind: products.kind,
         status: products.status,
         sellPrice: products.sellPrice,
         originalPrice: products.originalPrice,
@@ -125,7 +137,8 @@ export async function getReportsData(params: ReportsParams = {}): Promise<Report
     db
       .select({
         productId: productVariants.productId,
-        totalStock: sum(productVariants.quantity),
+        totalVariants: count(productVariants.id),
+        availableVariants: sql<number>`count(*) filter (where ${productVariants.isAvailable})`,
       })
       .from(productVariants)
       .groupBy(productVariants.productId),
@@ -151,7 +164,9 @@ export async function getReportsData(params: ReportsParams = {}): Promise<Report
     customerName: o.customerName,
     itemsTotal: Number(o.itemsTotal),
     itemsCost: Number(o.itemsCost),
+    itemsMasterCost: Number(o.itemsMasterCost),
     shippingCost: Number(o.shippingCost),
+    preorderShippingCost: Number(o.preorderShippingCost),
     packingCost: Number(o.packingCost),
     advertisingCost: Number(o.advertisingCost),
     totalCost: Number(o.totalCost ?? 0),
@@ -159,12 +174,10 @@ export async function getReportsData(params: ReportsParams = {}): Promise<Report
     status: o.status,
   }))
 
-  const stockByProduct = new Map(
-    variantSums.map((v) => [v.productId, Number(v.totalStock ?? 0)])
-  )
+  const variantsByProduct = new Map(variantSums.map((v) => [v.productId, v]))
 
   const inventory: ReportInventoryRow[] = inventoryRows.map((p) => {
-    const totalStock = stockByProduct.get(p.id) ?? 0
+    const variants = variantsByProduct.get(p.id)
     return {
       id: p.id,
       productCode: p.productCode,
@@ -173,8 +186,10 @@ export async function getReportsData(params: ReportsParams = {}): Promise<Report
       status: p.status,
       sellPrice: Number(p.sellPrice),
       originalPrice: Number(p.originalPrice),
-      totalStock,
-      stockValueAtCost: Number(p.originalPrice) * totalStock,
+      audience: p.audience,
+      kind: p.kind,
+      availableVariants: Number(variants?.availableVariants ?? 0),
+      totalVariants: Number(variants?.totalVariants ?? 0),
     }
   })
 

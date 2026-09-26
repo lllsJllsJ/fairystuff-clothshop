@@ -35,7 +35,7 @@ This is the one thing that actually needs to be checked repeatedly, and it
 is a security check, not a health check: Railway Postgres has no public API
 of its own (unlike the old Supabase design this replaced, which needed RLS
 to guard a publicly reachable database), so the only realistic way private product data
-(product type, preorder lead time, cost, supplier, exact stock depth) leaks to the public is through **this
+(product type, preorder lead time, cost, supplier) leaks to the public is through **this
 app's own public endpoints accidentally selecting private columns** — see
 `docs/api-overview.md`'s "Public data contract" section for the mechanism
 (the RSC-payload leak path in particular).
@@ -51,9 +51,10 @@ curl -s "$BASE/api/products" \
   | grep -Ei 'productType|preorderMinDays|preorderMaxDays|originalPrice|buyingSource|sourceLink|margin' \
   && echo "FAIL: private field leaked" || echo "PASS"
 
-# 2. Nor exact stock depth
-curl -s "$BASE/api/products" | grep -E '"quantity"' \
-  && echo "FAIL: stock depth leaked" || echo "PASS"
+# 2. Nor any order-side cost figure (the product API never selects orders,
+#    so a hit here means a query was rewired to the wrong module)
+curl -s "$BASE/api/products" | grep -Ei 'masterCost|productCost|preorderShipping' \
+  && echo "FAIL: cost field leaked" || echo "PASS"
 
 # 3. Nor the server-rendered detail page (RSC payload included)
 curl -s "$BASE/th/shop/<code>" \
@@ -82,8 +83,14 @@ grep -rE 'buyingSource|originalPrice' .next/static/chunks/ \
 #    (see docs/api-overview.md's "public, unguessable-URL" note). Create one
 #    real order through checkout first to get a real <code>.
 curl -s "$BASE/th/track/<code>" \
-  | grep -Ei 'itemsCost|totalCost|profit|productCost|lineCost|advertisingCost|packingCost|orderNo' \
+  | grep -Ei 'itemsCost|itemsMasterCost|masterCost|preorderShipping|shipments|totalCost|profit|productCost|lineCost|advertisingCost|packingCost|orderNo' \
   && echo "FAIL: private order field leaked" || echo "PASS"
+
+# 6a. …nor any INBOUND preorder parcel (CN→CN / CN→TH / TH→TH). Put a
+#     recognisable tracking number on one leg in the admin (e.g. YT-LEAKTEST)
+#     — only the customer's own carrier + tracking no. may appear.
+curl -s "$BASE/th/track/<code>" | grep -F 'YT-LEAKTEST' \
+  && echo "FAIL: inbound parcel leaked" || echo "PASS"
 
 # 6b. An unknown-but-well-shaped code and a malformed code must return the
 #     SAME 404 — never let the shape of the response tell an attacker which
@@ -102,7 +109,7 @@ surface) — every check above targets one of this app's *own* routes.
 ### Pass criteria
 
 - Checks 1–3 and 5: the `grep` must find **nothing** — a match means a
-  private field or exact stock count leaked into a response the public can
+  private field or order cost figure leaked into a response the public can
   read, which is a CRITICAL-severity finding (see
   `~/.claude/rules/common/code-review.md`'s severity table) and must block
   any deploy until fixed.
@@ -171,26 +178,35 @@ schema assertions, then runs the query-layer assertions against the real
 nothing else on the machine — not even the `docker compose` dev database
 (different container name and port).
 
-It has two halves, 33 checks total: 8 schema checks plus 25 query-layer and
+It has two halves, 54 checks total: 14 schema checks plus 40 query-layer and
 transaction checks (including the two rollback/commit checks below). The
 first half executes the SQL guarantees directly:
 
-The eight schema checks:
+The fourteen schema checks:
 
 1. `margin` computes from sell price minus cost
 2. `line_total` / `line_cost` compute per line
 3. Order totals aggregate correctly, including shipping, packing, and advertising
 4. Changing a line quantity recomputes the order
-5. **Stock is untouched by orders** — manual stock is deliberate product
-   behaviour. A FAIL here means someone added a decrement trigger. Do not
-   "fix" it by making this check pass; remove the trigger.
+4b. Overriding a line's ACTUAL cost moves `items_cost` and profit while
+   `items_master_cost` stays on the master snapshot
+4c. Preorder shipment legs roll into `preorder_shipping_cost`, `total_cost`,
+   and `profit` — and deleting a leg rolls them back
+4d. A negative preorder shipment cost is rejected by the check constraint
+4e. Parcels belong to a line item — deleting the line removes its parcels
+   and the order's preorder shipping cost follows
+5. **Availability is untouched by orders** — it is switched by hand only.
+   A FAIL here means someone added an order-driven toggle. Do not "fix" it by
+   making this check pass; remove the trigger.
+5b. **Order history is a snapshot** — repricing the product (as an import
+   upsert does) leaves every figure on an existing order unchanged
 6. Order history survives deleting the product (the line is a snapshot;
    `product_id` nulls but `product_code` and the figures remain)
 7. Cancelled and fully refunded orders are excluded from revenue
 8. Deleting an order cascades to its line items, leaving no orphans
 
-**Re-run after any change to either file under `drizzle/`.** All eight must
-print PASS.
+**Re-run after any change to any file under `drizzle/`.** All must print
+PASS.
 
 
 The second half runs the **real** functions from `src/db/queries/*` against
@@ -213,17 +229,23 @@ It asserts, among other things:
 - `getPublicProducts` / `getPublicProductByCode` return **no** private field,
   verified by a recursive scan of the returned structure rather than by
   inspection — this is the programmatic form of the leak test above
-- Public variants carry selectable preorder options and never `quantity`;
-  public products expose characters but not product type or preorder-day fields
+- Public variants carry `isAvailable` and never a stock count; the public
+  size filter only matches AVAILABLE sizes; audience/kind filters work;
+  public products expose characters but not product type or preorder-day
+  fields
 - Product-code lookup is case-insensitive
 - Admin queries *do* see cost fields (the converse check — proving the split is
   real rather than just absent everywhere)
-- Order search matches by customer name and by order number, and misses cleanly
+- Order search matches by customer name, order number, and a preorder-code
+  fragment, and misses cleanly; list rows carry the preorder progress count;
+  `getOrderById` joins items AND preorder shipments
 - `listUsers` executes and never selects `passwordHash`
 - `getOrderByPreorderCode` (the `/track/[code]` query) finds an order by its
   random code, returns `null` for an unknown one, and — via the same
-  recursive scan technique — leaks no `orderNo`/cost/profit field
-- Dashboard SKU/gross/net/cost totals and report advertising-cost aggregates
+  recursive scan technique — leaks no `orderNo`/cost/profit/master-cost/
+  preorder-shipping field; shows the customer's parcel; never carries an
+  inbound preorder tracking number
+- Dashboard available/switched-off size counts, gross/net/cost totals and report advertising-cost aggregates
   execute with the expected values
 - **`db.transaction()` rolls back on a thrown error** — a product inserted
   inside a transaction that then throws does not survive the transaction,

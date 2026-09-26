@@ -5,7 +5,7 @@ import { Shirt } from "lucide-react"
 import { Link } from "@/i18n/navigation"
 import type { PublicProductSummary } from "@/db/queries/storefront"
 import { Price } from "@/components/shop/price"
-import { NewBadge } from "@/components/shop/sold-out-badge"
+import { KidsBadge, KindBadge, NewBadge, UnavailableBadge } from "@/components/shop/shop-badges"
 
 const SWATCH_LIMIT = 4
 
@@ -56,7 +56,14 @@ export function ProductTile({
 
         <div className="absolute top-2 left-2 flex flex-col items-start gap-1">
           {isNew && <NewBadge />}
+          <KindBadge kind={product.kind} />
         </div>
+        {product.audience === "kids" && <KidsBadge className="absolute top-2 right-2" />}
+        {!product.isOrderable && (
+          <div className="absolute inset-x-0 bottom-0 flex justify-center bg-background/70 py-2 backdrop-blur-sm">
+            <UnavailableBadge />
+          </div>
+        )}
       </div>
 
       <div className="flex flex-1 flex-col gap-1 p-2.5 sm:gap-1.5 sm:p-4">

@@ -50,8 +50,10 @@ nothing is trusted to be well-formed.
 |---|---|---|
 | `search` | string | Matches `productName` or `productCode`, substring, case-insensitive. Clamped to 100 chars. |
 | `character` | string | Exact character slug linked through `product_characters`. |
-| `color` | string | Exact match on any variant's `color`. |
-| `size` | string | Exact match on any variant's `size`. |
+| `audience` | `adult` \| `kids` | Who the product is sized for. Anything else is ignored. |
+| `kind` | `single` \| `set` \| `fullset` \| `sets` | `sets` = set OR full set (the storefront's single toggle). Anything else is ignored. |
+| `color` | string | Exact match on an AVAILABLE variant's `color`. |
+| `size` | string | Exact match on an AVAILABLE variant's `size` (a switched-off size never matches). |
 | `minPrice`, `maxPrice` | number | Clamped to `[0, 10_000_000]`. |
 | `sort` | `newest` \| `price_asc` \| `price_desc` | Defaults to `newest`. Anything else falls back to `newest`. |
 | `page` | integer | Clamped to `[1, 10_000]`. |
@@ -72,11 +74,14 @@ GET /api/products?search=dress&character=mickey&sort=price_asc&page=1
       "id": "b2f0...",
       "productCode": "DR-001",
       "productName": "Linen Wrap Dress",
+      "audience": "adult",
+      "kind": "single",
       "description": "...",
       "sellPrice": "1290.00",
       "createdAt": "2026-01-14T08:00:00.000Z",
       "coverImageUrl": "https://img.example.com/products/.../1600.webp",
       "colors": ["ดำ", "ครีม"],
+      "isOrderable": true,
       "characters": [
         { "id": "c_...", "slug": "mickey", "name": "มิกกี้", "nameEn": "Mickey" }
       ]
@@ -110,6 +115,8 @@ Every field a public caller would never see — `originalPrice`,
 | `search` | string | Matches `productCode`, `productName`, or `buyingSource`. |
 | `status` | `draft` \| `active` \| `archived` \| `all` | Default `all`. |
 | `type` | string | Exact match on `productType`. |
+| `audience` | `adult` \| `kids` | Optional. Anything else is ignored. |
+| `kind` | `single` \| `set` \| `fullset` | Optional. Anything else is ignored. |
 | `sort` | `newest` \| `oldest` \| `price_high` \| `price_low` \| `name_asc` | Default `newest`. |
 | `page` | integer | Default `1`. |
 | `pageSize` | integer | Default `20`. |
@@ -124,6 +131,8 @@ Every field a public caller would never see — `originalPrice`,
       "productCode": "DR-001",
       "productName": "Linen Wrap Dress",
       "productType": "เดรส",
+      "audience": "adult",
+      "kind": "single",
       "description": "...",
       "sellPrice": "1290.00",
       "originalPrice": "650.00",
@@ -136,7 +145,7 @@ Every field a public caller would never see — `originalPrice`,
       "createdBy": "u_...",
       "createdAt": "...",
       "updatedAt": "...",
-      "variants": [{ "id": "...", "color": "ดำ", "size": "S", "quantity": 3, "sku": null, "sortOrder": 0, "createdAt": "...", "updatedAt": "..." }],
+      "variants": [{ "id": "...", "color": "ดำ", "size": "S", "isAvailable": true, "sku": null, "sortOrder": 0, "createdAt": "...", "updatedAt": "..." }],
       "images": [{ "id": "...", "url": "...", "storageKey": "...", "alt": null, "color": null, "sortOrder": 0, "createdAt": "..." }],
       "characters": [{ "id": "...", "slug": "mickey", "name": "มิกกี้", "nameEn": "Mickey", "sortOrder": 0 }]
     }
@@ -167,8 +176,8 @@ date-range filters resolved in SQL (not filtered in memory).
 
 | Param | Type | Notes |
 |---|---|---|
-| `status` | `new` \| `accepted` \| `preorder` \| `packaging` \| `shipping` \| `complete` \| `cancelled` \| `refund` \| `all` | Default `all`. |
-| `search` | string | Matches `customerName` (substring) or, if the term is all digits, an exact `orderNo`. |
+| `status` | `new` \| `accepted` (= **Paid**) \| `preorder` \| `packaging` \| `shipping` \| `complete` \| `cancelled` \| `refund` \| `all` | Default `all`. |
+| `search` | string | Matches `customerName`, `customerPhone`, or `preorderCode` (case-insensitive substring — `PO-AB12` or just `ab12`), or, if the term is all digits, an exact `orderNo`. Each row also carries `receivedCount` (lines in a received/refunded status) for the Preorder column's progress chip. |
 | `dateFrom`, `dateTo` | ISO `yyyy-mm-dd` | Inclusive bounds on `orderDate`. |
 | `sort` | `newest` \| `oldest` \| `orderno_high` \| `orderno_low` \| `total_high` \| `total_low` | Default `newest`; an unrecognised value falls back to it. `newest`/`oldest` sort on `orderDate` and `orderno_high`/`orderno_low` on the order number — the admin list's two sortable column headers set these. Every date sort breaks ties on `orderNo` descending, so a day's worth of orders paginates stably. |
 | `page` | integer | Default `1`. |
@@ -190,11 +199,14 @@ date-range filters resolved in SQL (not filtered in memory).
       "shippingCost": "50.00",
       "packingCost": "10.00",
       "advertisingCost": "30.00",
-      "shippingConfirmedAt": null,
+      "shippingCarrier": "Flash Express",
+      "trackingNo": "TH0012345",
+      "preorderShippingCost": "155.00",
       "itemsTotal": "1290.00",
       "itemsCost": "650.00",
-      "totalCost": "740.00",
-      "profit": "550.00",
+      "itemsMasterCost": "620.00",
+      "totalCost": "895.00",
+      "profit": "395.00",
       "status": "new",
       "refundReason": null,
       "refundedAt": null,
@@ -202,7 +214,8 @@ date-range filters resolved in SQL (not filtered in memory).
       "createdBy": "u_...",
       "createdAt": "...",
       "updatedAt": "...",
-      "itemCount": 1
+      "itemCount": 1,
+      "receivedCount": 0
     }
   ],
   "count": 87,
@@ -427,6 +440,8 @@ export const PUBLIC_PRODUCT_COLUMNS = {
   id: products.id,
   productCode: products.productCode,
   productName: products.productName,
+  audience: products.audience,
+  kind: products.kind,
   description: products.description,
   sellPrice: products.sellPrice,
   createdAt: products.createdAt,
@@ -434,14 +449,16 @@ export const PUBLIC_PRODUCT_COLUMNS = {
 ```
 
 Layered on top for list/detail views: a computed `coverImageUrl`, a
-deduplicated `colors` array, safe variant identifiers/options, and linked
-character objects — never the raw variant row or stock quantity.
+deduplicated `colors` array, `isOrderable` (false when every size is
+switched off), variants as `{ id, color, size, isAvailable, sortOrder }`,
+and linked character objects — never the raw variant row.
 
 **`productType`, preorder lead-time fields, `originalPrice`, `buyingSource`,
-`sourceLink`, `margin`, and any variant's exact `quantity` are never present
-in any public response — including RSC payloads.** Product type and lead time
-are admin-only; characters are the public taxonomy. All active variants are
-preorderable regardless of the admin stock ledger.
+`sourceLink`, and `margin` are never present in any public response —
+including RSC payloads.** Product type and lead time are admin-only;
+characters, audience, and kind are the public taxonomy. There is no stock
+count anywhere (preorder shop); a variant's `isAvailable` is public by
+design so a switched-off size can be shown struck through.
 
 That last clause matters more here than in a typical app. A React Server
 Component that fetches a *full* product row (e.g. via `queries/products.ts`,
@@ -481,7 +498,8 @@ const PUBLIC_ORDER_COLUMNS = {
   note: orders.note,
   itemsTotal: orders.itemsTotal,
   shippingCost: orders.shippingCost,
-  shippingConfirmedAt: orders.shippingConfirmedAt,
+  shippingCarrier: orders.shippingCarrier, // the customer's parcel — public by design
+  trackingNo: orders.trackingNo,
   updatedAt: orders.updatedAt, // operational timestamp, safe — see below
 } as const
 
@@ -497,8 +515,10 @@ const PUBLIC_ORDER_ITEM_COLUMNS = {
 } as const
 ```
 
-**`itemsCost`, `totalCost`, `profit`, `advertisingCost`, `packingCost`, each
-line's `productCost`/`lineCost`, `checkoutKey`, `createdBy`, `refundReason`,
+**`itemsCost`, `itemsMasterCost`, `preorderShippingCost`, `totalCost`,
+`profit`, `advertisingCost`, `packingCost`, each line's
+`productCost`/`masterCost`/`lineCost`, anything from `preorder_shipments`
+(the inbound CN→CN / CN→TH / TH→TH parcels), `checkoutKey`, `createdBy`, `refundReason`,
 `refundedAt`, and — the one most worth calling out — `orders.orderNo` are
 never present in this response.** `orderNo` is deliberately excluded even
 though it is not a money field: it is a sequential, enumerable bigint
@@ -534,7 +554,7 @@ this application.
 
 Every owner action follows the same five-step shape: authenticate → re-check
 `isOwner(user.role)` independently → `zod` parse the input → write (via `db`
-for single-statement writes, `txDb().transaction()` for multi-table writes) →
+for single-statement writes, `db.transaction()` for multi-table writes) →
 revalidate the affected paths. `submitCheckout` (guest checkout) is the one
 exception to the "authenticate" step — there is no session to check at all,
 by design (see the Auth model section above); it validates and re-resolves
@@ -552,10 +572,44 @@ image list. An empty asynchronous code preview is valid because the immutable
 code is minted inside the transaction; each submitted image must instead use
 the exact same-origin `/api/images/<storageKey>` URL for its validated product
 key. Products can link multiple managed characters and store an admin-only
-minimum/maximum preorder-day range. Order create/update payloads include non-negative `advertisingCost` along
-with shipping and packing. Postgres derives
-`totalCost = itemsCost + shippingCost + packingCost + advertisingCost` and
-`profit = itemsTotal - totalCost`; callers never submit either derived value.
+minimum/maximum preorder-day range, an `audience` (`adult`/`kids`) and a
+`kind` (`single`/`set`/`fullset` — sets and full sets mint `SET-`/`FULL-`
+codes; a single item requires a type, else `type_required`). Variants are
+`{ color, size (free text ≤ 40), isAvailable }`. Order create/update
+payloads include non-negative `advertisingCost` along with shipping and
+packing, the customer's `shippingCarrier`/`trackingNo`, and per line the
+ACTUAL `productCost` plus the `masterCost` snapshot. `updateOrder` never
+writes a retained line's `statusCode`. Postgres derives
+`totalCost = itemsCost + shippingCost + preorderShippingCost + packingCost
++ advertisingCost` and `profit = itemsTotal - totalCost`; callers never
+submit either derived value.
+
+**Product import / export** (`admin/products/import/actions.ts`,
+`admin/products/export-actions.ts`):
+
+| Action | Input | Result |
+|---|---|---|
+| `importProductsChunk(rows)` | 1–5 template rows (`productImportRowSchema`: optional fields = "keep" on update; `imageUrls` ≤ 20) | `{ ok: true, results: [{ sourceRow, ok, action: "created" \| "updated", productCode, imageWarnings } \| { sourceRow, ok: false, error }] }` — per-row errors: `name_required`, `type_required`, `duplicate_in_file`, `write_failed` |
+| `exportProducts(filters)` | `{ search?, status?, type?, audience?, kind? }` | `{ ok: true, rows }` — template rows keyed by the bilingual headers; `export_failed` on error |
+
+The template columns (`src/lib/import/product-template.ts`): Code, Name,
+Audience, Kind, Type, Colours, Sizes, Unavailable (`Colour/Size` pairs),
+Sell price, Cost price, Source, Source link, Status, Description, Image URLs
+(last; comma-separated, first = main photo). Import upserts on code and
+never touches orders.
+
+**Preorder shipments** (`admin/orders/shipment-actions.ts`, admin-only data):
+
+| Action | Input | Notes |
+|---|---|---|
+| `addPreorderShipment(orderId, orderItemId, v)` | `{ leg: cn_cn \| cn_th \| th_th, carrier?, trackingNo?, cost ≥ 0, note? }` | Parcels belong to one line item; `not_found` unless that item belongs to that order |
+| `updatePreorderShipment(orderId, id, v)` | same | scoped by BOTH ids — `not_found` otherwise |
+| `deletePreorderShipment(orderId, id)` | — | same scoping |
+
+A trigger keeps `orders.preorderShippingCost` = Σ `cost` across all lines;
+deleting a line item cascades its parcels. Item statuses gain
+an `isPreorder` flag (`saveItemStatus`), which shows the shipments panel;
+`preorder_1688` and `preorder_taobao` are seeded with it.
 
 The Settings mutation surface includes product types, shop contacts,
 characters, fixed admin/customer status labels, configurable line-item
@@ -569,8 +623,10 @@ idempotent (unique globally now, not scoped to an account — there is no
 account to scope it to). The resulting order stores a server-minted, random
 `preorderCode` (see the `PUBLIC_ORDER_COLUMNS` section above), generates
 `orderNo`, starts at `new`, and receives no online payment; nothing
-auto-advances it past `new` — the owner accepts it by hand from
-`/admin/orders`. `admin/orders/actions.ts#createOrder` mints a `preorderCode`
+auto-advances it past `new` — the owner marks it Paid (`accepted`) by hand
+from `/admin/orders`. Each line's `masterCost` = `productCost` =
+`products.originalPrice` at that moment; a variant that is switched off
+(`isAvailable = false`) is rejected as `cart_changed`. `admin/orders/actions.ts#createOrder` mints a `preorderCode`
 too, so an owner-typed phone order is trackable at the same `/track/[code]`
 URL. Both mint paths share the same retry-on-`23505` strategy (see
 `src/lib/preorder-code.ts`), bounded at 3 attempts, because a unique-index

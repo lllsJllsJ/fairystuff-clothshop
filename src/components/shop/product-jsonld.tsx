@@ -30,7 +30,10 @@ export function ProductJsonLd({
       url,
       priceCurrency: currency,
       price: Number(product.sellPrice).toFixed(2),
-      availability: "https://schema.org/PreOrder",
+      availability:
+        product.variants.length === 0 || product.variants.some((v) => v.isAvailable)
+          ? "https://schema.org/PreOrder"
+          : "https://schema.org/OutOfStock",
       itemCondition: "https://schema.org/NewCondition",
     },
   }

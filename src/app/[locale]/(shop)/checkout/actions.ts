@@ -69,6 +69,8 @@ export async function submitCheckout(values: CheckoutInput): Promise<CheckoutRes
     if (!product || Number(product.sellPrice) !== Number(item.expectedSellPrice)) return { ok: false, error: "cart_changed" }
     const variant = item.productVariantId ? (variantMap.get(item.productVariantId) ?? null) : null
     if (item.productVariantId && (!variant || variant.productId !== product.id)) return { ok: false, error: "cart_changed" }
+    // A size the owner switched off after it went into the cart.
+    if (variant && !variant.isAvailable) return { ok: false, error: "cart_changed" }
     if (!item.productVariantId && (variantsByProduct.get(product.id) ?? 0) > 0) return { ok: false, error: "cart_changed" }
     resolved.push({ item, product, variant })
   }
@@ -85,7 +87,7 @@ export async function submitCheckout(values: CheckoutInput): Promise<CheckoutRes
           checkoutKey: v.checkoutKey,
           // Lifecycle invariant (see CLAUDE.md): a guest order always lands
           // in "new" and nothing here advances it automatically — the owner
-          // accepts it by hand from the admin order list.
+          // marks it paid by hand from the admin order list.
           status: "new",
           note: v.note || null,
         }).returning({ id: orders.id, orderNo: orders.orderNo, preorderCode: orders.preorderCode })
@@ -99,7 +101,11 @@ export async function submitCheckout(values: CheckoutInput): Promise<CheckoutRes
           productType: product.productType,
           color: variant?.color && variant.color !== "-" ? variant.color : null,
           size: variant?.size ?? null,
+          // Actual cost starts at the master (catalogue) cost; the owner
+          // overrides productCost later if the supplier price differs.
+          // masterCost is the untouched baseline for that comparison.
           productCost: product.originalPrice,
+          masterCost: product.originalPrice,
           sellPrice: product.sellPrice,
           // Lead-time snapshot (see schema.ts's comment on orderItems) — a
           // later edit to the product's preorder window must never rewrite

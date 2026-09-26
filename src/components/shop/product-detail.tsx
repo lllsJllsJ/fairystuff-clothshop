@@ -9,42 +9,43 @@ import type { PublicProductDetail } from "@/db/queries/storefront"
 import { Price } from "@/components/shop/price"
 import { ProductGallery } from "@/components/shop/product-gallery"
 import { ColorSelector } from "@/components/shop/color-selector"
-import { SizeSelector } from "@/components/shop/size-selector"
+import { SizeSelector, type SizeOption } from "@/components/shop/size-selector"
+import { KidsBadge, KindBadge, UnavailableBadge } from "@/components/shop/shop-badges"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useCart } from "@/components/cart/cart-provider"
 import { BackLink } from "@/components/layout/back-link"
 
 /**
- * The sizes offered for a given colour, in the owner's configured order.
- * Module-level and pure so both the initial state and `handleColorChange`
- * call exactly the same logic — the "auto-select when there's only one"
- * rule below must never apply on first render but not on a later colour
- * switch.
+ * The sizes offered for a given colour, in the owner's configured order,
+ * each flagged available or not. Module-level and pure so both the initial
+ * state and `handleColorChange` call exactly the same logic — the
+ * "auto-select when there's only one" rule below must never apply on first
+ * render but not on a later colour switch.
  */
 function sizesForColor(
   variants: PublicProductDetail["variants"],
   color: string | null
-): string[] {
+): SizeOption[] {
   return [...variants]
     .filter((v) => (color ? v.color === color : true))
     .sort((a, b) => a.sortOrder - b.sortOrder)
-    .map((v) => v.size)
+    .map((v) => ({ size: v.size, available: v.isAvailable }))
 }
 
 /**
  * A size the customer has no choice about is not a decision worth making
- * them tap. When exactly one size exists for the current colour it is
- * pre-selected, so a one-colour/one-size product goes straight to Add to
- * cart. With two or more this returns null and lets them choose — guessing
- * would silently put the wrong size in the basket.
+ * them tap. When exactly one ORDERABLE size exists for the current colour
+ * it is pre-selected, so a one-size product goes straight to Add to cart.
+ * With two or more this returns null and lets them choose — guessing would
+ * silently put the wrong size in the basket.
  */
 function onlySizeFor(
   variants: PublicProductDetail["variants"],
   color: string | null
 ): string | null {
-  const options = sizesForColor(variants, color)
-  return options.length === 1 ? (options[0] ?? null) : null
+  const available = sizesForColor(variants, color).filter((option) => option.available)
+  return available.length === 1 ? (available[0]?.size ?? null) : null
 }
 
 /**
@@ -64,14 +65,28 @@ export function ProductDetail({
   const t = useTranslations()
   const cart = useCart()
 
-  const initialColor = product.colors[0] ?? null
+  const colorAvailable = useMemo(
+    () =>
+      Object.fromEntries(
+        product.colors.map((color) => [
+          color,
+          product.variants.some((v) => v.color === color && v.isAvailable),
+        ])
+      ),
+    [product.colors, product.variants]
+  )
+  const isOrderable =
+    product.variants.length === 0 || product.variants.some((v) => v.isAvailable)
+  // Open on a colour the customer can actually order, if there is one.
+  const initialColor =
+    product.colors.find((color) => colorAvailable[color]) ?? product.colors[0] ?? null
   const [selectedColor, setSelectedColor] = useState<string | null>(initialColor)
   const [selectedSize, setSelectedSize] = useState<string | null>(() =>
     onlySizeFor(product.variants, initialColor)
   )
   const [quantity, setQuantity] = useState(1)
 
-  const sizes = useMemo(
+  const sizeOptions = useMemo(
     () => sizesForColor(product.variants, selectedColor),
     [product.variants, selectedColor]
   )
@@ -87,6 +102,10 @@ export function ProductDetail({
     )
     if (product.variants.length > 0 && !variant) {
       toast.error(t("cart.selectVariant"))
+      return
+    }
+    if (variant && !variant.isAvailable) {
+      toast.error(t("shop.sizeUnavailable"))
       return
     }
     cart.addItem({
@@ -131,6 +150,12 @@ export function ProductDetail({
                   .join(" · ")}
               </p>
             )}
+            {(product.kind !== "single" || product.audience === "kids") && (
+              <div className="flex flex-wrap gap-1.5">
+                <KindBadge kind={product.kind} />
+                {product.audience === "kids" && <KidsBadge />}
+              </div>
+            )}
             <h1 className="text-h2 font-bold text-foreground">{product.productName}</h1>
             <p className="text-small text-muted-foreground">
               {t("shop.productCode")}: {product.productCode}
@@ -149,12 +174,17 @@ export function ProductDetail({
             {product.colors.length > 0 && selectedColor && (
               <ColorSelector
                 colors={product.colors}
-                stockByColor={Object.fromEntries(product.colors.map((color) => [color, true]))}
+                stockByColor={colorAvailable}
                 value={selectedColor}
                 onChange={handleColorChange}
               />
             )}
-            <SizeSelector sizes={sizes} value={selectedSize} onChange={setSelectedSize} />
+            <SizeSelector
+              options={sizeOptions}
+              value={selectedSize}
+              onChange={setSelectedSize}
+              audience={product.audience}
+            />
           </div>
           <div className="flex gap-3 border-t border-border pt-5">
             <Input
@@ -166,10 +196,17 @@ export function ProductDetail({
               aria-label={t("cart.quantity")}
               className="w-24"
             />
-            <Button size="lg" className="flex-1" onClick={addToCart}>
-              <ShoppingBag />
-              {t("cart.addToCart")}
-            </Button>
+            {isOrderable ? (
+              <Button size="lg" className="flex-1" onClick={addToCart}>
+                <ShoppingBag />
+                {t("cart.addToCart")}
+              </Button>
+            ) : (
+              <div className="flex flex-1 items-center justify-center gap-2 border border-dashed border-border text-body text-muted-foreground">
+                <UnavailableBadge />
+                {t("shop.unavailableBody")}
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -60,6 +60,21 @@ export const orderStatus = pgEnum("order_status", [
   "refund",
 ])
 
+/** Who a product is sized for — drives the size presets (src/lib/sizes.ts)
+ * and the storefront's Adults / Kids switch. Public. */
+export const productAudience = pgEnum("product_audience", ["adult", "kids"])
+
+/**
+ * Single item, a set, or a full set. `set`/`fullset` mint codes in their own
+ * series (`SET-001`, `FULL-001`) instead of the product type's prefix — see
+ * src/lib/product-code.ts. Public.
+ */
+export const productKind = pgEnum("product_kind", ["single", "set", "fullset"])
+
+/** One leg of a preorder's inbound journey: seller -> China warehouse,
+ * China -> Thailand (forwarder), then Thailand -> the shop. */
+export const preorderLeg = pgEnum("preorder_leg", ["cn_cn", "cn_th", "th_th"])
+
 export const customerOrderStage = pgEnum("customer_order_stage", [
   "received",
   "preparing",
@@ -183,6 +198,8 @@ export const products = pgTable(
     productCode: text("product_code").notNull(),
     productName: text("product_name").notNull(),
     productType: text("product_type"),
+    audience: productAudience("audience").notNull().default("adult"),
+    kind: productKind("kind").notNull().default("single"),
     description: text("description"),
     sellPrice: numeric("sell_price", { precision: 12, scale: 2 })
       .notNull()
@@ -217,6 +234,8 @@ export const products = pgTable(
     ),
     index("products_status_idx").on(table.status),
     index("products_product_type_idx").on(table.productType),
+    index("products_audience_idx").on(table.audience),
+    index("products_kind_idx").on(table.kind),
     index("products_created_at_idx").on(table.createdAt.desc()),
     check(
       "products_preorder_days_check",
@@ -261,8 +280,13 @@ export const productVariants = pgTable(
     /** "-" = a one-colour item (no real colour axis). */
     color: text("color").notNull().default("-"),
     size: text("size").notNull(),
-    /** Check (quantity >= 0) is added in 0001_init_extras.sql. */
-    quantity: integer("quantity").notNull().default(0),
+    /**
+     * The only "stock" a preorder shop keeps: can a customer order this
+     * colour x size right now? Toggled by hand in the product editor (or by
+     * import) — NEVER flipped by an order. Switching off keeps the row (and
+     * its id), so carts and order_items.productVariantId stay valid.
+     */
+    isAvailable: boolean("is_available").notNull().default(true),
     sku: text("sku"),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -297,6 +321,10 @@ export const productImages = pgTable(
       .references(() => products.id, { onDelete: "cascade" }),
     url: text("url").notNull(),
     storageKey: text("storage_key"),
+    /** Where an imported image was downloaded from, so re-importing the same
+     * sheet keeps the existing row instead of downloading it again. Null for
+     * images uploaded in the product editor. */
+    sourceUrl: text("source_url"),
     alt: text("alt"),
     color: text("color"),
     sortOrder: integer("sort_order").notNull().default(0),
@@ -317,6 +345,9 @@ export const orderItemStatuses = pgTable(
     isDefault: boolean("is_default").notNull().default(false),
     isReceived: boolean("is_received").notNull().default(false),
     isRefunded: boolean("is_refunded").notNull().default(false),
+    /** A line in this status is being bought from a supplier (1688, Taobao…),
+     * which reveals the order's Preorder shipments panel. */
+    isPreorder: boolean("is_preorder").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -412,9 +443,18 @@ export const orders = pgTable(
     advertisingCost: numeric("advertising_cost", { precision: 12, scale: 2 })
       .notNull()
       .default("0"),
-    shippingConfirmedAt: timestamp("shipping_confirmed_at", {
-      withTimezone: true,
-    }),
+    /** Customer-facing parcel carrier + tracking number. Intentionally
+     * public — shown on /track/[code] (see src/db/queries/track.ts). */
+    shippingCarrier: text("shipping_carrier"),
+    trackingNo: text("tracking_no"),
+    /** Trigger-maintained by recalc_preorder_shipping() — the sum of this
+     * order's preorder_shipments.cost. Never set directly. */
+    preorderShippingCost: numeric("preorder_shipping_cost", {
+      precision: 12,
+      scale: 2,
+    })
+      .notNull()
+      .default("0"),
     /** Trigger-maintained by recalc_order() — never set directly. */
     itemsTotal: numeric("items_total", { precision: 12, scale: 2 })
       .notNull()
@@ -423,7 +463,13 @@ export const orders = pgTable(
     itemsCost: numeric("items_cost", { precision: 12, scale: 2 })
       .notNull()
       .default("0"),
-    /** Generated column (itemsCost + shippingCost + packingCost + advertisingCost). */
+    /** Trigger-maintained by recalc_order() — Σ(masterCost × quantity), the
+     * catalogue cost the actual itemsCost is compared against. */
+    itemsMasterCost: numeric("items_master_cost", { precision: 12, scale: 2 })
+      .notNull()
+      .default("0"),
+    /** Generated column (itemsCost + shippingCost + preorderShippingCost +
+     * packingCost + advertisingCost). */
     totalCost: numeric("total_cost", { precision: 12, scale: 2 }),
     /** Net profit after product, shipping, packing, and advertising costs. */
     profit: numeric("profit", { precision: 12, scale: 2 }),
@@ -477,7 +523,14 @@ export const orderItems = pgTable(
     productType: text("product_type"),
     color: text("color"),
     size: text("size"),
+    /** ACTUAL cost price paid for this line — defaults to the master cost
+     * and is overridden by the owner when the supplier price differs. */
     productCost: numeric("product_cost", { precision: 12, scale: 2 })
+      .notNull()
+      .default("0"),
+    /** SNAPSHOT of products.originalPrice when the line was added. Never
+     * edited afterwards — it is the baseline productCost is compared to. */
+    masterCost: numeric("master_cost", { precision: 12, scale: 2 })
       .notNull()
       .default("0"),
     sellPrice: numeric("sell_price", { precision: 12, scale: 2 })
@@ -515,5 +568,45 @@ export const orderItems = pgTable(
   (table) => [
     index("order_items_order_id_idx").on(table.orderId),
     index("order_items_product_code_idx").on(table.productCode),
+  ]
+)
+
+// ---------------------------------------------------------------------------
+// preorderShipments — admin-only inbound tracking for a preorder: any number
+// of rows per ORDER LINE (each item may be a different lot), each on one leg (CN->CN, CN->TH, TH->TH) with its own
+// tracking number and cost. orders.preorderShippingCost is the trigger-kept
+// sum of `cost` (see drizzle/0005_preorder_extras.sql). NEVER selected by a
+// public query — /track shows only orders.shippingCarrier/trackingNo.
+// ---------------------------------------------------------------------------
+
+export const preorderShipments = pgTable(
+  "preorder_shipments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Kept alongside orderItemId so the cost trigger and every write can
+     * scope by order; the action verifies the item belongs to this order. */
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    /** The line item this parcel carries — preorders are bought per item
+     * (often different lots/sellers), so each line has its own legs.
+     * Removing the line removes its parcels. */
+    orderItemId: uuid("order_item_id")
+      .notNull()
+      .references(() => orderItems.id, { onDelete: "cascade" }),
+    leg: preorderLeg("leg").notNull(),
+    carrier: text("carrier"),
+    trackingNo: text("tracking_no"),
+    /** Check (cost >= 0) is added in 0005_preorder_extras.sql. */
+    cost: numeric("cost", { precision: 12, scale: 2 }).notNull().default("0"),
+    note: text("note"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("preorder_shipments_order_id_idx").on(table.orderId),
+    index("preorder_shipments_order_item_id_idx").on(table.orderItemId),
   ]
 )

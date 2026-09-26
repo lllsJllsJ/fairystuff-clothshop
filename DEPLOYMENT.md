@@ -57,6 +57,27 @@ It is idempotent (`drop ... if exists` / `create ... if not exists`
 throughout), so re-running it by hand against an already-migrated database
 (e.g. for debugging) is safe.
 
+The preorder redesign adds `0003`–`0008`, applied by the same
+`npm run db:migrate` with no manual step. Upgrading an existing database is
+safe and data-preserving:
+
+- every existing variant becomes **available** (`is_available = true`) —
+  the storefront already treated every variant as orderable — and the old
+  `quantity` column is dropped, along with `orders.shipping_confirmed_at`;
+- every existing order line's `master_cost` is backfilled from its
+  `product_cost`, and order totals are recomputed (figures don't change —
+  no order has preorder shipments yet);
+- `total_cost` / `profit` are regenerated to include the new
+  `preorder_shipping_cost`;
+- the `preorder_1688` / `preorder_taobao` item statuses are added, and the
+  "Accepted" label becomes "Paid" unless you had already renamed it;
+- preorder shipments are tracked per line item (`0006`–`0008`): any parcel
+  logged before that is attached to its order's first line item.
+
+Take a backup first on production as usual (`pg_dump`); on Railway, run
+`npm run db:migrate` once against the database before (or as part of) the
+deploy that ships this code.
+
 ## 3. Seed data
 
 ```bash

@@ -3,12 +3,13 @@ export type ProductColumnKey =
   | "code"
   | "name"
   | "type"
+  | "category"
   | "characters"
   | "preorder"
   | "sell_price"
   | "original_price"
   | "margin"
-  | "stock"
+  | "availability"
   | "status"
   | "actions"
 
@@ -18,12 +19,13 @@ export const ALL_COLUMNS: ProductColumnKey[] = [
   "code",
   "name",
   "type",
+  "category",
   "characters",
   "preorder",
   "sell_price",
   "original_price",
   "margin",
-  "stock",
+  "availability",
   "status",
   "actions",
 ]
@@ -42,12 +44,13 @@ export const COLUMN_LABEL_KEY: Record<ProductColumnKey, string> = {
   code: "product.code",
   name: "product.name",
   type: "product.type",
+  category: "product.category",
   characters: "product.characters",
   preorder: "product.preorderLeadTime",
   sell_price: "product.sellPrice",
   original_price: "product.originalPrice",
   margin: "product.margin",
-  stock: "product.stock",
+  availability: "product.availability",
   status: "product.status",
   actions: "common.actions",
 }
@@ -55,7 +58,7 @@ export const COLUMN_LABEL_KEY: Record<ProductColumnKey, string> = {
 // Versioned so a future column-set change can invalidate old stored
 // preferences without special-casing migration logic, matching
 // carstockpro's stock/columns.ts convention.
-const STORAGE_KEY = "clothshop.productColumns.v1"
+const STORAGE_KEY = "clothshop.productColumns.v2"
 
 /** Reads the persisted visible-column set; defaults to everything. */
 export function loadVisibleColumns(): Set<ProductColumnKey> {

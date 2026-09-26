@@ -5,12 +5,16 @@ import { useQueryClient } from "@tanstack/react-query"
 import { useTranslations } from "next-intl"
 import { toast } from "sonner"
 
-import type { OrderStatusValue } from "@/db/queries/orders"
+import { CircleDollarSign } from "lucide-react"
+
+import type { OrderStatusValue, PreorderShipmentRow } from "@/db/queries/orders"
 import type { OrderItemStatusDefinition } from "@/db/queries/settings"
 import { setOrderItemStatus, setOrderStatus } from "@/app/[locale]/admin/orders/actions"
 import { useRouter } from "@/i18n/navigation"
 import { Button } from "@/components/ui/button"
 import { SimpleSelect } from "@/components/ui/simple-select"
+import { OrderStatusBadge } from "@/components/orders/order-status-badge"
+import { ItemPreorderShipments, ShippingCostTotals } from "@/components/orders/preorder-shipments"
 
 type FulfillmentItem = {
   id: string
@@ -25,14 +29,20 @@ type FulfillmentItem = {
 export function OrderFulfillment({
   orderId,
   orderStatus,
+  orderStatusLabel,
   items,
   statuses,
+  shipments,
+  customerShippingCost,
   locale,
 }: {
   orderId: string
   orderStatus: OrderStatusValue
+  orderStatusLabel: string
   items: FulfillmentItem[]
   statuses: OrderItemStatusDefinition[]
+  shipments: PreorderShipmentRow[]
+  customerShippingCost: number
   locale: string
 }) {
   const t = useTranslations("order")
@@ -67,9 +77,17 @@ export function OrderFulfillment({
     router.refresh()
   }
 
-  async function moveToPackaging() {
+  // A line's shipments block appears once it's being bought from a supplier
+  // (a status flagged is_preorder: 1688, Taobao, …) — and stays if parcels
+  // were already logged, so switching the line back never hides data.
+  const shipmentsFor = (itemId: string) => shipments.filter((row) => row.orderItemId === itemId)
+  const showShipmentsFor = (item: FulfillmentItem) =>
+    shipmentsFor(item.id).length > 0 || !!statusMap.get(item.statusCode)?.isPreorder
+  const preorderShippingCost = shipments.reduce((sum, row) => sum + Number(row.cost), 0)
+
+  async function moveTo(status: "packaging" | "accepted") {
     setWorking("order")
-    const result = await setOrderStatus(orderId, "packaging")
+    const result = await setOrderStatus(orderId, status)
     setWorking(null)
     if (!result.ok) {
       toast.error(result.error === "items_pending" ? t("itemsPending") : t("fulfillmentFailed"))
@@ -87,12 +105,25 @@ export function OrderFulfillment({
     <section className="border border-border bg-card p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="font-bold">{t("fulfillment")}</h2>
+          <h2 className="flex flex-wrap items-center gap-2 font-bold">
+            {t("fulfillment")}
+            <span className="text-small font-normal">
+              <OrderStatusBadge status={orderStatus} label={orderStatusLabel} />
+            </span>
+          </h2>
           <p className="text-small text-muted-foreground">{t("fulfillmentHint")}</p>
         </div>
-        {allResolved && !["packaging", "shipping", "complete", "cancelled", "refund"].includes(orderStatus) && (
-          <Button onClick={moveToPackaging} disabled={working !== null}>{t("moveToPackaging")}</Button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {orderStatus === "new" && (
+            <Button variant="outline" onClick={() => moveTo("accepted")} disabled={working !== null}>
+              <CircleDollarSign />
+              {t("markAsPaid")}
+            </Button>
+          )}
+          {allResolved && !["packaging", "shipping", "complete", "cancelled", "refund"].includes(orderStatus) && (
+            <Button onClick={() => moveTo("packaging")} disabled={working !== null}>{t("moveToPackaging")}</Button>
+          )}
+        </div>
       </div>
 
       {allResolved && (
@@ -122,10 +153,26 @@ export function OrderFulfillment({
                   label: locale === "en" ? status.labelEn : status.labelTh,
                 }))}
               />
+              {showShipmentsFor(item) && (
+                <div className="sm:col-span-2">
+                  <ItemPreorderShipments
+                    orderId={orderId}
+                    orderItemId={item.id}
+                    shipments={shipmentsFor(item.id)}
+                  />
+                </div>
+              )}
             </div>
           )
         })}
       </div>
+
+      {(shipments.length > 0 || items.some(showShipmentsFor)) && (
+        <ShippingCostTotals
+          preorderShippingCost={preorderShippingCost}
+          customerShippingCost={customerShippingCost}
+        />
+      )}
     </section>
   )
 }

@@ -7,7 +7,7 @@ import { Loader2, SquareArrowOutUpRight, Trash2 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Link } from "@/i18n/navigation"
-import { formatBaht, formatNumber } from "@/lib/format"
+import { formatBaht } from "@/lib/format"
 import type { ProductStatusValue, ProductWithRelations } from "@/db/queries/products"
 import type { ProductInlineUpdateValues } from "@/lib/validations/product"
 import { deleteProduct, updateProductInline } from "@/app/[locale]/admin/products/actions"
@@ -16,7 +16,11 @@ import { Input } from "@/components/ui/input"
 import { TableCell, TableRow } from "@/components/ui/table"
 import { SimpleSelect } from "@/components/ui/simple-select"
 import { CreatableCombobox } from "@/components/ui/creatable-combobox"
-import { Badge } from "@/components/ui/badge"
+import {
+  AudienceBadge,
+  AvailabilitySummary,
+  KindBadge,
+} from "@/components/products/product-badges"
 import { ProductStatusBadge } from "@/components/products/product-admin-card"
 import type { ProductColumnKey } from "@/components/products/columns"
 
@@ -223,8 +227,6 @@ export function ProductRow({
     )
   }
 
-  const totalQuantity = product.variants.reduce((sum, v) => sum + v.quantity, 0)
-  const isSoldOut = product.variants.length > 0 && totalQuantity === 0
   const marginPreview = Number(draft.sellPrice || 0) - Number(draft.originalPrice || 0)
 
   return (
@@ -282,6 +284,15 @@ export function ProductRow({
         </TableCell>
       )}
 
+      {show("category") && (
+        <TableCell className="px-2">
+          <div className="flex flex-wrap items-center gap-1">
+            <AudienceBadge audience={product.audience} />
+            <KindBadge kind={product.kind} />
+          </div>
+        </TableCell>
+      )}
+
       {show("characters") && (
         <TableCell className="max-w-48 px-2 text-small text-muted-foreground">
           {product.characters.length > 0
@@ -329,13 +340,9 @@ export function ProductRow({
         </TableCell>
       )}
 
-      {show("stock") && (
-        <TableCell className="px-2 text-right tabular-nums">
-          {isSoldOut ? (
-            <Badge variant="destructive">{t("product.soldOut")}</Badge>
-          ) : (
-            formatNumber(totalQuantity)
-          )}
+      {show("availability") && (
+        <TableCell className="whitespace-nowrap px-2 text-right">
+          <AvailabilitySummary variants={product.variants} />
         </TableCell>
       )}
 

@@ -38,7 +38,7 @@ async function main() {
 
   const { replaceCatalog } = await import("../src/lib/catalog/import")
   const summary = await replaceCatalog(manifest)
-  console.log(`Imported ${summary.products} active products, ${summary.variants} variants at quantity 99, and ${summary.images} images.`)
+  console.log(`Imported ${summary.products} active products, ${summary.variants} available variants, and ${summary.images} images.`)
   console.log(`Uploaded ${summary.uploadedObjects} renditions; removed ${summary.removedOldImages} old image groups.`)
 }
 

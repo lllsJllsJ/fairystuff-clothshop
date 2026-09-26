@@ -3,306 +3,410 @@
 import { useMemo, useState } from "react"
 import { useTranslations } from "next-intl"
 import { toast } from "sonner"
-import { AlertTriangle, FileSpreadsheet, Loader2, Upload } from "lucide-react"
+import {
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+  Download,
+  FileSpreadsheet,
+  ImageIcon,
+  Loader2,
+  Upload,
+} from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { useRouter } from "@/i18n/navigation"
+import { Link } from "@/i18n/navigation"
 import { formatBaht } from "@/lib/format"
-import { parseProductWorkbook, type ParsedProductRow } from "@/lib/import/parse-products"
-import { importProducts, type ImportRowValues } from "@/app/[locale]/admin/products/import/actions"
+import { exportToExcel } from "@/lib/export"
+import {
+  createIssues,
+  parseProductWorkbook,
+  TEMPLATE_COLUMNS,
+  TEMPLATE_HEADERS,
+  type RowIssue,
+  type TemplateRow,
+} from "@/lib/import/product-template"
+import { IMPORT_CHUNK_SIZE, type ProductImportRow } from "@/lib/validations/product"
+import type { ProductImportIndexEntry } from "@/db/queries/products"
+import { importProductsChunk } from "@/app/[locale]/admin/products/import/actions"
+import type { ImportRowResult } from "@/lib/import/import-product"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
 
-/** Port of carstockpro's `car-import.tsx`: drop -> editable preview ->
- * confirm. Duplicate detection uses `getProductCodes()` (page-loaded, via
- * `existingCodes`) — the analogue of carstockpro's `getCarRegistrations()`
- * — but unlike that importer (which has no update path and would just
- * fail a duplicate registration on the DB's unique index), plan Risk 7
- * calls for a per-row update-or-skip choice on each duplicate, since a
- * clothing stock sheet is commonly re-imported to refresh a known
- * catalogue rather than only ever adding new codes. */
+/**
+ * Import flow: drop a sheet -> every row is classified in the preview ->
+ * import in small chunks with progress -> per-row results.
+ *
+ *   New                 no code: created, code generated on save
+ *   Will update         code exists: upsert (blank cells keep old values)
+ *   Code not found      code given but unknown: created with a NEW code
+ *   Duplicate in file   same code earlier in the sheet: skipped
+ *   Error               can't be imported as-is (reason shown)
+ *
+ * Updating a product never changes past orders — the preview says so next
+ * to every price change (see lib/import/import-product.ts).
+ */
 
-type DraftRow = ParsedProductRow & {
-  /** Only meaningful when the row's code is a duplicate — see the Switch
-   * rendered for duplicate rows below. Defaults to false (skip): an
-   * unreviewed duplicate must never silently overwrite existing data. */
-  updateExisting: boolean
+type RowStatus = "new" | "update" | "not_found" | "duplicate" | "error"
+
+type PreviewRow = {
+  row: TemplateRow
+  status: RowStatus
+  issues: RowIssue[]
+  existing?: ProductImportIndexEntry
 }
 
-function normalizeCode(value: string): string {
-  return value.trim().toLowerCase()
+const STATUS_STYLE: Record<RowStatus, string> = {
+  new: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200",
+  update: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200",
+  not_found: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
+  duplicate: "bg-muted text-muted-foreground",
+  error: "bg-destructive/10 text-destructive",
 }
 
-function variantSummary(variants: ParsedProductRow["variants"]): string {
-  if (variants.length === 0) return ""
-  return variants.map((v) => `${v.color} ${v.size}:${v.quantity}`).join(", ")
+function classify(rows: TemplateRow[], existing: Map<string, ProductImportIndexEntry>): PreviewRow[] {
+  const firstIndex = new Map<string, number>()
+  rows.forEach((row, index) => {
+    const code = row.productCode.toLowerCase()
+    if (code && !firstIndex.has(code)) firstIndex.set(code, index)
+  })
+
+  return rows.map((row, index) => {
+    const code = row.productCode.toLowerCase()
+    const match = code ? existing.get(code) : undefined
+    if (code && firstIndex.get(code) !== index) {
+      return { row, status: "duplicate", issues: [] }
+    }
+    const issues = [...row.issues, ...(match ? [] : createIssues(row))]
+    if (issues.length > 0) return { row, status: "error", issues, existing: match }
+    if (match) return { row, status: "update", issues, existing: match }
+    return { row, status: code ? "not_found" : "new", issues }
+  })
 }
 
-export function ProductImport({ existingCodes }: { existingCodes: string[] }) {
-  const t = useTranslations()
-  const router = useRouter()
+function toPayload(row: TemplateRow): ProductImportRow {
+  // `issues` is preview-only; everything else maps 1:1.
+  const { issues: _issues, ...rest } = row
+  void _issues
+  return rest
+}
 
-  const [rows, setRows] = useState<DraftRow[] | null>(null)
+export function ProductImport({ existing }: { existing: ProductImportIndexEntry[] }) {
+  const t = useTranslations("import")
+  const tProduct = useTranslations("product")
+
+  const [preview, setPreview] = useState<PreviewRow[] | null>(null)
   const [fileName, setFileName] = useState("")
-  const [importing, setImporting] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
+  const [results, setResults] = useState<ImportRowResult[] | null>(null)
 
-  const existing = useMemo(() => new Set(existingCodes.map(normalizeCode)), [existingCodes])
+  const existingByCode = useMemo(
+    () => new Map(existing.map((entry) => [entry.productCode.toLowerCase(), entry])),
+    [existing]
+  )
 
-  const included = rows?.filter((r) => r.include) ?? []
-  const skipped = (rows?.length ?? 0) - included.length
+  const counts = useMemo(() => {
+    const out: Record<RowStatus, number> = { new: 0, update: 0, not_found: 0, duplicate: 0, error: 0 }
+    for (const item of preview ?? []) out[item.status] += 1
+    return out
+  }, [preview])
 
-  async function handleFile(files: FileList | null) {
-    const file = files?.[0]
+  const importable = preview?.filter((item) => item.status !== "duplicate" && item.status !== "error") ?? []
+
+  async function handleFile(file: File | undefined) {
     if (!file) return
     setFileName(file.name)
-
-    const result = parseProductWorkbook(await file.arrayBuffer())
-    if (!result.ok) {
-      toast.error(result.error === "no_rows" ? t("import.noRows") : t("import.parseError"))
-      setRows(null)
+    setResults(null)
+    const parsed = parseProductWorkbook(await file.arrayBuffer())
+    if (!parsed.ok) {
+      setPreview(null)
+      toast.error(parsed.error === "no_rows" ? t("noRows") : t("parseError"))
       return
     }
-    setRows(result.rows.map((row) => ({ ...row, updateExisting: false })))
+    setPreview(classify(parsed.rows, existingByCode))
   }
 
-  function updateRow(key: string, patch: Partial<DraftRow>) {
-    setRows((prev) => prev?.map((r) => (r.key === key ? { ...r, ...patch } : r)) ?? prev)
-  }
-
-  async function handleImport() {
-    if (!included.length) return
-    setImporting(true)
-    try {
-      const payload: ImportRowValues[] = included.map((r) => ({
-        productCode: r.productCode,
-        productName: r.productName,
-        productType: r.productType,
-        sellPrice: r.sellPrice,
-        originalPrice: r.originalPrice,
-        buyingSource: r.buyingSource,
-        sourceLink: r.sourceLink,
-        variants: r.variants,
-        updateExisting: r.updateExisting,
-      }))
-      const result = await importProducts(payload)
-      if (!result.ok) {
-        toast.error(errorMessage(result.error))
-        return
+  async function runImport() {
+    const rows = importable.map((item) => toPayload(item.row))
+    const collected: ImportRowResult[] = []
+    setProgress({ done: 0, total: rows.length })
+    for (let i = 0; i < rows.length; i += IMPORT_CHUNK_SIZE) {
+      const chunk = rows.slice(i, i + IMPORT_CHUNK_SIZE)
+      try {
+        const result = await importProductsChunk(chunk)
+        if (result.ok) collected.push(...result.results)
+        else collected.push(...chunk.map((row) => ({ sourceRow: row.sourceRow, ok: false as const, error: result.error })))
+      } catch {
+        collected.push(...chunk.map((row) => ({ sourceRow: row.sourceRow, ok: false as const, error: "network" })))
       }
-      if (result.created > 0) toast.success(t("import.created", { count: result.created }))
-      if (result.updated > 0) toast.success(t("import.updated", { count: result.updated }))
-      router.push("/admin/products")
-      router.refresh()
-    } finally {
-      setImporting(false)
+      setProgress({ done: Math.min(i + chunk.length, rows.length), total: rows.length })
     }
+    setProgress(null)
+    setResults(collected)
+    const failed = collected.filter((r) => !r.ok).length
+    if (failed === 0) toast.success(t("doneToast", { count: collected.length }))
+    else toast.error(t("doneWithErrors", { failed }))
   }
 
-  function errorMessage(code: string): string {
-    if (code === "forbidden") return t("errors.forbidden")
-    if (code === "unauthorized") return t("errors.unauthorized")
-    if (code === "invalid") return t("errors.invalid")
-    return t("errors.generic")
+  function downloadTemplate() {
+    const blank = Object.fromEntries(TEMPLATE_COLUMNS.map((c) => [TEMPLATE_HEADERS[c], ""]))
+    exportToExcel("product-import-template", "Products", [
+      {
+        ...blank,
+        [TEMPLATE_HEADERS.productName]: "Bunny hoodie",
+        [TEMPLATE_HEADERS.audience]: "kids",
+        [TEMPLATE_HEADERS.kind]: "single",
+        [TEMPLATE_HEADERS.productType]: "Outerwear",
+        [TEMPLATE_HEADERS.colors]: "Pink, White",
+        [TEMPLATE_HEADERS.sizes]: "90cm, 100cm, 110cm",
+        [TEMPLATE_HEADERS.unavailable]: "White/110cm",
+        [TEMPLATE_HEADERS.sellPrice]: 490,
+        [TEMPLATE_HEADERS.originalPrice]: 220,
+        [TEMPLATE_HEADERS.status]: "active",
+        [TEMPLATE_HEADERS.imageUrls]: "https://example.com/front.jpg, https://example.com/back.jpg",
+      },
+    ])
   }
+
+  const issueLabel = (issue: RowIssue) => t(`issue.${issue}`)
+  const busy = progress !== null
 
   return (
-    <div className="space-y-5">
-      <section className="space-y-3 border border-border bg-card p-4">
-        <label className="flex cursor-pointer flex-col items-center justify-center gap-2 border border-dashed border-input px-4 py-8 text-body text-muted-foreground hover:bg-muted">
-          {fileName ? (
-            <>
-              <FileSpreadsheet className="size-6" />
-              <span className="font-medium text-foreground">{fileName}</span>
-              <span className="text-small">{t("import.selectFile")}</span>
-            </>
-          ) : (
-            <>
-              <Upload className="size-6" />
-              <span>{t("import.dropHint")}</span>
-            </>
-          )}
-          <input
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            className="hidden"
-            onChange={(e) => handleFile(e.target.files)}
-          />
-        </label>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 border border-border bg-card p-4">
+        <p className="text-small text-muted-foreground">{t("templateHelp")}</p>
+        <Button type="button" variant="outline" size="sm" onClick={downloadTemplate}>
+          <Download />
+          {t("downloadTemplate")}
+        </Button>
+      </div>
 
-        <div className="text-small text-muted-foreground">
-          <p className="font-bold">{t("import.columns")}</p>
-          <p className="mt-0.5">{t("import.columnsHelp")}</p>
-        </div>
-      </section>
+      <label
+        onDragOver={(e) => {
+          e.preventDefault()
+          setDragOver(true)
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault()
+          setDragOver(false)
+          void handleFile(e.dataTransfer.files[0])
+        }}
+        className={cn(
+          "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-input bg-card p-8 text-center transition-colors hover:border-primary focus-within:outline-2 focus-within:outline-primary",
+          dragOver && "border-primary bg-primary/5",
+          busy && "pointer-events-none opacity-60"
+        )}
+      >
+        {fileName ? <FileSpreadsheet className="size-8 text-primary" /> : <Upload className="size-8 text-muted-foreground" />}
+        <span className="text-body font-medium">{fileName || t("dropHint")}</span>
+        {fileName && <span className="text-small text-muted-foreground">{t("selectFile")}</span>}
+        <input
+          type="file"
+          accept=".xlsx,.xls,.csv"
+          className="sr-only"
+          onChange={(e) => {
+            void handleFile(e.target.files?.[0])
+            e.target.value = ""
+          }}
+        />
+      </label>
 
-      {rows && (
+      {preview && !results && (
         <>
-          <section className="space-y-1">
-            <h2 className="text-h4 font-bold text-foreground">{t("import.preview")}</h2>
-            <p className="text-small text-muted-foreground">
-              {t("import.rowsFound", { count: rows.length })}
-              {" · "}
-              {t("import.rowsReady", { count: included.length })}
-              {skipped > 0 && ` · ${t("import.rowsSkipped", { count: skipped })}`}
-            </p>
-          </section>
-
-          <div className="space-y-3">
-            {rows.map((row) => {
-              const duplicate =
-                row.productCode.length > 0 && existing.has(normalizeCode(row.productCode))
-
-              return (
+          <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border border-border bg-card/95 p-3 backdrop-blur">
+            {(Object.keys(counts) as RowStatus[])
+              .filter((status) => counts[status] > 0)
+              .map((status) => (
+                <span key={status} className={cn("rounded-full px-2.5 py-1 text-small font-medium", STATUS_STYLE[status])}>
+                  {t(`status.${status}`)} · {counts[status]}
+                </span>
+              ))}
+            <Button
+              type="button"
+              className="ml-auto"
+              disabled={busy || importable.length === 0}
+              onClick={runImport}
+            >
+              {busy ? <Loader2 className="animate-spin" /> : <ArrowRight />}
+              {busy
+                ? t("progress", { done: progress.done, total: progress.total })
+                : t("importCount", { count: importable.length })}
+            </Button>
+            {busy && (
+              <div className="h-1 w-full overflow-hidden rounded-full bg-muted" aria-hidden>
                 <div
-                  key={row.key}
-                  className={cn(
-                    "space-y-3 border border-border bg-card p-4",
-                    !row.include && "opacity-60"
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-small text-muted-foreground">
-                      {t("import.sourceRow")} {row.sourceRow}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <Label htmlFor={`inc-${row.key}`} className="text-small text-muted-foreground">
-                        {row.include ? t("import.includeRow") : t("import.skipRow")}
-                      </Label>
-                      <Switch
-                        id={`inc-${row.key}`}
-                        checked={row.include}
-                        onCheckedChange={(checked) => updateRow(row.key, { include: checked })}
-                      />
-                    </div>
-                  </div>
-
-                  {!row.productCode && <Warning message={t("import.noProductCode")} />}
-                  {duplicate && <Warning message={t("import.duplicate")} />}
-
-                  {duplicate && row.include && (
-                    <div className="flex items-center gap-2 bg-accent px-3 py-2">
-                      <Switch
-                        id={`upd-${row.key}`}
-                        checked={row.updateExisting}
-                        onCheckedChange={(checked) => updateRow(row.key, { updateExisting: checked })}
-                      />
-                      <Label htmlFor={`upd-${row.key}`} className="text-body">
-                        {row.updateExisting ? t("import.updateExisting") : t("import.skipExisting")}
-                      </Label>
-                    </div>
-                  )}
-
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <Cell label={t("product.code")}>
-                      <Input
-                        value={row.productCode}
-                        onChange={(e) => updateRow(row.key, { productCode: e.target.value })}
-                      />
-                    </Cell>
-                    <Cell label={t("product.name")}>
-                      <Input
-                        value={row.productName}
-                        onChange={(e) => updateRow(row.key, { productName: e.target.value })}
-                      />
-                    </Cell>
-                    <Cell label={t("product.type")}>
-                      <Input
-                        value={row.productType}
-                        onChange={(e) => updateRow(row.key, { productType: e.target.value })}
-                      />
-                    </Cell>
-                    <Cell label={t("product.sellPrice")}>
-                      <Input
-                        type="number"
-                        inputMode="decimal"
-                        value={row.sellPrice}
-                        onChange={(e) =>
-                          updateRow(row.key, { sellPrice: Number(e.target.value || 0) })
-                        }
-                      />
-                    </Cell>
-                    <Cell label={t("product.originalPrice")}>
-                      <Input
-                        type="number"
-                        inputMode="decimal"
-                        value={row.originalPrice}
-                        onChange={(e) =>
-                          updateRow(row.key, { originalPrice: Number(e.target.value || 0) })
-                        }
-                      />
-                    </Cell>
-                    <div className="flex items-end">
-                      <p className="text-small text-muted-foreground">
-                        {t("product.margin")}: {formatBaht(row.sellPrice - row.originalPrice)}
-                      </p>
-                    </div>
-                    <Cell label={t("product.buyingSource")}>
-                      <Input
-                        value={row.buyingSource}
-                        onChange={(e) => updateRow(row.key, { buyingSource: e.target.value })}
-                      />
-                    </Cell>
-                    <Cell label={t("product.sourceLink")}>
-                      <Input
-                        value={row.sourceLink}
-                        onChange={(e) => updateRow(row.key, { sourceLink: e.target.value })}
-                      />
-                    </Cell>
-                  </div>
-
-                  {row.variants.length > 0 && (
-                    <p className="text-small text-muted-foreground">
-                      {t("product.variantsTitle")}: {variantSummary(row.variants)}
-                    </p>
-                  )}
-                </div>
-              )
-            })}
+                  className="h-full bg-primary transition-transform"
+                  style={{ transform: `translateX(-${100 - (progress.done / Math.max(progress.total, 1)) * 100}%)` }}
+                />
+              </div>
+            )}
           </div>
 
-          <div className="sticky bottom-0 flex gap-3 border-t border-border bg-background/95 py-3 backdrop-blur">
-            <Button
-              type="button"
-              variant="outline"
-              size="lg"
-              className="flex-1"
-              onClick={() => router.back()}
-            >
-              {t("common.cancel")}
-            </Button>
-            <Button
-              type="button"
-              size="lg"
-              className="flex-1"
-              onClick={handleImport}
-              disabled={importing || included.length === 0}
-            >
-              {importing && <Loader2 className="animate-spin" />}
-              {importing ? t("import.importing") : t("import.confirm")}
-            </Button>
-          </div>
+          <ul className="space-y-2">
+            {preview.map((item) => (
+              <PreviewCard key={item.row.sourceRow} item={item} issueLabel={issueLabel} />
+            ))}
+          </ul>
         </>
+      )}
+
+      {results && (
+        <ResultsPanel
+          results={results}
+          onAgain={() => {
+            setResults(null)
+            setPreview(null)
+            setFileName("")
+          }}
+          productsLabel={tProduct("list")}
+        />
       )}
     </div>
   )
 }
 
-function Warning({ message }: { message: string }) {
+function PreviewCard({
+  item,
+  issueLabel,
+}: {
+  item: PreviewRow
+  issueLabel: (issue: RowIssue) => string
+}) {
+  const t = useTranslations("import")
+  const tProduct = useTranslations("product")
+  const { row, status, existing } = item
+
+  const sellChanged =
+    status === "update" && row.sellPrice !== undefined && existing && Number(existing.sellPrice) !== row.sellPrice
+  const costChanged =
+    status === "update" &&
+    row.originalPrice !== undefined &&
+    existing &&
+    Number(existing.originalPrice) !== row.originalPrice
+
+  const sizes = row.variants ? Array.from(new Set(row.variants.map((v) => v.size))) : []
+  const colors = row.variants ? Array.from(new Set(row.variants.map((v) => v.color))).filter((c) => c !== "-") : []
+  const off = row.variants?.filter((v) => !v.isAvailable).length ?? 0
+
   return (
-    <p className="flex items-center gap-1.5 text-small text-warning">
-      <AlertTriangle className="size-3.5 shrink-0" />
-      {message}
-    </p>
+    <li
+      className={cn(
+        "grid gap-2 border border-border bg-card p-3 sm:grid-cols-[auto_1fr_auto]",
+        (status === "duplicate" || status === "error") && "opacity-75"
+      )}
+    >
+      <div className="flex items-start gap-2 sm:flex-col">
+        <span className="text-small text-muted-foreground tabular-nums">
+          {t("sourceRow")} {row.sourceRow}
+        </span>
+        <span className={cn("rounded-full px-2 py-0.5 text-small font-medium whitespace-nowrap", STATUS_STYLE[status])}>
+          {t(`status.${status}`)}
+        </span>
+      </div>
+
+      <div className="min-w-0 space-y-1">
+        <p className="truncate text-body font-bold">
+          {row.productName ?? existing?.productName ?? "—"}
+          <span className="ml-2 font-mono text-small font-normal text-muted-foreground">
+            {status === "update" ? existing?.productCode : status === "new" || status === "not_found" ? t("codeOnSave") : row.productCode}
+          </span>
+        </p>
+        <p className="text-small text-muted-foreground">
+          {[
+            row.audience && (row.audience === "kids" ? tProduct("audienceKids") : tProduct("audienceAdult")),
+            row.kind && row.kind !== "single" && (row.kind === "set" ? tProduct("kindSet") : tProduct("kindFullset")),
+            row.productType,
+            colors.length > 0 && colors.join(", "),
+            sizes.length > 0 && sizes.join(", "),
+            off > 0 && t("offCount", { count: off }),
+          ]
+            .filter(Boolean)
+            .join(" · ") || t("noVariantChange")}
+        </p>
+
+        {(sellChanged || costChanged) && existing && (
+          <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-small">
+            {sellChanged && (
+              <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                {tProduct("sellPrice")} {formatBaht(Number(existing.sellPrice))} → {formatBaht(row.sellPrice!)}
+              </span>
+            )}
+            {costChanged && (
+              <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                {tProduct("originalPrice")} {formatBaht(Number(existing.originalPrice))} → {formatBaht(row.originalPrice!)}
+              </span>
+            )}
+            <span className="text-muted-foreground">{t("ordersUnaffected")}</span>
+          </p>
+        )}
+
+        {status === "not_found" && <p className="text-small text-amber-800 dark:text-amber-300">{t("notFoundHint", { code: row.productCode })}</p>}
+        {status === "duplicate" && <p className="text-small text-muted-foreground">{t("duplicateHint")}</p>}
+        {item.issues.length > 0 && (
+          <p className="flex items-start gap-1 text-small text-destructive">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+            {item.issues.map(issueLabel).join(" · ")}
+          </p>
+        )}
+      </div>
+
+      <div className="flex items-start gap-3 text-small sm:flex-col sm:items-end">
+        {row.sellPrice !== undefined && <span className="font-bold tabular-nums">{formatBaht(row.sellPrice)}</span>}
+        <span className="flex items-center gap-1 text-muted-foreground">
+          <ImageIcon className="size-3.5" />
+          {row.imageUrls === undefined ? t("imagesKept") : t("imageCount", { count: row.imageUrls.length })}
+        </span>
+      </div>
+    </li>
   )
 }
 
-function Cell({ label, children }: { label: string; children: React.ReactNode }) {
+function ResultsPanel({
+  results,
+  onAgain,
+  productsLabel,
+}: {
+  results: ImportRowResult[]
+  onAgain: () => void
+  productsLabel: string
+}) {
+  const t = useTranslations("import")
+  const created = results.filter((r) => r.ok && r.action === "created").length
+  const updated = results.filter((r) => r.ok && r.action === "updated").length
+  const failed = results.filter((r): r is Extract<ImportRowResult, { ok: false }> => !r.ok)
+  const imageWarnings = results.reduce((sum, r) => sum + (r.ok ? r.imageWarnings : 0), 0)
+
   return (
-    <div className="grid gap-1.5">
-      <Label className="text-small text-muted-foreground">{label}</Label>
-      {children}
-    </div>
+    <section className="space-y-3 border border-border bg-card p-4">
+      <h2 className="flex items-center gap-2 text-h4 font-bold">
+        <CheckCircle2 className="size-5 text-emerald-600" />
+        {t("resultsTitle")}
+      </h2>
+      <p className="text-body">
+        {t("created", { count: created })} · {t("updated", { count: updated })}
+        {failed.length > 0 && <> · <span className="text-destructive">{t("failed", { count: failed.length })}</span></>}
+      </p>
+      {imageWarnings > 0 && (
+        <p className="text-small text-amber-800 dark:text-amber-300">{t("imageWarnings", { count: imageWarnings })}</p>
+      )}
+      {failed.length > 0 && (
+        <ul className="space-y-1 text-small text-destructive">
+          {failed.map((r) => (
+            <li key={r.sourceRow}>
+              {t("sourceRow")} {r.sourceRow}: {t.has(`issue.${r.error}`) ? t(`issue.${r.error}`) : t("issue.write_failed")}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <Button render={<Link href="/admin/products" />} nativeButton={false}>
+          {productsLabel}
+        </Button>
+        <Button type="button" variant="outline" onClick={onAgain}>
+          {t("importAnother")}
+        </Button>
+      </div>
+    </section>
   )
 }

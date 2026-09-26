@@ -3,7 +3,7 @@
 import { and, eq, inArray } from "drizzle-orm"
 import { z } from "zod"
 
-import { db, txDb } from "@/db"
+import { db } from "@/db"
 import { orderItems, orderItemStatuses, orderStatus, orders } from "@/db/schema"
 import { getCurrentUser } from "@/lib/auth-helpers"
 import { isUniqueViolation } from "@/lib/db-errors"
@@ -60,19 +60,19 @@ import { revalidateOrders } from "./revalidate"
  * drizzle/0001_init_extras.sql). Postgres rejects a write that names them
  * (23P05). `orders.itemsTotal`/`orders.itemsCost` are instead
  * trigger-maintained by `recalc_order()`, firing automatically on every
- * `order_items` insert/update/delete — never set them directly either.
+ * `order_items` insert/update/delete — never set them directly either. The
+ * same goes for `orders.itemsMasterCost` (also `recalc_order()`) and
+ * `orders.preorderShippingCost` (`recalc_preorder_shipping()`, fired by
+ * `preorder_shipments` writes — see shipment-actions.ts).
  * None of the writes below ever touch any of these six columns.
  *
  * ---------------------------------------------------------------------
- * MANUAL STOCK — DELIBERATE, do not "fix" this
+ * AVAILABILITY IS MANUAL — DELIBERATE, do not "fix" this
  * ---------------------------------------------------------------------
- * Neither `createOrder` nor `updateOrder` ever decrements
- * `productVariants.quantity`. Orders and stock are independent ledgers by
- * design (see schema.ts's comment on `productVariants` and plan §4/§15) —
- * the owner adjusts quantities by hand in the product editor after
- * checking physical stock. Adding a decrement here would silently start
- * lying about stock the moment a cancelled/edited order didn't reverse
- * cleanly. Do not add one.
+ * This is a preorder shop with no stock count. Nothing here ever touches
+ * `productVariants.isAvailable` — the owner switches a size on/off by hand
+ * in the product editor. Orders and availability are independent by
+ * design; do not add an order-driven toggle.
  */
 
 export type OrderResult = { ok: true; id: string } | { ok: false; error: string }
@@ -96,6 +96,12 @@ function toMoney(value: number): string {
   return value.toFixed(2)
 }
 
+/**
+ * Line-item rows for insert. For a RETAINED row on update, use
+ * `toItemUpdate` instead — it leaves `statusCode` out, because the
+ * fulfillment panel owns item status and the form's copy may be stale (the
+ * owner can change a status there after the form loaded).
+ */
 function toItemRows(items: OrderFormValues["items"], orderId: string) {
   return items.map((item, i) => ({
     orderId,
@@ -107,6 +113,7 @@ function toItemRows(items: OrderFormValues["items"], orderId: string) {
     color: toNullable(item.color),
     size: toNullable(item.size),
     productCost: toMoney(Number(item.productCost)),
+    masterCost: toMoney(Number(item.masterCost ?? item.productCost)),
     sellPrice: toMoney(Number(item.sellPrice)),
     // Lead-time snapshot — set by the product picker (order-line-row.tsx),
     // carried through untouched; both null is normal for a non-preorder item.
@@ -142,7 +149,7 @@ export async function createOrder(values: OrderFormValues): Promise<OrderResult>
   let insertedId: string | null = null
   for (let attempt = 0; attempt < MAX_PREORDER_CODE_ATTEMPTS && insertedId === null; attempt += 1) {
   try {
-    insertedId = await txDb().transaction(async (tx) => {
+    insertedId = await db.transaction(async (tx) => {
       const [row] = await tx
         .insert(orders)
         .values({
@@ -154,7 +161,8 @@ export async function createOrder(values: OrderFormValues): Promise<OrderResult>
           shippingCost: toMoney(v.shippingCost),
           packingCost: toMoney(v.packingCost),
           advertisingCost: toMoney(v.advertisingCost),
-          shippingConfirmedAt: v.shippingConfirmed ? new Date() : null,
+          shippingCarrier: toNullable(v.shippingCarrier),
+          trackingNo: toNullable(v.trackingNo),
           status: v.status,
           refundReason: v.status === "refund" ? toNullable(v.refundReason) : null,
           refundedAt: v.status === "refund" ? new Date() : null,
@@ -194,15 +202,11 @@ export async function updateOrder(id: string, values: OrderFormValues): Promise<
   if (!parsed.success) return { ok: false, error: "invalid" }
   const v = parsed.data
   if (v.status === "refund" && !toNullable(v.refundReason)) return { ok: false, error: "reason_required" }
-  if (v.status === "packaging" && !(await submittedItemsResolved(v.items))) return { ok: false, error: "items_pending" }
 
   try {
-    await txDb().transaction(async (tx) => {
+    await db.transaction(async (tx) => {
       const [currentOrder] = await tx
-        .select({
-          shippingConfirmedAt: orders.shippingConfirmedAt,
-          refundedAt: orders.refundedAt,
-        })
+        .select({ refundedAt: orders.refundedAt })
         .from(orders)
         .where(eq(orders.id, id))
         .limit(1)
@@ -218,9 +222,8 @@ export async function updateOrder(id: string, values: OrderFormValues): Promise<
           shippingCost: toMoney(v.shippingCost),
           packingCost: toMoney(v.packingCost),
           advertisingCost: toMoney(v.advertisingCost),
-          shippingConfirmedAt: v.shippingConfirmed
-            ? (currentOrder.shippingConfirmedAt ?? new Date())
-            : null,
+          shippingCarrier: toNullable(v.shippingCarrier),
+          trackingNo: toNullable(v.trackingNo),
           status: v.status,
           ...(v.status === "refund" ? {
             refundReason: toNullable(v.refundReason),
@@ -247,15 +250,34 @@ export async function updateOrder(id: string, values: OrderFormValues): Promise<
         const item = v.items[index]
         const row = rows[index]
         if (item.id) {
-          await tx.update(orderItems).set(row).where(and(eq(orderItems.id, item.id), eq(orderItems.orderId, id)))
+          // statusCode deliberately omitted — see toItemRows' comment.
+          const { statusCode: _statusCode, ...retained } = row
+          void _statusCode
+          await tx.update(orderItems).set(retained).where(and(eq(orderItems.id, item.id), eq(orderItems.orderId, id)))
         } else {
           await tx.insert(orderItems).values(row)
+        }
+      }
+
+      // Packaging needs every line received or refunded — judged from the
+      // SAVED statuses (the form doesn't own them), after the item writes.
+      if (v.status === "packaging") {
+        const states = await tx
+          .select({ isReceived: orderItemStatuses.isReceived, isRefunded: orderItemStatuses.isRefunded })
+          .from(orderItems)
+          .leftJoin(orderItemStatuses, eq(orderItems.statusCode, orderItemStatuses.code))
+          .where(eq(orderItems.orderId, id))
+        if (!states.length || states.some((state) => !state.isReceived && !state.isRefunded)) {
+          throw new Error("items_pending")
         }
       }
     })
   } catch (error) {
     if (error instanceof Error && error.message === "not_found") {
       return { ok: false, error: "not_found" }
+    }
+    if (error instanceof Error && error.message === "items_pending") {
+      return { ok: false, error: "items_pending" }
     }
     console.error("updateOrder failed", error)
     return { ok: false, error: "update_failed" }

@@ -51,15 +51,15 @@ export default async function AdminDashboardPage({
           tone="primary"
         />
         <KpiCard
-          label={t("dashboard.readyToShipSkus")}
-          value={formatNumber(data.readyToShipSkus)}
+          label={t("dashboard.availableVariants")}
+          value={formatNumber(data.availableVariantCount)}
           icon={PackageCheck}
         />
         <KpiCard
-          label={t("dashboard.soldOutSkus")}
-          value={formatNumber(data.soldOutVariantCount)}
+          label={t("dashboard.unavailableVariants")}
+          value={formatNumber(data.unavailableVariantCount)}
           icon={PackageX}
-          tone={data.soldOutVariantCount > 0 ? "warning" : "default"}
+          tone={data.unavailableVariantCount > 0 ? "warning" : "default"}
         />
         <KpiCard
           label={t("dashboard.totalOrders")}

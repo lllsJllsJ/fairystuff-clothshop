@@ -19,6 +19,8 @@ import type { OrderWithItems } from "@/db/queries/orders"
 import type { ProductType } from "@/db/queries/product-types"
 import type { OrderStatusLabel } from "@/db/queries/settings"
 import { DEFAULT_ADMIN_STATUS_LABELS } from "@/lib/order-status"
+import { CARRIER_NAMES } from "@/lib/carriers"
+import { CreatableCombobox } from "@/components/ui/creatable-combobox"
 import { createOrder, updateOrder } from "@/app/[locale]/admin/orders/actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -41,6 +43,7 @@ const BLANK_ITEM: OrderItemValues = {
   color: "",
   size: "",
   productCost: 0,
+  masterCost: 0,
   sellPrice: 0,
   preorderMinDays: null,
   preorderMaxDays: null,
@@ -87,7 +90,8 @@ export function OrderForm({
       packingCost: order ? Number(order.packingCost) : 0,
       advertisingCost: order ? Number(order.advertisingCost) : 0,
       status: order?.status ?? "new",
-      shippingConfirmed: !!order?.shippingConfirmedAt,
+      shippingCarrier: order?.shippingCarrier ?? "",
+      trackingNo: order?.trackingNo ?? "",
       refundReason: order?.refundReason ?? "",
       note: order?.note ?? "",
       items:
@@ -102,6 +106,7 @@ export function OrderForm({
               color: item.color ?? "",
               size: item.size ?? "",
               productCost: Number(item.productCost),
+              masterCost: Number(item.masterCost),
               sellPrice: Number(item.sellPrice),
               preorderMinDays: item.preorderMinDays,
               preorderMaxDays: item.preorderMaxDays,
@@ -124,6 +129,7 @@ export function OrderForm({
   const shippingCost = watch("shippingCost")
   const packingCost = watch("packingCost")
   const advertisingCost = watch("advertisingCost")
+  const shippingCarrier = watch("shippingCarrier") ?? ""
 
   function addLine() {
     append(BLANK_ITEM)
@@ -206,10 +212,19 @@ export function OrderForm({
         <Field label={t("order.shippingCost")}>
           <Input type="number" inputMode="decimal" step="0.01" min={0} {...register("shippingCost")} />
         </Field>
-        <label className="flex min-h-11 items-center gap-2 self-end pb-2 text-body">
-          <input type="checkbox" className="size-5" {...register("shippingConfirmed")} />
-          {t("order.shippingConfirmed")}
-        </label>
+        {/* Customer parcel — shown to the customer on /track/<code>. */}
+        <Field label={t("order.shippingCarrier")}>
+          <CreatableCombobox
+            value={shippingCarrier}
+            onValueChange={(v) => setValue("shippingCarrier", v, { shouldDirty: true })}
+            options={[...CARRIER_NAMES]}
+            placeholder={t("order.shippingCarrierPlaceholder")}
+            createLabel={(q) => t("product.addOption", { value: q })}
+          />
+        </Field>
+        <Field label={t("order.trackingNo")} hint={t("order.trackingNoHint")}>
+          <Input className="font-mono" maxLength={80} {...register("trackingNo")} />
+        </Field>
         <Field label={t("order.packingCost")}>
           <Input type="number" inputMode="decimal" step="0.01" min={0} {...register("packingCost")} />
         </Field>
@@ -285,6 +300,7 @@ export function OrderForm({
         shippingCost={Number(shippingCost || 0)}
         packingCost={Number(packingCost || 0)}
         advertisingCost={Number(advertisingCost || 0)}
+        preorderShippingCost={Number(order?.preorderShippingCost ?? 0)}
       />
 
       <div className="flex gap-3">

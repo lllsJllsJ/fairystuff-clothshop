@@ -309,6 +309,7 @@ function ItemStatusesSection({
             badges={[
               status.isDefault ? t("defaultStatus") : null,
               status.isReceived ? "received" : null,
+              status.isPreorder ? t("preorderFlag") : null,
               status.isRefunded ? "refunded" : null,
               status.isActive ? "active" : null,
             ]}
@@ -352,6 +353,7 @@ type ItemStatusValues = {
   labelEn: string
   isReceived: boolean
   isRefunded: boolean
+  isPreorder: boolean
   isActive: boolean
 }
 
@@ -372,6 +374,7 @@ function ItemStatusDialog({
   const [en, setEn] = useState(initial?.labelEn ?? "")
   const [received, setReceived] = useState(initial?.isReceived ?? false)
   const [refunded, setRefunded] = useState(initial?.isRefunded ?? false)
+  const [preorder, setPreorder] = useState(initial?.isPreorder ?? false)
   const [active, setActive] = useState(initial?.isActive ?? true)
 
   return (
@@ -382,7 +385,7 @@ function ItemStatusDialog({
       submitLabel={t("save")}
       canSubmit={code.trim().length > 0 && th.trim().length > 0 && en.trim().length > 0}
       onSubmit={() =>
-        onSubmit({ code, labelTh: th, labelEn: en, isReceived: received, isRefunded: refunded, isActive: active })
+        onSubmit({ code, labelTh: th, labelEn: en, isReceived: received, isRefunded: refunded, isPreorder: preorder, isActive: active })
       }
     >
       <DialogField label="code">
@@ -401,6 +404,7 @@ function ItemStatusDialog({
       <div className="grid gap-1">
         <CheckboxRow label="received" checked={received} onChange={setReceived} />
         <CheckboxRow label="refunded" checked={refunded} onChange={setRefunded} />
+        <CheckboxRow label={t("preorderFlagHint")} checked={preorder} onChange={setPreorder} />
         <CheckboxRow label="active" checked={active} onChange={setActive} />
       </div>
     </SettingsFormDialog>

@@ -10,6 +10,7 @@ import {
   products,
   productVariants,
 } from "@/db/schema"
+import type { ProductAudience, ProductKind } from "@/lib/product-taxonomy"
 
 /**
  * ============================================================================
@@ -28,10 +29,10 @@ import {
  * from `queries/products.ts`) into a component that renders on `/` or
  * `/shop`.
  *
- * DO NOT add: originalPrice, buyingSource, sourceLink, margin, or any
- * `product_variants.quantity` value (exact stock depth) to anything
- * exported from this file. Every active variant remains preorderable;
- * stock is an admin-only operational field.
+ * DO NOT add: originalPrice, buyingSource, sourceLink, or margin to
+ * anything exported from this file. `audience`, `kind`, and a variant's
+ * `isAvailable` ARE public by design — they're what the customer filters
+ * and picks by (a switched-off size shows struck through, not hidden).
  *
  * Why this matters more here than it would in a typical app: a Server
  * Component that fetches a full product row and hands it to a client
@@ -46,6 +47,8 @@ export const PUBLIC_PRODUCT_COLUMNS = {
   id: products.id,
   productCode: products.productCode,
   productName: products.productName,
+  audience: products.audience,
+  kind: products.kind,
   description: products.description,
   sellPrice: products.sellPrice,
   createdAt: products.createdAt,
@@ -55,6 +58,8 @@ type BasePublicProduct = {
   id: string
   productCode: string
   productName: string
+  audience: ProductAudience
+  kind: ProductKind
   description: string | null
   sellPrice: string
   createdAt: Date
@@ -65,6 +70,8 @@ export type PublicProductSummary = BasePublicProduct & {
   coverImageUrl: string | null
   /** Distinct variant colours, "-" (the one-colour sentinel) excluded. */
   colors: string[]
+  /** False when every size has been switched off — shown as unavailable. */
+  isOrderable: boolean
   characters: PublicCharacter[]
 }
 
@@ -72,6 +79,8 @@ export type PublicProductVariant = {
   id: string
   color: string
   size: string
+  /** Off = shown struck through and not selectable. */
+  isAvailable: boolean
   sortOrder: number
 }
 
@@ -94,9 +103,14 @@ export type PublicProductDetail = BasePublicProduct & {
 
 export type PublicSort = "newest" | "price_asc" | "price_desc"
 
+/** `sets` = set OR full set — the storefront's single "Sets" toggle. */
+export type PublicKindFilter = ProductKind | "sets"
+
 export type PublicProductListParams = {
   search?: string
   character?: string
+  audience?: ProductAudience
+  kind?: PublicKindFilter
   color?: string
   size?: string
   minPrice?: number
@@ -151,6 +165,13 @@ function activeProductFilters(params: PublicProductListParams) {
     )
   }
 
+  if (params.audience) conditions.push(eq(products.audience, params.audience))
+  if (params.kind === "sets") {
+    conditions.push(inArray(products.kind, ["set", "fullset"]))
+  } else if (params.kind) {
+    conditions.push(eq(products.kind, params.kind))
+  }
+
   if (params.minPrice != null) {
     conditions.push(gte(products.sellPrice, String(params.minPrice)))
   }
@@ -167,7 +188,8 @@ function activeProductFilters(params: PublicProductListParams) {
           .where(
             and(
               eq(productVariants.productId, products.id),
-              eq(productVariants.color, params.color)
+              eq(productVariants.color, params.color),
+              eq(productVariants.isAvailable, true)
             )
           )
       )
@@ -183,7 +205,8 @@ function activeProductFilters(params: PublicProductListParams) {
           .where(
             and(
               eq(productVariants.productId, products.id),
-              eq(productVariants.size, params.size)
+              eq(productVariants.size, params.size),
+              eq(productVariants.isAvailable, true)
             )
           )
       )
@@ -259,6 +282,7 @@ async function attachSummaryRelations(
       .select({
         productId: productVariants.productId,
         color: productVariants.color,
+        isAvailable: productVariants.isAvailable,
       })
       .from(productVariants)
       .where(inArray(productVariants.productId, ids)),
@@ -296,6 +320,7 @@ async function attachSummaryRelations(
       ...row,
       coverImageUrl: images[0]?.url ?? null,
       colors: distinctColors(variants.map((v) => v.color)),
+      isOrderable: variants.length === 0 || variants.some((v) => v.isAvailable),
       characters: (charactersByProduct.get(row.id) ?? []).map((character) => ({
         id: character.id,
         slug: character.slug,
@@ -351,6 +376,7 @@ export async function getPublicProductByCode(
         id: productVariants.id,
         color: productVariants.color,
         size: productVariants.size,
+        isAvailable: productVariants.isAvailable,
         sortOrder: productVariants.sortOrder,
       })
       .from(productVariants)
@@ -384,6 +410,7 @@ export async function getPublicProductByCode(
     id: v.id,
     color: v.color,
     size: v.size,
+    isAvailable: v.isAvailable,
     sortOrder: v.sortOrder,
   }))
 

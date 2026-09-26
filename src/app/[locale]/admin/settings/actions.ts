@@ -14,6 +14,7 @@ import { clearAllData } from "@/lib/shop-data"
 
 import { revalidateOrders } from "../orders/revalidate"
 import { revalidateSettings } from "./revalidate"
+import { RESERVED_CODE_PREFIXES } from "@/lib/product-taxonomy"
 
 /**
  * `getProductTypes()` (src/db/queries/product-types.ts) is read-only per
@@ -65,6 +66,8 @@ const codePrefixSchema = z
   .trim()
   .max(6)
   .transform((value) => value.toUpperCase().replace(/[^A-Z0-9]/g, ""))
+  // SET / FULL are the set and full-set code series (src/lib/product-taxonomy.ts).
+  .refine((value) => !RESERVED_CODE_PREFIXES.has(value), "reserved")
 
 export type ActionResult = { ok: true; id?: string } | { ok: false; error: string }
 export type DeleteTypeResult =

@@ -27,8 +27,9 @@ reference.
   theoretical one.** A Server Component that fetches a full product row
   (e.g. via the admin-only `queries/products.ts`) and hands it to a client
   component serializes **every field into the RSC payload** — including
-  `originalPrice`, `buyingSource`, `sourceLink`, `margin`, and exact variant
-  `quantity`, even for fields the JSX never renders. Clean-looking HTML is
+  `originalPrice`, `buyingSource`, `sourceLink`, and `margin`, even for
+  fields the JSX never renders. (`audience`, `kind`, and a variant's
+  `isAvailable` ARE public by design — customers filter and pick by them.) Clean-looking HTML is
   not proof the page is safe. The structural defense is
   `src/db/queries/storefront.ts`'s `PUBLIC_PRODUCT_COLUMNS` — every public
   read (storefront pages, `GET /api/products`) must derive its select list
@@ -53,7 +54,11 @@ reference.
   reason the preorder code is random rather than sequential. Never spread
   `orders.*`/`orderItems.*` here, and never pass an admin-fetched order row
   (e.g. from `queries/orders.ts`) into anything that renders under
-  `/track`. `docs/health-check.md`'s check 6 is the standing curl-based leak
+  `/track`. The customer's own parcel (`shippingCarrier`, `trackingNo`) IS
+  public; the preorder's inbound legs (`preorder_shipments` — per LINE ITEM,
+  CN→CN, CN→TH, TH→TH tracking numbers and costs), `masterCost`, `itemsMasterCost`, and
+  `preorderShippingCost` are NOT and must never be selected here.
+  `docs/health-check.md`'s check 6 is the standing curl-based leak
   test for this route — re-run it after touching `queries/track.ts` or the
   track page components.
 
@@ -113,16 +118,26 @@ reference.
 
 ## Domain invariants (do not "fix" these)
 
-- **Manual stock is deliberate — never add an order→stock decrement
-  trigger.** `productVariants.quantity` and orders are independent ledgers
-  by design (see the comment on `productVariants` in `src/db/schema.ts`).
-  The owner adjusts quantities by hand after checking physical stock.
-  Wiring a decrement on order creation would silently start lying about
-  stock the moment a cancelled or edited order didn't reverse cleanly.
+- **This is a preorder shop: there is no stock count, only availability —
+  and it is manual.** `productVariants.isAvailable` (the `quantity` column
+  was dropped in `drizzle/0004`) is switched on/off by the owner in the
+  product editor or by import; nothing ever flips it from an order. Turning
+  a size OFF keeps the variant row and its id (carts and
+  `orderItems.productVariantId` point at it) — only deselecting a whole size
+  or removing a colour deletes rows. The storefront shows an off size
+  struck through (not hidden) and checkout rejects it as `cart_changed`.
+- **Import never rewrites order history.** `src/lib/import/import-product.ts`
+  upserts `products`/`product_variants`/`product_images` only, one row per
+  transaction; variants are upserted in place on `(product, colour, size)`
+  (a size missing from the sheet is switched off, never deleted), the code
+  is never changed, and a BLANK cell on an existing product means "keep".
+  A price change therefore affects only future orders — `scripts/
+  schema-smoke-test.sql` check 5b pins this.
 - **Order lines are snapshots — reports group on `orderItems.productCode`,
   never `productId`.** `orderItems.productId` is `ON DELETE SET NULL`
   (a soft link for reporting convenience only); `productCode`, `productName`,
-  `productType`, `color`, `size`, `productCost`, and `sellPrice` are all
+  `productType`, `color`, `size`, `productCost`, `masterCost`, and
+  `sellPrice` are all
   copied onto the line item at order time so a later product edit — or a
   product delete — never rewrites history. `src/db/queries/reports.ts`'s
   `profitByProduct` groups on the snapshotted `productCode` specifically so
@@ -136,8 +151,27 @@ reference.
   `orders.itemsTotal`/`itemsCost` are **trigger-maintained** (not generated —
   a stored generated column can't reference another generated column, and
   `totalCost`/`profit` need to read from these), recomputed by
-  `recalc_order()` on every `order_items` insert/update/delete. Never set
-  any of these six columns directly from a Server Action.
+  `recalc_order()` on every `order_items` insert/update/delete — as is
+  `orders.itemsMasterCost` (Σ `masterCost × quantity`). And
+  `orders.preorderShippingCost` is kept = Σ `preorder_shipments.cost` by
+  `recalc_preorder_shipping()`'s trigger (`drizzle/0005_preorder_extras.sql`,
+  which also regenerated `totalCost`/`profit` to include it). Never set any
+  of these columns directly from a Server Action.
+- **Actual vs master cost on order lines.** `orderItems.productCost` is the
+  ACTUAL cost price (the owner overrides it per preorder line; the order
+  form highlights it) and `orderItems.masterCost` is the catalogue
+  `originalPrice` snapshotted when the line was added — set only by the
+  product picker / checkout, never shown as an input. Cost, profit, and
+  reports use the actual; the master is the baseline for the variance.
+- **Order status `accepted` means PAID.** The enum value was kept (a pg
+  enum rename through drizzle-kit is risky); every label says "Paid" /
+  "ชำระเงินแล้ว". Don't reintroduce "Accepted" copy.
+- **The admin order form is remounted when the order changes.**
+  `admin/orders/[id]/page.tsx` keys `OrderForm` on `order.updatedAt`: the
+  fulfillment panel (Mark as paid, item status, preorder shipments) writes
+  the order directly, and react-hook-form never re-reads defaultValues — a
+  stale form would revert those on Save. `updateOrder` also never writes a
+  retained line's `statusCode` (the fulfillment panel owns it).
 - **`db.transaction()` works. `txDb()` is a deprecated alias for `db`, not a
   separate client — don't reach for it in new code.** `src/db/index.ts` now
   wraps a single pooled `node-postgres` client (`pg.Pool` +
@@ -177,7 +211,12 @@ reference.
 - **Product codes are server-generated and immutable.** The form's code
   input is read-only and `createProduct` ignores whatever the client sends —
   it mints the code itself inside its own transaction via
-  `src/lib/product-code.ts` (`<product_types.code_prefix>-<NNN>`). Neither
+  `src/lib/product-code.ts` (`<product_types.code_prefix>-<NNN>` for a
+  single item; sets and full sets use their own series, `SET-<NNN>` /
+  `FULL-<NNN>`, whatever their type — those two prefixes are reserved and no
+  product type may claim them). Import mints codes the same way — a code
+  in the sheet only ever MATCHES an existing product, never creates one
+  under that code. Neither
   `updateProduct` nor `updateProductInline` writes `productCode` at all, even
   when the product's type changes: the code is the storefront URL
   (`/shop/<code>`) and the key every order line snapshotted. The next number
@@ -203,8 +242,9 @@ reference.
   (bounded at 3 attempts) — a unique-violation aborts the transaction
   outright, so the retry can never reuse the same `tx`.
 - **Cover photo = `sortOrder` 0.** No separate "is cover" flag — whichever
-  `productImages` row has `sortOrder = 0` is the cover, full stop. Setting a
-  cover means reordering, not flagging.
+  `productImages` row has `sortOrder = 0` is the cover ("Main photo" in the
+  editor), full stop. Setting a main photo means reordering, not flagging.
+  Import treats the FIRST URL in a row's image cell as the main photo.
 - **The pre-row UUID upload trick.** `ProductForm` generates the product's
   `id` client-side (`crypto.randomUUID()`) *before* the product row exists,
   so image uploads can start immediately under `products/<id>/...` in R2

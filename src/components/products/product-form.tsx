@@ -1,18 +1,15 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import Image from "next/image"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslations } from "next-intl"
 import { toast } from "sonner"
-import { Loader2, Star, Upload, X } from "lucide-react"
+import { Loader2 } from "lucide-react"
 
-import { cn } from "@/lib/utils"
 import { useRouter } from "@/i18n/navigation"
 import { formatBaht } from "@/lib/format"
-import { buildProductImageKey, resizeProductImage } from "@/lib/image-resize"
-import { productImageUrl } from "@/lib/product-image-keys"
+import type { ProductAudience, ProductKind } from "@/lib/product-taxonomy"
 import {
   productFormSchema,
   type ProductFormValues,
@@ -33,69 +30,16 @@ import { Textarea } from "@/components/ui/textarea"
 import { SimpleSelect } from "@/components/ui/simple-select"
 import { CreatableCombobox } from "@/components/ui/creatable-combobox"
 import { VariantRowsEditor } from "@/components/products/variant-rows-editor"
+import { SegmentedControl } from "@/components/ui/segmented-control"
+import {
+  ProductImageGallery,
+  type PreviewImage,
+} from "@/components/products/product-image-gallery"
 
-/** Port of carstockpro's `car-form.tsx`, wholesale where the mechanism is
- * identical (pre-row UUID upload, cover-photo star, new/existing image
- * split, `Field` sub-component) and swapped where the domain differs
- * (product fields instead of car fields; resize -> presign -> PUT instead
- * of a direct Supabase bucket upload; the variant matrix embedded at the
- * bottom instead of a notes-only tail section). See plan §7 and §12. */
-
-type PreviewImage = {
-  /** Existing image id — set only for a row loaded from the product being
-   * edited, never for a newly uploaded one. */
-  id?: string
-  url: string
-  storageKey: string
-  isNew: boolean
-}
-
-type PresignResponse = { uploads: { key: string; url: string }[] }
-
-/**
- * Resizes one picked file into its WebP renditions, asks the owner-gated
- * presign endpoint for PUT URLs at the exact keys it computed, and PUTs
- * each rendition straight to S3-compatible storage. Runs entirely client-side except for the
- * one presign round-trip — the file itself never touches this app's
- * server (plan §7).
- */
-async function uploadProductImage(
-  productId: string,
-  file: File,
-  index: number
-): Promise<{ url: string; storageKey: string }> {
-  const renditions = await resizeProductImage(file)
-  const timestamp = Date.now()
-  const keys = renditions.map((r) => buildProductImageKey(productId, index, r.width, timestamp))
-
-  const presignRes = await fetch("/api/uploads/presign", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ productId, keys }),
-  })
-  if (!presignRes.ok) throw new Error("presign_failed")
-  const { uploads } = (await presignRes.json()) as PresignResponse
-
-  await Promise.all(
-    uploads.map((upload, i) =>
-      fetch(upload.url, {
-        method: "PUT",
-        headers: { "Content-Type": "image/webp" },
-        body: renditions[i].blob,
-      }).then((res) => {
-        if (!res.ok) throw new Error("upload_failed")
-      })
-    )
-  )
-
-  // The canonical stored URL is the widest rendition — lib/image-loader.ts
-  // derives every other size from it by swapping the trailing
-  // `-<width>.webp` suffix, so any one of the three would work as the
-  // "master" key; the widest gives the detail-view zoom the most to work
-  // with.
-  const widestKey = keys[keys.length - 1]
-  return { url: productImageUrl(widestKey), storageKey: widestKey }
-}
+/** Port of carstockpro's `car-form.tsx` (pre-row UUID upload, new/existing
+ * image split, `Field` sub-component). Photos come first and work before
+ * anything else is filled in — the product's id is minted client-side, so
+ * uploads never wait on a type, kind, or database round trip. */
 
 export function ProductForm({
   product,
@@ -136,6 +80,8 @@ export function ProductForm({
       productCode: product?.productCode ?? "",
       productName: product?.productName ?? "",
       productType: product?.productType ?? "",
+      audience: product?.audience ?? "adult",
+      kind: product?.kind ?? "single",
       description: product?.description ?? "",
       sellPrice: product ? Number(product.sellPrice) : 0,
       originalPrice: product ? Number(product.originalPrice) : 0,
@@ -150,7 +96,7 @@ export function ProductForm({
           id: v.id,
           color: v.color,
           size: v.size,
-          quantity: v.quantity,
+          isAvailable: v.isAvailable,
           sortOrder: v.sortOrder,
         })) ?? [],
     },
@@ -159,6 +105,8 @@ export function ProductForm({
   const typeOptions = useMemo(() => types.map((pt) => pt.name), [types])
   const selectedType = watch("productType") ?? ""
   const selectedCharacterIds = watch("characterIds") ?? []
+  const audience = (watch("audience") ?? "adult") as ProductAudience
+  const kind = (watch("kind") ?? "single") as ProductKind
 
   /**
    * The product code is generated from the type, never typed (see
@@ -174,7 +122,9 @@ export function ProductForm({
   useEffect(() => {
     if (isEdit) return
     const type = selectedType.trim()
-    if (!type) {
+    // A single item's code comes from its type; sets / full sets have
+    // their own series (SET-, FULL-) and need no type.
+    if (kind === "single" && !type) {
       setCodePreview("")
       setValue("productCode", "", { shouldValidate: false })
       return
@@ -182,7 +132,7 @@ export function ProductForm({
 
     let cancelled = false
     setCodeLoading(true)
-    previewProductCode(type)
+    previewProductCode(type, kind)
       .then((result) => {
         if (cancelled) return
         const code = result.ok ? (result.code ?? "") : ""
@@ -198,46 +148,19 @@ export function ProductForm({
     return () => {
       cancelled = true
     }
-  }, [selectedType, isEdit, setValue])
-
-  /** Nothing but the type is editable until a type is chosen — the code,
-   *  and therefore the product's identity, depends on it. */
-  const awaitingType = !isEdit && !selectedType.trim()
+  }, [selectedType, kind, isEdit, setValue])
   const selectedStatus = watch("status") ?? "active"
   const variants: ProductVariantValues[] = watch("variants") ?? []
   const sellPrice = watch("sellPrice")
   const originalPrice = watch("originalPrice")
   const marginPreview = Number(sellPrice || 0) - Number(originalPrice || 0)
 
-  async function handleFiles(files: FileList | null) {
-    if (!files?.length) return
-    setUploading(true)
-    try {
-      const start = images.length
-      const uploaded = await Promise.all(
-        Array.from(files).map((file, i) => uploadProductImage(productId, file, start + i))
-      )
-      setImages((prev) => [...prev, ...uploaded.map((u) => ({ ...u, isNew: true }))])
-    } catch (error) {
-      toast.error(t("errors.generic"))
-      console.error(error)
-    } finally {
-      setUploading(false)
-    }
-  }
-
   function handleRemoveImage(img: PreviewImage) {
-    setImages((prev) => prev.filter((i) => i !== img))
     if (img.id) setRemovedImageIds((prev) => [...prev, img.id!])
     // A newly uploaded (not-yet-saved) image removed here is orphaned in
-    // R2 — no endpoint exists for a client-initiated delete-by-key outside
-    // the owner-gated presign flow, and adding one solely for this
-    // same-session abandoned-upload case isn't worth the extra surface.
-  }
-
-  /** Cover = first image (sortOrder 0). Move the chosen one to the front. */
-  function handleSetCover(img: PreviewImage) {
-    setImages((prev) => [img, ...prev.filter((i) => i !== img)])
+    // storage — no client-initiated delete-by-key endpoint exists outside
+    // the owner-gated presign flow, and this same-session case isn't worth
+    // the extra surface.
   }
 
   async function onSubmit(values: ProductFormValues) {
@@ -293,6 +216,7 @@ export function ProductForm({
     if (code === "duplicate_code") return t("errors.duplicateCode")
     if (code === "invalid") return t("errors.invalid")
     if (code === "not_found") return t("errors.notFound")
+    if (code === "type_required") return t("product.typeRequired")
     return t("errors.generic")
   }
 
@@ -301,76 +225,51 @@ export function ProductForm({
       onSubmit={handleSubmit(onSubmit, () => toast.error(t("errors.invalid")))}
       className="space-y-6"
     >
-      {/* Images */}
-      <section className="space-y-3 border border-border bg-card p-4">
-        <Label>{t("product.images")}</Label>
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-          {images.map((img) => {
-            const isCover = images[0] === img
-            return (
-              <div
-                key={img.storageKey || img.url}
-                className="relative aspect-square overflow-hidden bg-muted"
-              >
-                <Image src={img.url} alt="" fill sizes="120px" className="object-cover" />
-                <button
-                  type="button"
-                  onClick={() => handleSetCover(img)}
-                  disabled={isCover}
-                  aria-label={t("product.setCover")}
-                  title={isCover ? t("product.cover") : t("product.setCover")}
-                  className={cn(
-                    "absolute top-1 left-1 flex size-11 items-center justify-center",
-                    isCover
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background/80 text-foreground"
-                  )}
-                >
-                  <Star className={cn("size-4", isCover && "fill-current")} />
-                </button>
-                {isCover && (
-                  <span className="absolute bottom-1 left-1 bg-primary px-1.5 py-0.5 text-small font-bold text-primary-foreground">
-                    {t("product.cover")}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => handleRemoveImage(img)}
-                  className="absolute top-1 right-1 flex size-11 items-center justify-center bg-background/80"
-                  aria-label={t("common.delete")}
-                >
-                  <X className="size-3.5" />
-                </button>
-              </div>
-            )
-          })}
+      <ProductImageGallery
+        productId={productId}
+        images={images}
+        onChange={setImages}
+        onRemove={handleRemoveImage}
+        onUploadingChange={setUploading}
+      />
 
-          <label
-            className={cn(
-              "flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 border border-dashed border-input text-small text-muted-foreground hover:bg-muted",
-              (uploading || awaitingType) && "pointer-events-none opacity-60"
-            )}
-          >
-            {uploading ? (
-              <Loader2 className="size-5 animate-spin" />
-            ) : (
-              <Upload className="size-5" />
-            )}
-            <span>{t("product.addImages")}</span>
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={(e) => handleFiles(e.target.files)}
-            />
-          </label>
-        </div>
+      {/* Who it's for + what it is — both drive the rest of the form:
+          audience picks the size presets, kind picks the code series. */}
+      <section className="grid gap-4 border border-border bg-card p-4 sm:grid-cols-2">
+        <Field label={t("product.audience")}>
+          <SegmentedControl
+            name="audience"
+            label={t("product.audience")}
+            value={audience}
+            onValueChange={(v) => setValue("audience", v, { shouldDirty: true })}
+            options={[
+              { value: "adult", label: t("product.audienceAdult") },
+              { value: "kids", label: t("product.audienceKids") },
+            ]}
+          />
+        </Field>
+        <Field label={t("product.kind")} hint={isEdit ? t("product.kindCodeFixed") : undefined}>
+          <SegmentedControl
+            name="kind"
+            label={t("product.kind")}
+            value={kind}
+            onValueChange={(v) => setValue("kind", v, { shouldDirty: true, shouldValidate: true })}
+            options={[
+              { value: "single", label: t("product.kindSingle") },
+              { value: "set", label: t("product.kindSet") },
+              { value: "fullset", label: t("product.kindFullset") },
+            ]}
+          />
+        </Field>
       </section>
 
       {/* Fields */}
       <section className="grid gap-4 border border-border bg-card p-4 sm:grid-cols-2">
-        <Field label={t("product.type")} required>
+        <Field
+          label={t("product.type")}
+          required={kind === "single"}
+          error={errors.productType && t("product.typeRequired")}
+        >
           <CreatableCombobox
             value={selectedType}
             onValueChange={(v) => setValue("productType", v, { shouldValidate: true })}
@@ -384,16 +283,14 @@ export function ProductForm({
             value={codeLoading ? t("common.loading") : codePreview}
             readOnly
             disabled
-            placeholder={t("product.codeAwaitingType")}
-            aria-describedby="product-code-hint"
+            placeholder={t("product.codeAssignedOnSave")}
           />
         </Field>
         <Field label={t("product.name")} error={errors.productName && t("common.required")} required>
-          <Input disabled={awaitingType} {...register("productName")} />
+          <Input {...register("productName")} />
         </Field>
         <Field label={t("product.status")}>
           <SimpleSelect
-            disabled={awaitingType}
             value={selectedStatus}
             onValueChange={(v) =>
               setValue("status", v as ProductFormValues["status"], { shouldValidate: true })
@@ -407,7 +304,7 @@ export function ProductForm({
         </Field>
         <div className="sm:col-span-2">
           <Field label={t("product.description")}>
-            <Textarea rows={3} disabled={awaitingType} {...register("description")} />
+            <Textarea rows={3} {...register("description")} />
           </Field>
         </div>
         <Field
@@ -464,7 +361,6 @@ export function ProductForm({
             inputMode="decimal"
             step="0.01"
             min={0}
-            disabled={awaitingType}
             {...register("sellPrice")}
           />
         </Field>
@@ -474,18 +370,17 @@ export function ProductForm({
             inputMode="decimal"
             step="0.01"
             min={0}
-            disabled={awaitingType}
             {...register("originalPrice")}
           />
         </Field>
         <Field label={t("product.buyingSource")}>
-          <Input disabled={awaitingType} {...register("buyingSource")} />
+          <Input {...register("buyingSource")} />
         </Field>
         <Field
           label={t("product.sourceLink")}
           error={errors.sourceLink && t("errors.invalid")}
         >
-          <Input type="url" placeholder="https://" disabled={awaitingType} {...register("sourceLink")} />
+          <Input type="url" placeholder="https://" {...register("sourceLink")} />
         </Field>
         <div className="flex items-center justify-between bg-accent px-4 py-3 text-accent-foreground sm:col-span-2">
           <span className="text-body font-medium">{t("product.margin")}</span>
@@ -497,7 +392,7 @@ export function ProductForm({
       <div>
         <VariantRowsEditor
           value={variants}
-          disabled={awaitingType}
+          audience={audience}
           onChange={(next) => setValue("variants", next, { shouldValidate: true })}
         />
         {errors.variants?.message && (
@@ -519,7 +414,7 @@ export function ProductForm({
           type="submit"
           size="lg"
           className="flex-1"
-          disabled={submitting || uploading || awaitingType}
+          disabled={submitting || uploading}
         >
           {submitting && <Loader2 className="animate-spin" />}
           {t("common.save")}
@@ -550,11 +445,7 @@ function Field({
         {required && <span className="text-destructive">*</span>}
       </Label>
       {children}
-      {hint && (
-        <p id="product-code-hint" className="text-small text-muted-foreground">
-          {hint}
-        </p>
-      )}
+      {hint && <p className="text-small text-muted-foreground">{hint}</p>}
       {typeof error === "string" && error && <p className="text-small text-destructive">{error}</p>}
     </div>
   )

@@ -14,6 +14,7 @@ import { ProductGrid } from "@/components/shop/product-grid"
 import { CollectionStrip } from "@/components/shop/collection-strip"
 import { QuickFilterRail } from "@/components/shop/quick-filter-rail"
 import { ContactCta } from "@/components/shop/contact-cta"
+import { AudienceEntry } from "@/components/shop/audience-entry"
 import { Link } from "@/i18n/navigation"
 
 export const revalidate = 300
@@ -88,6 +89,8 @@ export default async function HomePage({
   return (
     <>
       <Hero brandName={resolvedBrandName(settings)} tagline={resolvedBrandDescription(settings, locale)} />
+
+      <AudienceEntry />
 
       <section aria-labelledby="new-in-heading" className="bg-background">
         <div className="mx-auto max-w-[1440px] px-4 py-17 sm:px-6 lg:px-8">

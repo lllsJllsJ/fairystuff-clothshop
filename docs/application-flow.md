@@ -41,43 +41,45 @@
 32. [Delete Product](#delete-product)
 33. [Variant Rows Save](#variant-rows-save)
 34. [Excel Import — Parse → Preview → Commit](#excel-import--parse--preview--commit)
-35. [Orders List](#orders-list)
-36. [Create Order](#create-order)
-37. [Edit Order](#edit-order)
-38. [Quick Order Status Change](#quick-order-status-change)
-39. [Line-Item Fulfillment + Partial Refund](#line-item-fulfillment--partial-refund)
-40. [Full Order Refund](#full-order-refund)
-41. [Print Order Receipt](#print-order-receipt)
-42. [Delete Order](#delete-order)
-43. [Reports — View + Excel Export + Print](#reports--view--excel-export--print)
-44. [Settings — Create Product Type](#settings--create-product-type)
-45. [Settings — Rename Product Type (Cascade)](#settings--rename-product-type-cascade)
-46. [Settings — Delete Product Type (Blocked When In Use)](#settings--delete-product-type-blocked-when-in-use)
-47. [Settings — Reorder Product Types](#settings--reorder-product-types)
-48. [Settings — Clear Shop Data](#settings--clear-shop-data)
-49. [Settings — Shop Contacts](#settings--shop-contacts)
-50. [Settings — Brand](#settings--brand)
-51. [Settings — Character Taxonomy](#settings--character-taxonomy)
-52. [Settings — Order Status Labels](#settings--order-status-labels)
-53. [Settings — Line-Item Status Lifecycle](#settings--line-item-status-lifecycle)
-54. [Users — List + Filter](#users--list--filter)
-55. [Users — Change Role](#users--change-role)
-56. [Users — Delete Account](#users--delete-account)
-57. [Users — Mark Email Verified](#users--mark-email-verified)
-58. [Users — Send Password Reset](#users--send-password-reset)
+35. [Product Export](#product-export)
+36. [Orders List](#orders-list)
+37. [Preorder Fulfillment — Mark as Paid, Item Status, Preorder Shipments](#preorder-fulfillment--mark-as-paid-item-status-preorder-shipments)
+38. [Create Order](#create-order)
+39. [Edit Order](#edit-order)
+40. [Quick Order Status Change](#quick-order-status-change)
+41. [Line-Item Fulfillment + Partial Refund](#line-item-fulfillment--partial-refund)
+42. [Full Order Refund](#full-order-refund)
+43. [Print Order Receipt](#print-order-receipt)
+44. [Delete Order](#delete-order)
+45. [Reports — View + Excel Export + Print](#reports--view--excel-export--print)
+46. [Settings — Create Product Type](#settings--create-product-type)
+47. [Settings — Rename Product Type (Cascade)](#settings--rename-product-type-cascade)
+48. [Settings — Delete Product Type (Blocked When In Use)](#settings--delete-product-type-blocked-when-in-use)
+49. [Settings — Reorder Product Types](#settings--reorder-product-types)
+50. [Settings — Clear Shop Data](#settings--clear-shop-data)
+51. [Settings — Shop Contacts](#settings--shop-contacts)
+52. [Settings — Brand](#settings--brand)
+53. [Settings — Character Taxonomy](#settings--character-taxonomy)
+54. [Settings — Order Status Labels](#settings--order-status-labels)
+55. [Settings — Line-Item Status Lifecycle](#settings--line-item-status-lifecycle)
+56. [Users — List + Filter](#users--list--filter)
+57. [Users — Change Role](#users--change-role)
+58. [Users — Delete Account](#users--delete-account)
+59. [Users — Mark Email Verified](#users--mark-email-verified)
+60. [Users — Send Password Reset](#users--send-password-reset)
 
 **Catalogue CLI**
-59. [Catalogue Prepare — Workbook Extraction](#catalogue-prepare--workbook-extraction)
-60. [Catalogue Prepare — Supplier Enrichment + Workbook Fallback](#catalogue-prepare--supplier-enrichment--workbook-fallback)
-61. [Catalogue Verify + Import Dry Run](#catalogue-verify--import-dry-run)
-62. [Catalogue Apply — Storage Staging](#catalogue-apply--storage-staging)
-63. [Catalogue Apply — Transactional Replacement](#catalogue-apply--transactional-replacement)
-64. [Catalogue Apply — Rollback + Object Cleanup](#catalogue-apply--rollback--object-cleanup)
+61. [Catalogue Prepare — Workbook Extraction](#catalogue-prepare--workbook-extraction)
+62. [Catalogue Prepare — Supplier Enrichment + Workbook Fallback](#catalogue-prepare--supplier-enrichment--workbook-fallback)
+63. [Catalogue Verify + Import Dry Run](#catalogue-verify--import-dry-run)
+64. [Catalogue Apply — Storage Staging](#catalogue-apply--storage-staging)
+65. [Catalogue Apply — Transactional Replacement](#catalogue-apply--transactional-replacement)
+66. [Catalogue Apply — Rollback + Object Cleanup](#catalogue-apply--rollback--object-cleanup)
 
 **Cross-cutting**
-65. [Storefront Revalidation After a Product Mutation](#storefront-revalidation-after-a-product-mutation)
-66. [Unauthorized / Forbidden Denial Paths](#unauthorized--forbidden-denial-paths)
-67. [Transaction Rollback on Mid-Write Failure](#transaction-rollback-on-mid-write-failure)
+67. [Storefront Revalidation After a Product Mutation](#storefront-revalidation-after-a-product-mutation)
+68. [Unauthorized / Forbidden Denial Paths](#unauthorized--forbidden-denial-paths)
+69. [Transaction Rollback on Mid-Write Failure](#transaction-rollback-on-mid-write-failure)
 
 ---
 
@@ -413,30 +415,38 @@ Client interaction inside `ProductDetail` → `ColorSelector`, on `/shop/[code]`
                           variants (SizeSelector re-renders)
 ```
 
-Failure: none — pure client state, no network call. A colour with zero
-stock across every size still renders (desaturated chip) so the shopper can
-browse its photos; it just starts every size disabled.
+Failure: none — pure client state, no network call. A colour whose every
+size is switched off still renders (desaturated chip) so the shopper can
+browse its photos; every size then shows struck through. On first render
+the page opens on the first colour that has an orderable size.
 
 ## Size Selection / Preorder
 
 Client interaction inside `ProductDetail` → `SizeSelector`, on `/shop/[code]`.
+Kids' products are sized by height, so the label reads "Height" with a
+"choose by your child's height" hint.
 
 ```
 ┌────────┐ click size chip  ┌──────────────────┐
 │ Browser│ ────────────────▶│ SizeSelector state │
 └────────┘                  └──────────┬──────────┘
                                         ▼
-                          matching (colour, size) variant exists?
-                                  │yes                 │no
-                                  ▼                    ▼
-                          selection recorded      add-to-cart prompts
-                          (stock is ignored for   for a valid selection
-                           preorder products)
+                  variant for (colour, size) isAvailable?
+                     │yes                         │no (switched off)
+                     ▼                            ▼
+             selection recorded           chip is struck through +
+             (exactly one orderable        aria-disabled — click is
+              size = pre-selected)         ignored, stays announced
+                     │
+                     ▼
+             Add to cart (every size off -> "Unavailable" panel
+             replaces the button; JSON-LD says OutOfStock)
 ```
 
-Failure: an add-to-cart attempt without a required variant selection is
-rejected in the client. Exact stock depth and sold-out state are admin-only;
-all active configured variants remain available for preorder.
+Failure: an add-to-cart attempt without a required variant selection, or on
+a switched-off size, is rejected in the client with a toast. If the owner
+switches a size off AFTER it went into a cart, `submitCheckout` rejects it
+as `cart_changed`.
 
 ## Filter + Sort — URL Sync
 
@@ -538,16 +548,17 @@ admin layout's `requireOwner()` forces that for the whole subtree.
                                         │
                                         ▼
                       10 KPI cards:
-                      total / ready / sold-out SKUs, orders, revenue,
-                      gross profit, advertising / shipping / packaging,
-                      net profit
+                      total sizes / orderable sizes / sizes switched
+                      off, orders, revenue, gross profit, advertising /
+                      shipping (to customer + preorder legs) /
+                      packaging, net profit
                                         │
                                         ▼
                       Recharts: monthly total cost vs net profit
                       + product-type distribution (no stock-level chart)
                                         │
                                         ▼
-                      alerts: no photo / price / variants / all sold out
+                      alerts: no photo / price / variants / every size off
 ```
 
 Failure: this route never runs at prerender time (it's gated dynamic), so
@@ -556,8 +567,10 @@ database error here surfaces as a normal Next.js error boundary/500, since
 the owner is already authenticated and expects live data.
 
 Cancelled orders are excluded. Gross profit is item revenue minus item cost;
-net profit additionally subtracts shipping, packaging, and advertising. A SKU
-is one variant row: quantity above zero is ready to ship, and zero is sold out.
+net profit additionally subtracts shipping (to the customer AND the
+preorder's inbound legs), packaging, and advertising. A "size" is one
+variant row; this is a preorder shop, so there are no stock units — only
+whether each colour x size is switched on (`isAvailable`).
 
 ## Product Browse
 
@@ -675,14 +688,19 @@ Triggered by submitting `ProductForm` in create mode.
                                  │  must exactly match its validated key)
                                  ▼
                       db.transaction(async tx => {
-                        nextProductCodeIn(tx, type)   <- code is MINTED here;
-                          -> "TS-003"                     v.productCode (the
+                        nextProductCodeIn(tx, type,   <- code is MINTED here;
+                                          kind)           v.productCode (the
+                          -> "TS-003" / "SET-001" /
+                             "FULL-001"
                                                           form's preview) is
                                                           ignored outright
-                        insert products (+ admin-only preorder day range)
+                        insert products (+ audience, kind, admin-only
+                          preorder day range)
                         insert productCharacters[] (many-to-many links)
-                        insert productVariants[]  (sortOrder = index)
-                        insert productImages[]    (sortOrder = index)
+                        insert productVariants[]  (isAvailable per cell,
+                                                   sortOrder = index)
+                        insert productImages[]    (sortOrder = index;
+                                                   0 = main photo)
                       })
                                  │
                     success? ──no──▶ unique_violation? -> retry with the next
@@ -704,6 +722,14 @@ identically and returns `insert_failed`. Auth/role failures short-circuit
 before any database work at all (`unauthorized`/`forbidden`).
 Client validation failures also show an error toast; the submit can no longer
 stop silently because an asynchronous, disabled code-preview input is empty.
+A single item with no type fails validation (`type_required`) — its code is
+built from the type; sets and full sets need none.
+
+Photos come FIRST and work immediately: nothing in the form is gated on the
+type any more. The product id is minted client-side before the row exists,
+so uploads (multi-select or drag-and-drop, partial failures tolerated,
+every width 480/800/1600 always written) start at once; "Set as main" /
+arrows reorder, and on-screen order becomes `sortOrder`.
 
 ## Product Code Generation
 
@@ -713,11 +739,14 @@ transaction). Product codes are never typed — the form's code input is
 read-only and the server ignores whatever it receives.
 
 ```
-owner picks a product type
+owner picks a kind and/or product type
         │
         ▼
-previewProductCode(type)   [owner-gated action]
+previewProductCode(type, kind)   [owner-gated action]
         │
+        ▼
+kind = set / fullset? ──yes──▶ prefix "SET" / "FULL" (reserved — no type
+        │no                                           may claim them)
         ▼
 codePrefixFor(type):  product_types.code_prefix ──found──▶ "TS"
         │not set
@@ -750,9 +779,8 @@ would merge a dead product's sales into a new one's report row. A code whose
 product was deleted before it was ever ordered *is* reusable, which is
 harmless because no history refers to it.
 
-Failure: no type selected returns `null` and the form leaves the code empty
-(and every other field disabled — the product's identity depends on the
-type). A type with no ASCII letters anywhere and no stored prefix falls back
+Failure: a single item with no type selected returns `null` and the form
+shows "Assigned when you save" (every other field stays usable). A type with no ASCII letters anywhere and no stored prefix falls back
 to `PR`; the owner sets a real one in **Settings -> product types**, where
 each type shows and edits its prefix. Codes are **immutable once assigned** —
 `updateProduct` and `updateProductInline` never write `productCode`, even
@@ -856,103 +884,108 @@ orphaned R2 object costs storage, not correctness.
 
 ## Variant Rows Save
 
-Not a separate Server Action — the stock grid built by `VariantRowsEditor`
-is submitted as part of **Create Product** or **Edit Product** (see those
-flows for the actual database write). Documented separately because it has
-its own distinct client-side data shape.
-
-One block per colour, every standard size across it. "Add color (all
-sizes)" creates the whole block at once with each size already at 0, so a
-new colourway is one click plus the numbers — no size buttons to press
-first.
+Not a separate Server Action — the "Sizes & availability" grid built by
+`VariantRowsEditor` is submitted as part of **Create Product** or **Edit
+Product**. Documented separately because it has its own client-side data
+shape. There are no quantities: this is a preorder shop.
 
 ```
-┌────────┐ "Add color (all sizes)"  ┌───────────────────────────────┐
-│ Owner  │ ────────────────────────▶│ VariantRowsEditor               │
-└────────┘                           │                                 │
-                                      │  [colour combobox]         [x]  │
-                                      │  XS   S   M   L   XL  2XL  Free │
-                                      │   0   0   0   0   0    0    0   │
-                                      │                                 │
-                                      │ colour: presets (No color/Black/│
-                                      │ White/Pink/Yellow/Grey/Blue),   │
-                                      │ free text wins if typed         │
-                                      └──────────────┬──────────────────┘
-                                                     │ toVariants(): one row
-                                                     │ per cell that HOLDS A
-                                                     │ NUMBER — a blank cell
-                                                     │ is not a row
-                                                     ▼
-                                    form.setValue("variants", next)
-                                    -> productFormSchema validates
-                                       (duplicate (colour,size) rejected)
-                                                     │
-                                                     ▼
-                                    submitted with the rest of the
-                                    product form -> create/updateProduct
+┌────────┐ 1. pick sizes    ┌──────────────────────────────────────────┐
+│ Owner  │ ────────────────▶│ Sizes (preset chips follow Audience):    │
+└────────┘                  │  adult: XS S M L XL 2XL Free Size         │
+                            │  kids:  80cm … 150cm >150cm               │
+                            │  + custom free text ("3-4Y", "US 7")      │
+                            │ 2. colours: [+ Add color] (or one colour) │
+                            │ 3. tap a cell to switch ON / OFF:         │
+                            │          90cm  100cm  110cm               │
+                            │   Black   On    On     On                 │
+                            │   White   On    Off    On                 │
+                            └──────────────────┬───────────────────────┘
+                                               ▼
+                           form.setValue("variants", rows) — one row per
+                           colour x size, isAvailable per cell, sortOrder
+                           = presets in index order then custom sizes
+                                               ▼
+                           productFormSchema validates (duplicate
+                           (colour,size) rejected) -> create/updateProduct
 ```
 
-Blank vs `0` is the load-bearing distinction: `0` is a real row meaning
-"this combination exists and is sold out"; blank means the combination does
-not exist at all. Opening an existing product shows the standard sizes it
-never had as blank cells, so saving without touching them leaves it exactly
-as it was — the editor never quietly adds zero-quantity rows to a product
-the owner only came to re-price. Typing into a blank creates that row;
-clearing one back to blank removes it.
+OFF keeps the row and its id (`isAvailable = false`) so carts and
+`orderItems.productVariantId` survive; only deselecting a whole size or
+removing a colour deletes rows. Adding a size or colour creates only the new
+cells (ON) — it never silently switches on gaps an older sparse product had.
 
-Renaming a block's colour rewrites the colour on its existing rows rather
-than replacing them, so variant ids survive and `updateProduct` takes its
-update-by-id path instead of delete-and-reinsert.
-
-Failure: two blocks with the same colour are flagged inline and fail
-`productFormSchema`'s refine check (`duplicate_variant`) before the form
-submits — the server action re-validates the same schema regardless, so a
-hand-crafted payload cannot get past it either.
+Failure: two colours with the same name are refused at rename; the server
+re-validates `productFormSchema` regardless.
 
 ## Excel Import — Parse → Preview → Commit
 
-`ProductImport` client component (parse) + `importProducts` Server Action
-(commit), reached from `/admin/products/import`.
+`ProductImport` client component (parse + preview) + `importProductsChunk`
+Server Action (commit), reached from `/admin/products/import`. Uses the same
+template as **Product Export** (`src/lib/import/product-template.ts`), so an
+exported file can be edited and imported straight back as an upsert.
 
 ```
-┌────────┐ upload .xlsx  ┌────────────────────────────┐
-│ Owner  │ ─────────────▶│ parseProductWorkbook(data)   │
-└────────┘                │ (client-side, xlsx library)   │
-                           │ findHeaderRow -> mapColumns    │
-                           │ (Thai/English header aliases)  │
-                           │ parseVariantCell() for "ไซซ์"  │
-                           └──────────┬───────────────────────┘
-                                     ▼
-                       editable preview table (per-row include
-                       toggle; duplicate productCode flagged
-                       against existingCodes, update-or-skip
-                       chosen per row — default: skip)
-                                     │ owner confirms
-                                     ▼
-                       importProducts(rows)  [Server Action]
-                                     │ auth -> isOwner -> zod parse (array, max 1000)
-                                     ▼
-                    txDb().transaction(async tx => {
-                      one bulk SELECT of existing (code -> id)
-                      for each row:
-                        exists + updateExisting? -> update product,
-                          delete+reinsert its variants wholesale
-                        exists + !updateExisting -> skip
-                        new -> insert product + variants
-                    })
-                                     │
-                                     ▼
-                    learnProductType() per distinct type (deduped)
-                    revalidateStorefront()  (no single code — whole
-                    /shop list invalidated; individual /shop/[code]
-                    pages age out on their normal 300s window)
+┌────────┐ upload .xlsx/.csv ┌──────────────────────────────────────┐
+│ Owner  │ ─────────────────▶│ parseProductWorkbook (client, xlsx)    │
+└────────┘                    │ header aliases TH/EN; blank cell =     │
+                              │ "keep" on update; Image URLs cell:     │
+                              │ comma-separated, first = main photo    │
+                              └──────────────────┬───────────────────┘
+                                                 ▼
+               preview: each row classified against the product index
+                 New | Will update (price change chip, "existing orders
+                 are not affected") | Code not found (new code) |
+                 Duplicate in file (skipped) | Error (reason)
+                                                 │ Import N rows
+                                                 ▼
+               chunks of 5 -> importProductsChunk(rows)  [Server Action]
+                 auth -> isOwner -> zod -> per row:
+                   importProductRow (lib/import/import-product.ts)
+                     existing by lower(code)?  (decided server-side)
+                     images: own /api/images URL or known source_url
+                       -> keep; else download (HTTPS, public host,
+                       image/*, size cap) -> sharp 480/800/1600 -> put
+                     db.transaction (ONE row):
+                       update set only non-blank fields | insert with
+                       server-minted code (SET-/FULL-/type prefix)
+                       variants upserted on (product,colour,size);
+                       unlisted -> isAvailable=false (never deleted)
+                       images replaced in listed order (only if the
+                       cell was non-blank)
+                     after commit: delete removed images from storage
+                   revalidateStorefront(code) + learnProductType
+                                                 ▼
+               progress bar -> results: created / updated / failed rows
+               + count of image URLs that could not be downloaded
 ```
 
-Failure: the whole batch is one transaction — a mid-batch error (e.g. an
-unexpected constraint violation) rolls back every row in the import, not
-just the failing one, so a partial import never lands. A row that fails the
-per-row zod schema is rejected before the transaction opens at all
-(`invalid`).
+Failure: each row is its own transaction — a failed row is reported and the
+rest continue. A failed row's freshly uploaded images are deleted again. An
+image URL that fails to download is skipped and counted, never fatal. Order
+history is never touched (see `CLAUDE.md`, "Import never rewrites order
+history").
+
+## Product Export
+
+`exportProducts(filters)` Server Action, from the **Export** button on
+`/admin/products`.
+
+```
+┌────────┐ Export  ┌──────────────────────────┐
+│ Owner  │ ───────▶│ exportProducts(filters)    │ auth -> isOwner
+└────────┘         └────────────┬─────────────┘
+                                ▼
+            getProducts(current search/status/type/audience/kind,
+                        up to 5000) -> toTemplateRow() each
+            (colours, sizes, "Colour/Size" unavailable pairs,
+             absolute image URLs main-first)
+                                ▼
+            client: exportToExcel -> products-YYYY-MM-DD.xlsx
+```
+
+Failure: `export_failed` toast; zero matches -> "No products match these
+filters". Owner-only because it carries cost price, source, and link.
 
 ## Orders List
 
@@ -969,11 +1002,15 @@ Search, date range, status, and sort occupy one horizontal filter strip.
                                         useQuery -> GET /api/admin/orders
                                         (status/date-range/search filters
                                          AND sort resolved in SQL, not in
-                                         memory)
+                                         memory; search matches customer
+                                         name, phone, a preorder-code
+                                         fragment, or an exact order no.)
                                                    │
                                                    ▼
                                      table: order#, date, customer,
-                                     status (inline changer), totals
+                                     Preorder (code, click-to-copy +
+                                     "2/3 received" progress chip),
+                                     totals, status (inline changer)
                                                    │
                         click "Order no." or "Order date" header
                                                    │
@@ -994,6 +1031,40 @@ Failure: `401`/`403` on a lapsed session, `500` on an unexpected query
 error — identical shape to Product Browse. An unrecognised `sort` value
 falls back to `newest` at the route boundary.
 
+## Preorder Fulfillment — Mark as Paid, Item Status, Preorder Shipments
+
+The fulfillment panel on `/admin/orders/[id]` writes the order directly
+(each action re-checks `isOwner`). Preorder parcels are tracked PER LINE
+ITEM — items in one order are often different lots from different sellers.
+
+```
+┌────────┐ "Mark as paid" (status new) ─▶ setOrderStatus(id, "accepted")
+│ Owner  │                                 ("accepted" is labelled Paid)
+└────────┘ item status select ──────────▶ setOrderItemStatus(...)
+     │       e.g. Preorder-1688 (is_preorder)   │
+     │                                          ▼
+     │                 this line in an is_preorder status (or parcels
+     │                 already logged on it)? -> that line's shipments block
+     ▼
+ per line item:
+ CN→CN (seller→China warehouse) │ CN→TH (forwarder) │ TH→TH (to shop)
+ each leg: any number of parcels {carrier, tracking no., cost, note}
+   addPreorderShipment(orderId, orderItemId, …)  [line must belong to
+     the order]; update/deletePreorderShipment(orderId, id)  [scoped by
+     orderId]; deleting the line cascades its parcels
+                                          ▼
+   trigger preorder_shipments_recalc -> orders.preorder_shipping_cost
+   -> GENERATED total_cost / profit include it
+                                          ▼
+   each line shows its own subtotal; the panel bottom shows Preorder
+   shipping (all lines) + Shipping to customer = Total shipping cost; revalidateOrders(id); OrderForm below remounts (keyed on
+   updatedAt) so a later Save never reverts these changes
+```
+
+Failure: invalid input -> `invalid`; a shipment id that doesn't belong to
+the order -> `not_found`; negative cost rejected by zod and a DB check
+constraint. Inbound legs are admin-only — never shown on `/track`.
+
 ## Create Order
 
 `createOrder` Server Action, triggered by submitting `OrderForm` (new
@@ -1012,11 +1083,12 @@ computes `orders.itemsTotal`/`itemsCost` from the inserted line items.
                        │                     the same trackable /track/[code]
                        │                     URL a guest checkout would)
                        ▼
-                             txDb().transaction(async tx => {
+                             db.transaction(async tx => {
                                insert orders (preorderCode, shipping/packing/
-                                 advertising/status/note)
+                                 advertising/carrier/trackingNo/status/note)
                                insert orderItems[] (snapshotted product
-                                 fields: code/name/type/color/size/cost/price)
+                                 fields: code/name/type/color/size/
+                                 ACTUAL cost + MASTER cost/price)
                              })
                                             │
                              23505 on preorderCode unique index? ──yes──▶
@@ -1027,10 +1099,12 @@ computes `orders.itemsTotal`/`itemsCost` from the inserted line items.
                                             ▼
                                      [Postgres AFTER INSERT trigger fires
                                       on order_items -> recalc_order(order_id)
-                                      -> orders.items_total/items_cost updated
+                                      -> orders.items_total/items_cost/
+                                         items_master_cost updated
                                       -> GENERATED columns recompute:
                                          totalCost = itemsCost + shipping
-                                           + packing + advertising
+                                           + preorderShipping + packing
+                                           + advertising
                                          profit = itemsTotal - totalCost]
                                             │
                                     success? ──no──▶ insert_failed (rollback)
@@ -1041,9 +1115,9 @@ computes `orders.itemsTotal`/`itemsCost` from the inserted line items.
 ```
 
 Failure: any insert failure rolls back the whole transaction — an order is
-never created with a subset of its line items. **Stock is never touched
-here** — `productVariants.quantity` is a completely separate, manually
-maintained ledger; see `CLAUDE.md` for why that's deliberate.
+never created with a subset of its line items. **Availability is never
+touched here** — `productVariants.isAvailable` is switched by hand in the
+product editor only; see `CLAUDE.md` for why that's deliberate.
 
 ## Edit Order
 
@@ -2149,8 +2223,11 @@ render: success banner (if ?new=1) + header (order label + code + date) +
         (order-placed date always; the current stage's label + updatedAt
         ONLY once the order has moved past "received" — there is no
         order_status_history table, so no other row is ever fabricated) +
-        items + totals (shipping/grand total only once shippingConfirmedAt
-        is set) + delivery info + note
+        "Your parcel" card (only once the owner has entered a tracking
+        no. — carrier, copyable number, and a "Track parcel" link for
+        carriers in src/lib/carriers.ts) + items + totals (shipping/grand
+        total only once the owner has set a shipping fee > 0, else "to be
+        confirmed") + delivery info + note
 ```
 
 Contact handoff is **LINE only** on this page — `ContactAdminButton` — even

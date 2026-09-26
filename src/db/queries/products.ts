@@ -28,6 +28,8 @@ import {
  * layer in `src/app/admin/products/actions.ts`.
  */
 
+import type { ProductAudience, ProductKind } from "@/lib/product-taxonomy"
+
 export type ProductStatusValue = (typeof productStatus.enumValues)[number]
 
 export type ProductRow = typeof products.$inferSelect
@@ -55,6 +57,8 @@ export type ProductListParams = {
   search?: string
   status?: ProductStatusValue | "all"
   type?: string
+  audience?: ProductAudience
+  kind?: ProductKind
   sort?: ProductSort
   page?: number
   pageSize?: number
@@ -88,6 +92,8 @@ export async function getProducts(
     search = "",
     status = "all",
     type,
+    audience,
+    kind,
     sort = "newest",
     page = 1,
     pageSize = DEFAULT_PAGE_SIZE,
@@ -96,6 +102,8 @@ export async function getProducts(
   const conditions = []
   if (status !== "all") conditions.push(eq(products.status, status))
   if (type) conditions.push(eq(products.productType, type))
+  if (audience) conditions.push(eq(products.audience, audience))
+  if (kind) conditions.push(eq(products.kind, kind))
 
   const term = search.trim()
   if (term) {
@@ -202,7 +210,22 @@ export async function getProductById(id: string): Promise<ProductWithRelations |
 
 /** Every product code currently in stock — used to flag duplicates during
  * an Excel import (the analogue of carstockpro's `getCarRegistrations()`). */
-export async function getProductCodes(): Promise<string[]> {
-  const rows = await db.select({ productCode: products.productCode }).from(products)
-  return rows.map((r) => r.productCode)
+export type ProductImportIndexEntry = {
+  productCode: string
+  productName: string
+  sellPrice: string
+  originalPrice: string
+}
+
+/** What the import preview needs to label a row "will update" and show its
+ * price change — code, name, and the two prices, nothing else. */
+export async function getProductImportIndex(): Promise<ProductImportIndexEntry[]> {
+  return db
+    .select({
+      productCode: products.productCode,
+      productName: products.productName,
+      sellPrice: products.sellPrice,
+      originalPrice: products.originalPrice,
+    })
+    .from(products)
 }

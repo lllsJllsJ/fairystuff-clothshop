@@ -9,9 +9,11 @@ import type {
   UseFormSetValue,
   UseFormWatch,
 } from "react-hook-form"
-import { Loader2, Search, Trash2, X } from "lucide-react"
+import { AlertTriangle, Loader2, Search, Trash2, X } from "lucide-react"
 
-import { formatBaht, formatNumber } from "@/lib/format"
+import { cn } from "@/lib/utils"
+import { formatBaht } from "@/lib/format"
+import { costVariance, formatVariance } from "@/lib/cost-variance"
 import type { OrderFormValues } from "@/lib/validations/order"
 import type { ProductListResult, ProductWithRelations } from "@/db/queries/products"
 import { Button } from "@/components/ui/button"
@@ -28,7 +30,7 @@ import { Field } from "@/components/orders/order-field"
 const NO_COLOR = "-"
 const PICKER_PAGE_SIZE = 8
 
-type SizeOption = { size: string; quantity: number }
+type SizeOption = { size: string; isAvailable: boolean }
 
 type VariantMeta = {
   colors: string[]
@@ -48,7 +50,7 @@ function buildVariantMeta(product: ProductWithRelations): VariantMeta {
   for (const v of product.variants) {
     const key = colors.length > 0 ? v.color : NO_COLOR
     const bucket = sizesByColor.get(key) ?? []
-    bucket.push({ size: v.size, quantity: v.quantity })
+    bucket.push({ size: v.size, isAvailable: v.isAvailable })
     sizesByColor.set(key, bucket)
   }
   return { colors, sizesByColor }
@@ -111,6 +113,12 @@ export function OrderLineRow({
   const sellPrice = watch(`items.${index}.sellPrice`)
   const quantity = watch(`items.${index}.quantity`)
   const lineTotal = Number(sellPrice || 0) * Number(quantity || 0)
+  const actualCost = Number(watch(`items.${index}.productCost`) || 0)
+  const masterCost = Number(watch(`items.${index}.masterCost`) || 0)
+  const variance = costVariance(actualCost, masterCost)
+  // Still on the catalogue price: the owner hasn't confirmed what the
+  // supplier actually charged for this preorder yet.
+  const stillMaster = masterCost > 0 && variance.tone === "same"
 
   const itemErrors = errors.items?.[index]
 
@@ -137,7 +145,11 @@ export function OrderLineRow({
     setValue(`items.${index}.productCode`, product.productCode, { shouldValidate: true })
     setValue(`items.${index}.productName`, product.productName, { shouldValidate: true })
     setValue(`items.${index}.productType`, product.productType ?? "", { shouldValidate: true })
+    // Actual cost starts at the master; masterCost is the fixed baseline.
     setValue(`items.${index}.productCost`, Number(product.originalPrice), {
+      shouldValidate: true,
+    })
+    setValue(`items.${index}.masterCost`, Number(product.originalPrice), {
       shouldValidate: true,
     })
     setValue(`items.${index}.sellPrice`, Number(product.sellPrice), { shouldValidate: true })
@@ -277,7 +289,7 @@ export function OrderLineRow({
         </Field>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid items-start gap-3 sm:grid-cols-4">
         <Field label={t("variant.color")}>
           {colorOptions.length > 0 ? (
             <SimpleSelect
@@ -296,22 +308,53 @@ export function OrderLineRow({
               onValueChange={(v) => setValue(`items.${index}.size`, v, { shouldValidate: true })}
               options={sizeOptions.map((s) => ({
                 value: s.size,
-                label: `${s.size} (${formatNumber(s.quantity)})`,
+                label: s.isAvailable ? s.size : `${s.size} (${t("order.sizeOff")})`,
               }))}
             />
           ) : (
             <Input {...register(`items.${index}.size`)} />
           )}
         </Field>
-        <Field label={t("product.originalPrice")}>
+        {/* The one field the owner MUST look at per preorder line: what the
+            supplier actually charged. Same label/input rhythm as its
+            neighbours (so all four inputs line up); the highlight is on the
+            input itself, with the master price and difference underneath. */}
+        <div className="grid content-start gap-1.5">
+          <Label
+            htmlFor={`items-${index}-productCost`}
+            className="text-body font-bold text-amber-800 dark:text-amber-300"
+          >
+            {t("order.actualCostPrice")}
+          </Label>
           <Input
+            id={`items-${index}-productCost`}
             type="number"
             inputMode="decimal"
             step="0.01"
             min={0}
+            className="border-amber-400 bg-amber-50 font-bold tabular-nums ring-2 ring-amber-300 focus-visible:ring-amber-400 dark:bg-amber-950/40 dark:ring-amber-700"
             {...register(`items.${index}.productCost`)}
           />
-        </Field>
+          <p className="text-small text-muted-foreground">
+            {t("order.masterCostLabel")} {formatBaht(masterCost)}
+            {variance.tone !== "same" && (
+              <span
+                className={cn(
+                  "ml-1 font-bold",
+                  variance.tone === "over" ? "text-destructive" : "text-emerald-700 dark:text-emerald-400"
+                )}
+              >
+                {formatVariance(variance, formatBaht)}
+              </span>
+            )}
+          </p>
+          {stillMaster && (
+            <p className="flex items-start gap-1 text-small font-medium text-amber-800 dark:text-amber-300">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              {t("order.confirmActualCost")}
+            </p>
+          )}
+        </div>
         <Field label={t("product.sellPrice")}>
           <Input
             type="number"

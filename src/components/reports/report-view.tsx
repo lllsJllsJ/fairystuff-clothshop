@@ -97,7 +97,7 @@ export function ReportView({
       return {
         count: data.inventory.length,
         revenue: null as number | null,
-        cost: data.inventory.reduce((s, r) => s + r.stockValueAtCost, 0),
+        cost: null as number | null,
         profit: null as number | null,
         advertising: null as number | null,
       }
@@ -117,6 +117,8 @@ export function ReportView({
       cost: data.orders.reduce((s, r) => s + r.totalCost, 0),
       profit: data.orders.reduce((s, r) => s + r.profit, 0),
       advertising: data.orders.reduce((s, r) => s + r.advertisingCost, 0),
+      preorderShipping: data.orders.reduce((s, r) => s + r.preorderShippingCost, 0),
+      costVariance: data.orders.reduce((s, r) => s + r.itemsCost - r.itemsMasterCost, 0),
     }
   }, [tab, data])
 
@@ -139,8 +141,10 @@ export function ReportView({
           [t("product.status")]: t(`product.status${r.status.charAt(0).toUpperCase()}${r.status.slice(1)}`),
           [t("product.sellPrice")]: r.sellPrice,
           [t("product.originalPrice")]: r.originalPrice,
-          [t("reports.totalStock")]: r.totalStock,
-          [t("reports.stockValue")]: r.stockValueAtCost,
+          [t("product.audience")]: r.audience === "kids" ? t("product.audienceKids") : t("product.audienceAdult"),
+          [t("product.kind")]: t(`product.kind${r.kind === "fullset" ? "Fullset" : r.kind === "set" ? "Set" : "Single"}`),
+          [t("reports.availableVariants")]: r.availableVariants,
+          [t("reports.totalVariants")]: r.totalVariants,
         }))
       )
       return
@@ -169,6 +173,12 @@ export function ReportView({
         [t("order.customerName")]: r.customerName,
         [t("order.status")]: statusLabel(r.status),
         [t("order.itemsTotal")]: r.itemsTotal,
+        [t("order.itemsCostActual")]: r.itemsCost,
+        [t("order.itemsMasterCost")]: r.itemsMasterCost,
+        [t("order.costVariance")]: Number((r.itemsCost - r.itemsMasterCost).toFixed(2)),
+        [t("order.shippingCost")]: r.shippingCost,
+        [t("order.preorderShippingCost")]: r.preorderShippingCost,
+        [t("order.packingCost")]: r.packingCost,
         [t("order.advertisingCost")]: r.advertisingCost,
         [t("order.totalCost")]: r.totalCost,
         [t("order.profit")]: r.profit,
@@ -317,10 +327,23 @@ export function ReportView({
           {summary.revenue !== null && (
             <SummaryTile label={t("reports.totalRevenue")} value={formatBaht(summary.revenue)} />
           )}
-          <SummaryTile
-            label={tab === "inventory" ? t("reports.stockValue") : t("reports.totalCost")}
-            value={formatBaht(summary.cost)}
-          />
+          {summary.cost !== null && (
+            <SummaryTile label={t("reports.totalCost")} value={formatBaht(summary.cost)} />
+          )}
+          {"preorderShipping" in summary &&
+            summary.preorderShipping !== undefined &&
+            summary.costVariance !== undefined && (
+              <>
+                <SummaryTile
+                  label={t("order.preorderShippingCost")}
+                  value={formatBaht(summary.preorderShipping)}
+                />
+                <SummaryTile
+                  label={t("order.costVariance")}
+                  value={`${summary.costVariance > 0 ? "+" : ""}${formatBaht(summary.costVariance)}`}
+                />
+              </>
+            )}
           {summary.profit !== null && (
             <SummaryTile
               label={t("reports.totalProfit")}
@@ -338,8 +361,8 @@ export function ReportView({
                   <TableHead>{t("product.code")}</TableHead>
                   <TableHead>{t("product.name")}</TableHead>
                   <TableHead>{t("product.type")}</TableHead>
-                  <TableHead className="text-right">{t("reports.totalStock")}</TableHead>
-                  <TableHead className="text-right">{t("reports.stockValue")}</TableHead>
+                  <TableHead>{t("product.category")}</TableHead>
+                  <TableHead className="text-right">{t("product.availability")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -352,9 +375,12 @@ export function ReportView({
                     </TableCell>
                     <TableCell className="max-w-56 truncate">{r.productName}</TableCell>
                     <TableCell>{r.productType ?? "-"}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatNumber(r.totalStock)}</TableCell>
+                    <TableCell className="whitespace-nowrap text-small">
+                      {r.audience === "kids" ? t("product.audienceKids") : t("product.audienceAdult")}
+                      {r.kind !== "single" && ` · ${r.kind === "set" ? t("product.kindSet") : t("product.kindFullset")}`}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {formatBaht(r.stockValueAtCost)}
+                      {t("product.availableOf", { available: r.availableVariants, total: r.totalVariants })}
                     </TableCell>
                   </TableRow>
                 ))}

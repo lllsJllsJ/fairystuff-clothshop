@@ -4,7 +4,7 @@ import type { Column } from "drizzle-orm"
 import { and, asc, count, desc, eq, gte, ilike, lte, or, sql } from "drizzle-orm"
 
 import { db } from "@/db"
-import { orderItems, orderStatus, orders } from "@/db/schema"
+import { orderItems, orderStatus, orders, preorderShipments } from "@/db/schema"
 
 /**
  * Admin order reads. Read-only — creating/editing an order writes to both
@@ -16,10 +16,17 @@ import { orderItems, orderStatus, orders } from "@/db/schema"
 export type OrderStatusValue = (typeof orderStatus.enumValues)[number]
 
 export type OrderRow = typeof orders.$inferSelect
-/** A list row carries its line count so the list view needn't N+1. */
-export type OrderListRow = OrderRow & { itemCount: number }
+/** A list row carries its line counts so the list view needn't N+1:
+ * `receivedCount` = lines in a received-or-refunded status, the preorder
+ * progress shown as "2/3". */
+export type OrderListRow = OrderRow & { itemCount: number; receivedCount: number }
 export type OrderItemRow = typeof orderItems.$inferSelect
-export type OrderWithItems = OrderRow & { items: OrderItemRow[] }
+export type PreorderShipmentRow = typeof preorderShipments.$inferSelect
+export type OrderWithItems = OrderRow & {
+  items: OrderItemRow[]
+  /** Admin-only inbound legs — never passed to anything public. */
+  shipments: PreorderShipmentRow[]
+}
 
 export type OrderSort =
   | "newest"
@@ -31,7 +38,8 @@ export type OrderSort =
 
 export type OrderListParams = {
   status?: OrderStatusValue | "all"
-  /** Matches customer name (case-insensitive substring) or exact order no. */
+  /** Matches customer name, phone, or preorder code (case-insensitive
+   * substring — `PO-AB12` or just `ab12`), or an exact order no. */
   search?: string
   /** Inclusive ISO `yyyy-mm-dd` bounds on `orderDate`. */
   dateFrom?: string
@@ -85,7 +93,11 @@ export async function getOrders(
   const term = search.trim()
   if (term) {
     const like = `%${term}%`
-    const parts = [ilike(orders.customerName, like)]
+    const parts = [
+      ilike(orders.customerName, like),
+      ilike(orders.preorderCode, like),
+      ilike(orders.customerPhone, like),
+    ]
     if (/^\d+$/.test(term)) parts.push(eq(orders.orderNo, Number(term)))
     conditions.push(or(...parts)!)
   }
@@ -120,6 +132,12 @@ export async function getOrders(
           select count(*)::int from "order_items"
           where "order_items"."order_id" = "orders"."id"
         )`.as("item_count"),
+        receivedCount: sql<number>`(
+          select count(*)::int from "order_items"
+          join "order_item_statuses" on "order_item_statuses"."code" = "order_items"."status_code"
+          where "order_items"."order_id" = "orders"."id"
+            and ("order_item_statuses"."is_received" or "order_item_statuses"."is_refunded")
+        )`.as("received_count"),
       })
       .from(orders)
       .where(where)
@@ -130,7 +148,7 @@ export async function getOrders(
   ])
 
   return {
-    rows: rows.map((r) => ({ ...r.order, itemCount: r.itemCount })),
+    rows: rows.map((r) => ({ ...r.order, itemCount: r.itemCount, receivedCount: r.receivedCount })),
     count: countRows[0]?.value ?? 0,
     page,
     pageSize,
@@ -142,11 +160,18 @@ export async function getOrderById(id: string): Promise<OrderWithItems | null> {
   const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1)
   if (!order) return null
 
-  const items = await db
-    .select()
-    .from(orderItems)
-    .where(eq(orderItems.orderId, id))
-    .orderBy(asc(orderItems.sortOrder))
+  const [items, shipments] = await Promise.all([
+    db
+      .select()
+      .from(orderItems)
+      .where(eq(orderItems.orderId, id))
+      .orderBy(asc(orderItems.sortOrder)),
+    db
+      .select()
+      .from(preorderShipments)
+      .where(eq(preorderShipments.orderId, id))
+      .orderBy(asc(preorderShipments.sortOrder), asc(preorderShipments.createdAt)),
+  ])
 
-  return { ...order, items }
+  return { ...order, items, shipments }
 }

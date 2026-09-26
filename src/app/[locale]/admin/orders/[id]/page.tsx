@@ -73,14 +73,29 @@ export default async function OrderDetailPage({
         <OrderFulfillment
           orderId={order.id}
           orderStatus={order.status}
+          orderStatusLabel={statusLabel}
           items={order.items}
           statuses={itemStatuses}
+          shipments={order.shipments}
+          customerShippingCost={Number(order.shippingCost)}
           locale={locale}
         />
       </div>
 
       <div className="print:hidden">
-        <OrderForm order={order} types={types} statusLabels={statusLabels} locale={locale} />
+        {/* Keyed on updatedAt: the fulfillment panel above writes the order
+            directly (Mark as paid, item status, preorder shipments — every
+            one bumps updatedAt via the set_updated_at trigger, including the
+            shipment trigger's cost recalc). react-hook-form never re-reads
+            its defaultValues, so without a remount this form would keep the
+            OLD status/costs and a Save would silently revert them. */}
+        <OrderForm
+          key={order.updatedAt.toISOString()}
+          order={order}
+          types={types}
+          statusLabels={statusLabels}
+          locale={locale}
+        />
       </div>
     </div>
   )

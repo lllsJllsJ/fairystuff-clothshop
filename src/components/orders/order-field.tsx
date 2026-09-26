@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils"
 import { Label } from "@/components/ui/label"
 
 /**
@@ -14,21 +15,28 @@ export function Field({
   error,
   required,
   className,
+  hint,
   children,
 }: {
   label: string
   error?: string | boolean
   required?: boolean
   className?: string
+  /** Small explanatory note under the input. */
+  hint?: string
   children: React.ReactNode
 }) {
   return (
-    <div className={className ?? "grid gap-1.5"}>
+    // content-start: when a neighbour in the same grid row is taller (a
+    // hint or error under its input), this field must not stretch its own
+    // label/input apart — every input in the row stays on one line.
+    <div className={cn("grid content-start gap-1.5", className)}>
       <Label className="text-body">
         {label}
         {required && <span className="text-destructive">*</span>}
       </Label>
       {children}
+      {hint && <p className="text-small text-muted-foreground">{hint}</p>}
       {typeof error === "string" && error && (
         <p className="text-small text-destructive">{error}</p>
       )}

@@ -3,12 +3,12 @@ import test from "node:test"
 
 import { catalogImageInserts, catalogVariantInsert } from "./import-plan"
 
-test("plans one in-stock Free Size variant using the detected color", () => {
+test("plans one available Free Size variant using the detected color", () => {
   assert.deepEqual(catalogVariantInsert("product", "ชมพู"), {
     productId: "product",
     color: "ชมพู",
     size: "Free Size",
-    quantity: 99,
+    isAvailable: true,
     sortOrder: 0,
   })
 })

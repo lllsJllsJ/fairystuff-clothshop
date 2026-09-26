@@ -8,9 +8,12 @@ import { productCharacters, productImages, products, productVariants } from "@/d
 import { getCurrentUser } from "@/lib/auth-helpers"
 import { deleteProductImageRenditions } from "@/lib/r2"
 import {
+  bumpCode,
   nextProductCode,
   nextProductCodeIn,
+  withCodeRetry,
 } from "@/lib/product-code"
+import { isProductKind, type ProductKind } from "@/lib/product-taxonomy"
 import { learnProductType } from "@/lib/reference"
 import { isOwner } from "@/lib/roles"
 import {
@@ -90,39 +93,6 @@ function toMoney(value: number): string {
   return value.toFixed(2)
 }
 
-/** Code prefix for a product saved with no type at all. */
-const UNTYPED_CODE_PREFIX = "GEN"
-/** How many times a create re-mints its code after losing a race. */
-const CODE_ATTEMPTS = 5
-
-/** `TS-007` + 2 -> `TS-009`; leaves an unparseable code untouched. */
-function bumpCode(code: string, by: number): string {
-  const match = code.match(/^(.*-)(\d+)$/)
-  if (!match) return code
-  const width = match[2].length
-  return `${match[1]}${String(Number(match[2]) + by).padStart(width, "0")}`
-}
-
-/**
- * Runs a create, retrying only the `lower(product_code)` unique violation —
- * the one failure a generated code can hit when two creates read the same
- * highest number at once. Any other error propagates on the first attempt.
- */
-async function withCodeRetry<T>(
-  run: (attempt: number) => Promise<T>
-): Promise<T> {
-  let lastError: unknown
-  for (let attempt = 0; attempt < CODE_ATTEMPTS; attempt += 1) {
-    try {
-      return await run(attempt)
-    } catch (error) {
-      if (!isUniqueViolation(error)) throw error
-      lastError = error
-    }
-  }
-  throw lastError
-}
-
 export async function createProduct(
   values: ProductFormValues,
   images: ProductImageInput[],
@@ -156,9 +126,11 @@ export async function createProduct(
   let assignedCode = ""
   try {
     insertedId = await withCodeRetry(async (attempt) => db.transaction(async (tx) => {
-      assignedCode =
-        (await nextProductCodeIn(tx, v.productType)) ??
-        `${UNTYPED_CODE_PREFIX}-${Date.now().toString().slice(-6)}`
+      // The schema already requires a type for a single item (sets/full
+      // sets use their own series), so null here means a bypassed form.
+      const minted = await nextProductCodeIn(tx, v.productType, v.kind)
+      if (!minted) throw new Error("type_required")
+      assignedCode = minted
       if (attempt > 0) {
         // A concurrent create took the number we just read; nudge past it
         // rather than replaying the identical code.
@@ -172,6 +144,8 @@ export async function createProduct(
           productCode: assignedCode,
           productName: v.productName,
           productType: toNullable(v.productType),
+          audience: v.audience,
+          kind: v.kind,
           description: toNullable(v.description),
           sellPrice: toMoney(v.sellPrice),
           originalPrice: toMoney(v.originalPrice),
@@ -192,7 +166,7 @@ export async function createProduct(
             productId: row.id,
             color: variant.color,
             size: variant.size,
-            quantity: variant.quantity,
+            isAvailable: variant.isAvailable,
             sku: toNullable(variant.sku),
             sortOrder: i,
           }))
@@ -222,6 +196,9 @@ export async function createProduct(
     }))
   } catch (error) {
     if (isUniqueViolation(error)) return { ok: false, error: "duplicate_code" }
+    if (error instanceof Error && error.message === "type_required") {
+      return { ok: false, error: "type_required" }
+    }
     console.error("createProduct failed", error)
     return { ok: false, error: "insert_failed" }
   }
@@ -239,14 +216,16 @@ export async function createProduct(
  * meantime simply becomes the next number on save.
  */
 export async function previewProductCode(
-  productType: string
+  productType: string,
+  kind: ProductKind = "single"
 ): Promise<{ ok: true; code: string | null } | { ok: false; error: string }> {
   const user = await getCurrentUser()
   if (!user) return { ok: false, error: "unauthorized" }
   if (!isOwner(user.role)) return { ok: false, error: "forbidden" }
 
   try {
-    return { ok: true, code: await nextProductCode(productType) }
+    if (!isProductKind(kind)) return { ok: false, error: "invalid" }
+    return { ok: true, code: await nextProductCode(productType, kind) }
   } catch (error) {
     console.error("previewProductCode failed", error)
     return { ok: false, error: "preview_failed" }
@@ -307,6 +286,8 @@ export async function updateProduct(
           // snapshot depend on it staying put.
           productName: v.productName,
           productType: toNullable(v.productType),
+          audience: v.audience,
+          kind: v.kind,
           description: toNullable(v.description),
           sellPrice: toMoney(v.sellPrice),
           originalPrice: toMoney(v.originalPrice),
@@ -357,7 +338,7 @@ export async function updateProduct(
             .set({
               color: variant.color,
               size: variant.size,
-              quantity: variant.quantity,
+              isAvailable: variant.isAvailable,
               sku: toNullable(variant.sku),
               sortOrder: i,
               updatedAt: new Date(),
@@ -373,14 +354,14 @@ export async function updateProduct(
               productId: id,
               color: variant.color,
               size: variant.size,
-              quantity: variant.quantity,
+              isAvailable: variant.isAvailable,
               sku: toNullable(variant.sku),
               sortOrder: i,
             })
             .onConflictDoUpdate({
               target: [productVariants.productId, productVariants.color, productVariants.size],
               set: {
-                quantity: variant.quantity,
+                isAvailable: variant.isAvailable,
                 sku: toNullable(variant.sku),
                 sortOrder: i,
                 updatedAt: new Date(),
@@ -461,8 +442,9 @@ export async function updateProductInline(
         productType: toNullable(v.productType),
         sellPrice: toMoney(v.sellPrice),
         originalPrice: toMoney(v.originalPrice),
-        preorderMinDays: v.preorderMinDays ?? null,
-        preorderMaxDays: v.preorderMaxDays ?? null,
+        // Preorder lead time is deliberately absent: the table can't edit
+        // it, and writing `?? null` here used to wipe it on every inline
+        // save. The full form owns it.
         status: v.status,
         updatedAt: new Date(),
       })

@@ -1,5 +1,8 @@
 import { z } from "zod"
 
+import { PRODUCT_AUDIENCES, PRODUCT_KINDS } from "@/lib/product-taxonomy"
+import { MAX_SIZE_LENGTH } from "@/lib/sizes"
+
 /**
  * Validation shapes for products, variants, images, and Excel imports.
  * Follows carstockpro's `src/lib/validations/car.ts` conventions exactly:
@@ -21,17 +24,6 @@ const money = z.preprocess(
   z.number({ message: "required" }).min(0, "min")
 )
 
-/**
- * "" | null | undefined -> 0, otherwise Number(v). Used for variant
- * quantities: always required (a variant row always has *some* quantity,
- * even if 0 — that's how a colour/size combination is marked sold out),
- * always an integer, capped well above anything a real stock room needs.
- */
-const count = z.preprocess(
-  (v) => (v === "" || v === null || v === undefined ? 0 : Number(v)),
-  z.number({ message: "required" }).int("required").min(0, "min").max(100_000, "max")
-)
-
 const emptyString = z.literal("").transform(() => "")
 
 const optionalDays = z.preprocess(
@@ -40,14 +32,16 @@ const optionalDays = z.preprocess(
 )
 
 // ---------------------------------------------------------------------------
-// Variants — one row per colour x size combination.
+// Variants — one row per colour x size combination. No stock count: this is
+// a preorder shop, so a variant is simply available (orderable) or not.
+// `size` is free text — presets in src/lib/sizes.ts are shortcuts only.
 // ---------------------------------------------------------------------------
 
 export const productVariantSchema = z.object({
   id: z.uuid().optional(),
   color: z.string().trim().min(1, "required").max(40),
-  size: z.string().trim().min(1, "required").max(20),
-  quantity: count,
+  size: z.string().trim().min(1, "required").max(MAX_SIZE_LENGTH),
+  isAvailable: z.boolean().default(true),
   sku: z.string().trim().max(60).optional().or(emptyString),
   sortOrder: z.number().int().min(0).default(0),
 })
@@ -74,6 +68,8 @@ const productFormObject = z.object({
   productCode: z.string().trim().max(40),
   productName: z.string().trim().min(1, "required").max(160),
   productType: z.string().trim().max(60).optional().or(emptyString),
+  audience: z.enum(PRODUCT_AUDIENCES).default("adult"),
+  kind: z.enum(PRODUCT_KINDS).default("single"),
   description: z.string().trim().max(2000).optional().or(emptyString),
   sellPrice: money,
   originalPrice: money,
@@ -107,7 +103,20 @@ function validatePreorderRange(
   }
 }
 
-export const productFormSchema = productFormObject.superRefine(validatePreorderRange)
+/** A single item's code comes from its type's prefix, so it needs a type;
+ * sets and full sets are numbered in their own series and don't. */
+function validateTypeForKind(
+  value: { kind?: string; productType?: string },
+  context: z.RefinementCtx
+) {
+  if ((value.kind ?? "single") === "single" && !value.productType?.trim()) {
+    context.addIssue({ code: "custom", path: ["productType"], message: "type_required" })
+  }
+}
+
+export const productFormSchema = productFormObject
+  .superRefine(validatePreorderRange)
+  .superRefine(validateTypeForKind)
 
 export type ProductFormValues = z.input<typeof productFormSchema>
 export type ProductFormParsed = z.output<typeof productFormSchema>
@@ -125,38 +134,61 @@ export const productInlineUpdateSchema = productFormObject.pick({
   productType: true,
   sellPrice: true,
   originalPrice: true,
-  preorderMinDays: true,
-  preorderMaxDays: true,
   status: true,
-}).superRefine(validatePreorderRange)
+})
 
 export type ProductInlineUpdateValues = z.input<typeof productInlineUpdateSchema>
 export type ProductInlineUpdateParsed = z.output<typeof productInlineUpdateSchema>
 
 // ---------------------------------------------------------------------------
-// Excel import — one confirmed row after the owner has edited the preview.
-// Looser than the product form: only productCode is required, since a
-// partially-filled sheet must not block the whole import.
+// Import — one row of the import/export template (src/lib/import/
+// product-template.ts), re-validated on the server. Optional fields are
+// genuinely optional: absent = "leave the existing value" on an update.
 // ---------------------------------------------------------------------------
 
+const optionalText = (max: number) => z.string().trim().max(max).optional()
+const optionalMoney = z.number().min(0).max(10_000_000).optional()
+
 export const productImportRowSchema = z.object({
-  productCode: z.string().trim().min(1, "required").max(40),
-  productName: z.string().trim().max(160).optional().or(emptyString),
-  productType: z.string().trim().max(60).optional().or(emptyString),
-  sellPrice: money,
-  originalPrice: money,
-  buyingSource: z.string().trim().max(160).optional().or(emptyString),
-  sourceLink: z.union([z.url().max(500), emptyString]).optional(),
-  variants: z.array(productVariantSchema.omit({ id: true })).max(120).default([]),
+  sourceRow: z.number().int().min(1),
+  productCode: z.string().trim().max(40).default(""),
+  productName: optionalText(160),
+  audience: z.enum(PRODUCT_AUDIENCES).optional(),
+  kind: z.enum(PRODUCT_KINDS).optional(),
+  productType: optionalText(60),
+  variants: z
+    .array(
+      z.object({
+        color: z.string().trim().min(1).max(40),
+        size: z.string().trim().min(1).max(MAX_SIZE_LENGTH),
+        isAvailable: z.boolean(),
+      })
+    )
+    .max(120)
+    .refine(
+      (variants) => new Set(variants.map(variantDedupeKey)).size === variants.length,
+      "duplicate_variant"
+    )
+    .optional(),
+  sellPrice: optionalMoney,
+  originalPrice: optionalMoney,
+  buyingSource: optionalText(160),
+  sourceLink: z.url().max(500).optional(),
+  status: z.enum(["draft", "active", "archived"]).optional(),
+  description: optionalText(2000),
+  imageUrls: z.array(z.url().max(2000)).max(20).optional(),
 })
 
 export type ProductImportRow = z.input<typeof productImportRowSchema>
 export type ProductImportRowParsed = z.output<typeof productImportRowSchema>
 
-export const productImportSchema = z
+/** Rows per server call — small, because each row may download images. */
+export const IMPORT_CHUNK_SIZE = 5
+
+export const productImportChunkSchema = z
   .array(productImportRowSchema)
   .min(1, "required")
-  .max(1000, "max")
+  .max(IMPORT_CHUNK_SIZE, "max")
 
 // ---------------------------------------------------------------------------
 // Product images — validated payload for attaching an already-uploaded R2

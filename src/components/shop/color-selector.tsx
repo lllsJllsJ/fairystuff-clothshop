@@ -10,7 +10,7 @@ import { RadioChipGroup } from "@/components/shop/radio-chip-group"
  * `product_variants.color` in schema.ts), so swatches render as labelled
  * chips rather than CSS colour dots: a value like "แดง" isn't a resolvable
  * CSS colour, and a dot that silently fails to paint is worse than a chip
- * that always reads correctly. A colour with zero stock across every size
+ * that always reads correctly. A colour with every size switched off
  * renders desaturated (DESIGN.md's colour/size interaction rule) but stays
  * selectable — the shopper can still browse its photos.
  */
@@ -21,7 +21,7 @@ export function ColorSelector({
   onChange,
 }: {
   colors: string[]
-  /** true if ANY size for that colour is in stock. */
+  /** true if ANY size for that colour is currently available. */
   stockByColor: Record<string, boolean>
   value: string | null
   onChange: (color: string) => void
@@ -55,7 +55,7 @@ export function ColorSelector({
               )}
             >
               {option.label}
-              {!inStock && <span className="sr-only"> — {t("shop.outOfStockAll")}</span>}
+              {!inStock && <span className="sr-only"> — {t("shop.colorUnavailable")}</span>}
             </span>
           )
         }}

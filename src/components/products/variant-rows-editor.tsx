@@ -2,30 +2,30 @@
 
 import { useState } from "react"
 import { useTranslations } from "next-intl"
-import { Plus, X } from "lucide-react"
+import { Check, Plus, X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import type { ProductAudience } from "@/lib/product-taxonomy"
+import { MAX_SIZE_LENGTH, normalizeSizes, sizePresetsFor, sortSizes } from "@/lib/sizes"
 import type { ProductVariantValues } from "@/lib/validations/product"
 import { Button } from "@/components/ui/button"
 import { CreatableCombobox } from "@/components/ui/creatable-combobox"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 
 /**
- * Stock editor: one block per colour, every size in that block, quantities
- * across. "Add colour" creates the whole block at once — all standard sizes
- * already there at 0 — so a new colourway is one click plus the numbers,
- * with no size buttons to press first.
+ * "Sizes & availability" — the preorder shop's replacement for a stock
+ * matrix. There are no quantities: the owner picks which sizes the product
+ * comes in (preset chips for the audience, or any free-text size), which
+ * colours, and then flips each colour x size ON (orderable) or OFF.
  *
  * ---------------------------------------------------------------------
- * WHICH CELLS BECOME ROWS
+ * WHY "OFF" KEEPS THE ROW
  * ---------------------------------------------------------------------
- * A cell that holds a number is a variant row (0 included — that is how a
- * colour/size combination is marked sold out rather than absent, see
- * `productVariantSchema`). A cell left blank is NOT a row: opening an
- * existing product shows the standard sizes it never had as empty cells,
- * and saving without touching them leaves the product exactly as it was.
- * Typing into one creates it; clearing one back to blank removes it.
+ * Turning a cell off only sets `isAvailable = false`; the variant row and
+ * its id survive. Carts in customers' browsers and
+ * `order_items.productVariantId` point at that id, so flipping a size off
+ * for a week and back on never breaks either. Only deselecting a whole
+ * size or removing a colour deletes rows.
  */
 
 /** "-" is the one-colour sentinel — see productVariants.color in schema.ts. */
@@ -34,239 +34,343 @@ const NO_COLOR = "-"
 /** Offered in the colour dropdown; anything typed instead is kept verbatim. */
 const COLOR_PRESETS = ["Black", "White", "Pink", "Yellow", "Grey", "Blue"]
 
-/** The columns every colour block shows, and what "Add colour" fills with 0. */
-const STANDARD_SIZES = ["XS", "S", "M", "L", "XL", "2XL", "Free Size"]
-
-type ColorGroup = {
-  color: string
-  /** size -> the row for that cell, for sizes that actually exist. */
-  rows: Map<string, ProductVariantValues>
+function uniqueInOrder(values: string[]): string[] {
+  return Array.from(new Set(values))
 }
 
-/** Groups the flat variants array by colour, preserving first-seen order. */
-function toGroups(variants: ProductVariantValues[]): ColorGroup[] {
-  const groups: ColorGroup[] = []
-  for (const variant of variants) {
-    let group = groups.find((candidate) => candidate.color === variant.color)
-    if (!group) {
-      group = { color: variant.color, rows: new Map() }
-      groups.push(group)
-    }
-    group.rows.set(variant.size, variant)
-  }
-  return groups
+function sameSize(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase()
 }
 
-/** Flattens back, numbering sortOrder by on-screen position. */
-function toVariants(groups: ColorGroup[]): ProductVariantValues[] {
+/** Rebuilds the flat variants array: colours in order, sizes sorted
+ * presets-first, sortOrder = position. Keeps each existing row's id. */
+function build(
+  colors: string[],
+  sizes: string[],
+  lookup: (color: string, size: string) => ProductVariantValues | undefined,
+  fillMissing: boolean
+): ProductVariantValues[] {
   const out: ProductVariantValues[] = []
-  for (const group of groups) {
-    for (const size of sizesFor(group)) {
-      const row = group.rows.get(size)
-      if (!row) continue
-      out.push({ ...row, color: group.color, size, sortOrder: out.length })
+  for (const color of colors) {
+    for (const size of sortSizes(sizes)) {
+      const existing = lookup(color, size)
+      if (!existing && !fillMissing) continue
+      out.push({
+        ...(existing ?? { isAvailable: true }),
+        color,
+        size,
+        sortOrder: out.length,
+      })
     }
   }
   return out
 }
 
-/** Standard sizes first, then anything non-standard this colour already has. */
-function sizesFor(group: ColorGroup): string[] {
-  const extras = [...group.rows.keys()].filter(
-    (size) => !STANDARD_SIZES.includes(size)
-  )
-  return [...STANDARD_SIZES, ...extras]
-}
-
-/**
- * The shared size axis: the standard sizes plus any non-standard size any
- * colour already carries. One header for the whole grid means each colour
- * is a single line — the size names are not repeated per row.
- */
-function sizeColumns(groups: ColorGroup[]): string[] {
-  const extras: string[] = []
-  for (const group of groups) {
-    for (const size of group.rows.keys()) {
-      if (!STANDARD_SIZES.includes(size) && !extras.includes(size)) {
-        extras.push(size)
-      }
-    }
-  }
-  return [...STANDARD_SIZES, ...extras]
-}
-
 export function VariantRowsEditor({
   value,
   onChange,
-  disabled,
+  audience,
 }: {
   value: ProductVariantValues[]
   onChange: (variants: ProductVariantValues[]) => void
-  disabled?: boolean
+  audience: ProductAudience
 }) {
-  const t = useTranslations()
-  const [duplicateColor, setDuplicateColor] = useState(false)
-  const groups = toGroups(value)
-  const columns = sizeColumns(groups)
+  const t = useTranslations("variant")
+  const tProduct = useTranslations("product")
+  /** Colours added before any size exists have no rows yet — held here so
+   * they don't vanish. Cleared as soon as rows carry them. */
+  const [pendingColors, setPendingColors] = useState<string[]>([])
+  /** The free-text size being typed. */
+  const [customSize, setCustomSize] = useState("")
 
-  function commit(next: ColorGroup[]) {
-    const colors = next.map((group) => group.color.trim().toLowerCase())
-    setDuplicateColor(new Set(colors).size !== colors.length)
-    onChange(toVariants(next))
+  const rowColors = uniqueInOrder(value.map((v) => v.color))
+  const colors = uniqueInOrder([...rowColors, ...pendingColors])
+  const sizes = sortSizes(uniqueInOrder(value.map((v) => v.size)))
+  const presets = sizePresetsFor(audience)
+  const extraSizes = sizes.filter((size) => !presets.some((p) => sameSize(p, size)))
+
+  const lookup = (color: string, size: string) =>
+    value.find((v) => v.color === color && sameSize(v.size, size))
+
+  /** Colours that rows get created for: real ones, else the "-" sentinel. */
+  const targetColors = colors.length > 0 ? colors : [NO_COLOR]
+
+  /**
+   * Rebuilds rows for `nextColors` x `nextSizes`. Existing cells keep their
+   * row (id + on/off); a cell for which `isNew` is true is created ON; any
+   * other missing cell stays missing — so adding a size never silently
+   * switches on a gap an older, sparse product already had.
+   */
+  function emit(
+    nextColors: string[],
+    nextSizes: string[],
+    isNew: (color: string, size: string) => boolean = () => false
+  ) {
+    const effective = nextColors.length > 0 ? nextColors : nextSizes.length > 0 ? [NO_COLOR] : []
+    onChange(
+      build(
+        effective,
+        nextSizes,
+        (c, s) => lookup(c, s) ?? (isNew(c, s) ? { color: c, size: s, isAvailable: true, sortOrder: 0 } : undefined),
+        false
+      )
+    )
+    setPendingColors((prev) => prev.filter((c) => !effective.includes(c)))
   }
 
-  function addColorBlock() {
-    const rows = new Map<string, ProductVariantValues>()
-    for (const size of STANDARD_SIZES) {
-      rows.set(size, { color: NO_COLOR, size, quantity: 0, sortOrder: 0 })
+  function addSize(size: string) {
+    if (sizes.some((s) => sameSize(s, size))) return
+    emit(targetColors, [...sizes, size], (_, s) => sameSize(s, size))
+  }
+
+  function toggleSize(size: string) {
+    if (sizes.some((s) => sameSize(s, size))) {
+      emit(targetColors, sizes.filter((s) => !sameSize(s, size)))
+    } else {
+      addSize(size)
     }
-    commit([...groups, { color: unusedColor(groups), rows }])
   }
 
-  function renameColor(index: number, color: string) {
-    commit(groups.map((group, i) => (i === index ? { ...group, color } : group)))
+  function addCustomSize() {
+    const [size] = normalizeSizes([customSize])
+    setCustomSize("")
+    if (size) addSize(size)
   }
 
-  function removeColorBlock(index: number) {
-    commit(groups.filter((_, i) => i !== index))
+  function addColor() {
+    const used = new Set(colors)
+    const name =
+      COLOR_PRESETS.find((preset) => !used.has(preset)) ?? `Colour ${colors.length + 1}`
+    if (colors.length === 1 && colors[0] === NO_COLOR) {
+      // Going from "one colour" to named colours: the existing rows become
+      // the first named colour instead of leaving a "-" block behind.
+      renameColor(NO_COLOR, name)
+      return
+    }
+    if (sizes.length === 0) {
+      setPendingColors((prev) => [...prev, name])
+      return
+    }
+    emit([...colors, name], sizes, (c) => c === name)
   }
 
-  function setQuantity(index: number, size: string, raw: string) {
-    const next = groups.map((group, i) => {
-      if (i !== index) return group
-      const rows = new Map(group.rows)
-      if (raw === "") {
-        rows.delete(size)
-      } else {
-        const existing = rows.get(size)
-        rows.set(size, {
-          ...(existing ?? { color: group.color, size, sortOrder: 0 }),
-          color: group.color,
+  function renameColor(from: string, raw: string) {
+    const to = raw.trim() === t("noColorLabel") ? NO_COLOR : raw.trim()
+    if (!to || to === from) return
+    if (colors.includes(to)) return // would merge two colours — refuse silently; UI shows the name unchanged
+    setPendingColors((prev) => prev.map((c) => (c === from ? to : c)))
+    onChange(value.map((v) => (v.color === from ? { ...v, color: to } : v)))
+  }
+
+  function removeColor(color: string) {
+    setPendingColors((prev) => prev.filter((c) => c !== color))
+    const remaining = colors.filter((c) => c !== color)
+    if (remaining.length === 0 && sizes.length > 0) {
+      // Last colour gone but sizes still chosen: keep them as one-colour.
+      onChange(
+        sortSizes(sizes).map((size, i) => ({
+          ...(lookup(color, size) ?? { isAvailable: true }),
+          color: NO_COLOR,
           size,
-          quantity: Math.max(0, Number(raw) || 0),
-        })
-      }
-      return { ...group, rows }
-    })
-    commit(next)
+          sortOrder: i,
+        }))
+      )
+      return
+    }
+    emit(remaining, sizes)
   }
 
-  /** Suggests a preset not already used, so two blocks don't start identical. */
-  function unusedColor(existing: ColorGroup[]): string {
-    const used = new Set(existing.map((group) => group.color))
-    if (!used.has(NO_COLOR)) return NO_COLOR
-    return COLOR_PRESETS.find((preset) => !used.has(preset)) ?? ""
+  function toggleCell(color: string, size: string) {
+    const existing = lookup(color, size)
+    if (existing) {
+      onChange(value.map((v) => (v === existing ? { ...v, isAvailable: !v.isAvailable } : v)))
+    } else {
+      onChange(
+        build(colors, sizes, (c, s) =>
+          c === color && sameSize(s, size)
+            ? { color, size, isAvailable: true, sortOrder: 0 }
+            : lookup(c, s),
+          false
+        )
+      )
+    }
   }
 
-  const colorOptions = [t("variant.noColorLabel"), ...COLOR_PRESETS]
-  const displayColor = (color: string) =>
-    color === NO_COLOR ? t("variant.noColorLabel") : color
-  const storeColor = (input: string) =>
-    input.trim() === t("variant.noColorLabel") ? NO_COLOR : input
+  function setAll(isAvailable: boolean) {
+    onChange(build(targetColors, sizes, lookup, true).map((v) => ({ ...v, isAvailable })))
+  }
+
+  const displayColor = (color: string) => (color === NO_COLOR ? t("noColorLabel") : color)
+  const colorOptions = [t("noColorLabel"), ...COLOR_PRESETS]
+  const available = value.filter((v) => v.isAvailable !== false).length
 
   return (
-    <section className="space-y-3 border border-border bg-card p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Label>{t("variant.stockRows")}</Label>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={disabled}
-          onClick={addColorBlock}
-        >
-          <Plus />
-          {t("variant.addColorRow")}
-        </Button>
+    <section className="space-y-5 border border-border bg-card p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-subtitle font-bold">{t("title")}</h2>
+        {value.length > 0 && (
+          <p className="text-small text-muted-foreground">
+            {t("availableCount", { available, total: value.length })}
+          </p>
+        )}
       </div>
 
-      {groups.length === 0 ? (
-        <p className="py-6 text-center text-small text-muted-foreground">
-          {t("variant.noRows")}
+      {/* 1. Sizes */}
+      <div className="space-y-2">
+        <p className="text-body font-medium">
+          {audience === "kids" ? t("sizesKids") : t("sizesAdult")}
         </p>
-      ) : (
-        // A real grid: the size names are one header row, so each colour
-        // below it is a single line. Wider than a phone with seven sizes,
-        // so the grid scrolls inside its own container rather than
-        // widening the form.
-        <div className="overflow-x-auto">
-          <table className="min-w-max border-separate border-spacing-x-1 border-spacing-y-1">
-            <thead>
-              <tr className="text-small text-muted-foreground">
-                <th className="text-left font-medium">{t("variant.color")}</th>
-                {columns.map((size) => (
-                  <th key={size} className="w-16 text-center font-medium">
-                    {size}
-                  </th>
-                ))}
-                <th className="w-8" />
-              </tr>
-            </thead>
-            <tbody>
-              {groups.map((group, index) => (
-                <tr key={`group-${index}`}>
-                  <td className="w-40">
-                    <CreatableCombobox
-                      value={displayColor(group.color)}
-                      onValueChange={(next) => renameColor(index, storeColor(next))}
-                      options={colorOptions}
-                      disabled={disabled}
-                      placeholder={t("variant.colorPlaceholder")}
-                      createLabel={(query) =>
-                        t("product.addOption", { value: query })
-                      }
-                    />
-                  </td>
-
-                  {columns.map((size) => {
-                    const row = group.rows.get(size)
-                    return (
-                      <td key={size} className="w-16">
-                        <Input
-                          type="number"
-                          min={0}
-                          inputMode="numeric"
-                          disabled={disabled}
-                          aria-label={`${displayColor(group.color)} ${size}`}
-                          placeholder="—"
-                          value={row ? String(row.quantity ?? 0) : ""}
-                          onChange={(event) =>
-                            setQuantity(index, size, event.target.value)
-                          }
-                          className={cn(
-                            "px-1 text-center tabular-nums",
-                            !row && "text-muted-foreground"
-                          )}
-                        />
-                      </td>
-                    )
-                  })}
-
-                  <td className="w-8 text-center">
-                    <button
-                      type="button"
-                      disabled={disabled}
-                      aria-label={t("variant.removeColor")}
-                      onClick={() => removeColorBlock(index)}
-                      className="flex size-11 items-center justify-center text-muted-foreground hover:text-destructive disabled:opacity-30"
-                    >
-                      <X className="size-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="flex flex-wrap gap-2">
+          {[...presets, ...extraSizes].map((size) => {
+            const selected = sizes.some((s) => sameSize(s, size))
+            const isCustom = !presets.some((p) => sameSize(p, size))
+            return (
+              <button
+                key={size}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => toggleSize(size)}
+                className={cn(
+                  "inline-flex h-9 min-w-11 items-center justify-center gap-1 rounded-full border px-3 text-body transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+                  selected
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-input bg-background hover:border-primary",
+                  isCustom && !selected && "border-dashed"
+                )}
+              >
+                {selected && <Check className="size-3.5" />}
+                {size}
+                {isCustom && selected && <X className="size-3.5 opacity-80" aria-hidden />}
+              </button>
+            )
+          })}
+          <div className="flex items-center gap-1">
+            <Input
+              value={customSize}
+              maxLength={MAX_SIZE_LENGTH}
+              onChange={(e) => setCustomSize(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault()
+                  addCustomSize()
+                }
+              }}
+              placeholder={t("customSizePlaceholder")}
+              aria-label={t("customSize")}
+              className="h-9 w-40 rounded-full"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 rounded-full"
+              disabled={!customSize.trim()}
+              onClick={addCustomSize}
+            >
+              <Plus />
+              {t("customSize")}
+            </Button>
+          </div>
         </div>
-      )}
+      </div>
 
-      <p className="text-small text-muted-foreground">{t("variant.blankHint")}</p>
+      {/* 2. Colours + availability grid */}
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-body font-medium">{t("availability")}</p>
+          <div className="flex flex-wrap gap-2">
+            {sizes.length > 0 && (
+              <>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setAll(true)}>
+                  {t("enableAll")}
+                </Button>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setAll(false)}>
+                  {t("disableAll")}
+                </Button>
+              </>
+            )}
+            <Button type="button" variant="outline" size="sm" onClick={addColor}>
+              <Plus />
+              {t("addColor")}
+            </Button>
+          </div>
+        </div>
 
-      {duplicateColor && (
-        <p className="text-small text-destructive">
-          {t("variant.duplicateVariant")}
-        </p>
-      )}
+        {sizes.length === 0 && colors.length === 0 ? (
+          <p className="rounded-md bg-muted/50 py-6 text-center text-small text-muted-foreground">
+            {t("pickSizesFirst")}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-max border-separate border-spacing-1">
+              <thead>
+                <tr className="text-small text-muted-foreground">
+                  <th className="text-left font-medium">{t("color")}</th>
+                  {sizes.map((size) => (
+                    <th key={size} className="min-w-16 px-1 text-center font-medium">
+                      {size}
+                    </th>
+                  ))}
+                  <th className="w-8" />
+                </tr>
+              </thead>
+              <tbody>
+                {(colors.length > 0 ? colors : [NO_COLOR]).map((color) => (
+                  <tr key={color}>
+                    <td className="w-44">
+                      <CreatableCombobox
+                        value={displayColor(color)}
+                        onValueChange={(next) => renameColor(color, next)}
+                        options={colorOptions}
+                        placeholder={t("colorPlaceholder")}
+                        createLabel={(query) => tProduct("addOption", { value: query })}
+                      />
+                    </td>
+                    {sizes.map((size) => {
+                      const row = lookup(color, size)
+                      const on = !!row && row.isAvailable !== false
+                      return (
+                        <td key={size} className="text-center">
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={on}
+                            aria-label={`${displayColor(color)} ${size}`}
+                            onClick={() => toggleCell(color, size)}
+                            className={cn(
+                              "inline-flex h-9 w-16 items-center justify-center rounded-md border text-small font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+                              on
+                                ? "border-emerald-600 bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                                : row
+                                  ? "border-input bg-muted text-muted-foreground line-through"
+                                  : "border-dashed border-input text-muted-foreground"
+                            )}
+                          >
+                            {on ? t("on") : row ? t("off") : "+"}
+                          </button>
+                        </td>
+                      )
+                    })}
+                    <td className="text-center">
+                      {color !== NO_COLOR && (
+                        <button
+                          type="button"
+                          aria-label={t("removeColor")}
+                          onClick={() => removeColor(color)}
+                          className="flex size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-destructive"
+                        >
+                          <X className="size-4" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="text-small text-muted-foreground">{t("availabilityHint")}</p>
+      </div>
     </section>
   )
 }

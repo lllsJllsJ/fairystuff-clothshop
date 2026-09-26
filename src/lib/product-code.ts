@@ -4,6 +4,12 @@ import { eq, isNotNull, sql } from "drizzle-orm"
 
 import { db } from "@/db"
 import { orderItems, productTypes, products } from "@/db/schema"
+import {
+  KIND_CODE_PREFIX,
+  RESERVED_CODE_PREFIXES,
+  type ProductKind,
+} from "@/lib/product-taxonomy"
+import { isUniqueViolation } from "@/lib/db-errors"
 import type { DbLike } from "@/lib/reference"
 
 /**
@@ -11,6 +17,11 @@ import type { DbLike } from "@/lib/reference"
  * hand: `<PREFIX>-<NNN>` — `TS-001`, `TS-002`, ... The prefix belongs to
  * the type (`product_types.code_prefix`) so every T-shirt shares one
  * sequence and a code says at a glance what it is.
+ *
+ * Sets and full sets are the exception: they are numbered in their own
+ * series whatever their type — `SET-001`, `FULL-001` (KIND_CODE_PREFIX in
+ * src/lib/product-taxonomy.ts). Those two prefixes are reserved, so
+ * `derivePrefix` never hands them to a type.
  *
  * ---------------------------------------------------------------------
  * WHY THE SERVER OWNS THIS
@@ -40,18 +51,15 @@ const FALLBACK_PREFIX = "PR"
 const MAX_PREFIX_LENGTH = 6
 
 /**
- * The next unused code for a product type. Returns null when no type is
- * selected — the form uses that to keep the code field empty until the
- * owner picks one.
+ * The next unused code for a product. Returns null when a single item has
+ * no type yet — the form uses that to show "assigned on save" until the
+ * owner picks one. Sets and full sets never need a type.
  */
 export async function nextProductCode(
-  productType: string | null | undefined
+  productType: string | null | undefined,
+  kind: ProductKind = "single"
 ): Promise<string | null> {
-  const name = productType?.trim()
-  if (!name) return null
-
-  const prefix = await codePrefixFor(db, name)
-  return `${prefix}-${String(await nextSequence(db, prefix)).padStart(SEQUENCE_PAD, "0")}`
+  return nextProductCodeIn(db, productType, kind)
 }
 
 /**
@@ -60,12 +68,23 @@ export async function nextProductCode(
  */
 export async function nextProductCodeIn(
   tx: DbLike,
-  productType: string | null | undefined
+  productType: string | null | undefined,
+  kind: ProductKind = "single"
 ): Promise<string | null> {
+  const prefix = await prefixFor(tx, productType, kind)
+  if (!prefix) return null
+  return `${prefix}-${String(await nextSequence(tx, prefix)).padStart(SEQUENCE_PAD, "0")}`
+}
+
+async function prefixFor(
+  client: DbLike,
+  productType: string | null | undefined,
+  kind: ProductKind
+): Promise<string | null> {
+  if (kind !== "single") return KIND_CODE_PREFIX[kind]
   const name = productType?.trim()
   if (!name) return null
-  const prefix = await codePrefixFor(tx, name)
-  return `${prefix}-${String(await nextSequence(tx, prefix)).padStart(SEQUENCE_PAD, "0")}`
+  return codePrefixFor(client, name)
 }
 
 /**
@@ -136,8 +155,9 @@ export function derivePrefix(
   nameEn: string | null,
   slug: string | null,
   name: string,
-  taken: Set<string>
+  takenByTypes: Set<string>
 ): string {
+  const taken = new Set([...takenByTypes, ...RESERVED_CODE_PREFIXES])
   for (const candidate of candidatesFrom(nameEn, slug, name)) {
     if (!taken.has(candidate)) return candidate
   }
@@ -210,4 +230,34 @@ async function nextSequence(client: DbLike, prefix: string): Promise<number> {
 
   const highest = result.rows[0]?.max_sequence
   return highest && Number.isFinite(Number(highest)) ? Number(highest) + 1 : 1
+}
+
+/** How many times a create re-mints its code after losing a race. */
+const CODE_ATTEMPTS = 5
+
+/** `TS-007` + 2 -> `TS-009`; leaves an unparseable code untouched. */
+export function bumpCode(code: string, by: number): string {
+  const match = code.match(/^(.*-)(\d+)$/)
+  if (!match) return code
+  const width = match[2].length
+  return `${match[1]}${String(Number(match[2]) + by).padStart(width, "0")}`
+}
+
+/**
+ * Runs a create, retrying only a unique violation — the one failure a
+ * generated code can hit when two creates read the same highest number at
+ * once. The callback gets the attempt number so it can `bumpCode` past the
+ * collision. Any other error propagates on the first attempt.
+ */
+export async function withCodeRetry<T>(run: (attempt: number) => Promise<T>): Promise<T> {
+  let lastError: unknown
+  for (let attempt = 0; attempt < CODE_ATTEMPTS; attempt += 1) {
+    try {
+      return await run(attempt)
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error
+      lastError = error
+    }
+  }
+  throw lastError
 }

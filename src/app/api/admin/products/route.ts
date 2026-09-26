@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server"
 
 import { getProducts, type ProductSort, type ProductStatusValue } from "@/db/queries/products"
 import { getCurrentUser } from "@/lib/auth-helpers"
+import { isProductAudience, isProductKind } from "@/lib/product-taxonomy"
 import { isOwner } from "@/lib/roles"
 
 /**
@@ -36,6 +37,8 @@ export async function GET(request: NextRequest) {
       search: sp.get("search") ?? "",
       status: (sp.get("status") as ProductStatusValue | "all") ?? "all",
       type: sp.get("type") || undefined,
+      audience: isProductAudience(sp.get("audience")) ? (sp.get("audience") as "adult" | "kids") : undefined,
+      kind: isProductKind(sp.get("kind")) ? (sp.get("kind") as "single" | "set" | "fullset") : undefined,
       sort: (sp.get("sort") as ProductSort) ?? "newest",
       page: Number(sp.get("page") ?? "1"),
       pageSize: Number(sp.get("pageSize") ?? "20"),

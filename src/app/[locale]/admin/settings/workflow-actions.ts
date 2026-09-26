@@ -203,6 +203,8 @@ const itemStatusSchema = z.object({
   labelEn: label,
   isReceived: z.boolean(),
   isRefunded: z.boolean(),
+  /** Reveals the order's Preorder shipments panel (1688, Taobao, …). */
+  isPreorder: z.boolean().default(false),
   isActive: z.boolean(),
 })
 
@@ -211,7 +213,7 @@ export async function saveItemStatus(values: z.input<typeof itemStatusSchema>, o
   const parsed = itemStatusSchema.safeParse(values)
   if (!parsed.success) return { ok: false, error: "invalid" }
   if (originalCode) {
-    await db.update(orderItemStatuses).set({ labelTh: parsed.data.labelTh, labelEn: parsed.data.labelEn, isReceived: parsed.data.isReceived, isRefunded: parsed.data.isRefunded, isActive: parsed.data.isActive }).where(eq(orderItemStatuses.code, originalCode))
+    await db.update(orderItemStatuses).set({ labelTh: parsed.data.labelTh, labelEn: parsed.data.labelEn, isReceived: parsed.data.isReceived, isRefunded: parsed.data.isRefunded, isPreorder: parsed.data.isPreorder, isActive: parsed.data.isActive }).where(eq(orderItemStatuses.code, originalCode))
   } else {
     const [last] = await db.select({ value: max(orderItemStatuses.sortOrder) }).from(orderItemStatuses)
     try { await db.insert(orderItemStatuses).values({ ...parsed.data, sortOrder: (last?.value ?? -1) + 1 }) }

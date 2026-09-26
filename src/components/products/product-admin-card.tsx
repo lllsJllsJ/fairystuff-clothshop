@@ -5,17 +5,20 @@ import { useTranslations } from "next-intl"
 import { Shirt } from "lucide-react"
 
 import { Link } from "@/i18n/navigation"
-import { formatBaht, formatNumber } from "@/lib/format"
+import { formatBaht } from "@/lib/format"
 import type { ProductWithRelations } from "@/db/queries/products"
 import { Badge } from "@/components/ui/badge"
+import {
+  AudienceBadge,
+  AvailabilitySummary,
+  KindBadge,
+} from "@/components/products/product-badges"
 
 /** Admin card — utilitarian is correct here (plan §12): code, name, cover,
- * cost, price, margin, and stock summary, no editorial styling. */
+ * cost, price, margin, and availability summary, no editorial styling. */
 export function ProductAdminCard({ product }: { product: ProductWithRelations }) {
   const t = useTranslations()
   const cover = product.images[0]
-  const totalQuantity = product.variants.reduce((sum, v) => sum + v.quantity, 0)
-  const isSoldOut = product.variants.length > 0 && totalQuantity === 0
   const margin = Number(product.sellPrice) - Number(product.originalPrice)
 
   return (
@@ -38,9 +41,13 @@ export function ProductAdminCard({ product }: { product: ProductWithRelations })
             <span className="text-small">{t("product.noImage")}</span>
           </div>
         )}
-        <div className="absolute top-2 left-2">
+        <div className="absolute top-2 left-2 flex flex-wrap gap-1">
           <ProductStatusBadge status={product.status} />
+          <KindBadge kind={product.kind} />
         </div>
+        {product.audience === "kids" && (
+          <AudienceBadge audience="kids" className="absolute top-2 right-2" />
+        )}
       </div>
 
       <div className="flex flex-1 flex-col gap-1 p-3">
@@ -73,11 +80,7 @@ export function ProductAdminCard({ product }: { product: ProductWithRelations })
               {t("product.margin")}: {formatBaht(margin)}
             </span>
           </div>
-          <span className="shrink-0 text-small text-muted-foreground">
-            {isSoldOut
-              ? t("product.soldOut")
-              : `${formatNumber(totalQuantity)} ${t("variant.quantity")}`}
-          </span>
+          <AvailabilitySummary variants={product.variants} className="shrink-0" />
         </div>
       </div>
     </Link>

@@ -24,11 +24,14 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { ProductGrid } from "@/components/shop/product-grid"
-import { ShopFilters, type ShopFilterValues } from "@/components/shop/shop-filters"
+import { ShopFilters, sizeOptionsFor, type ShopFilterValues } from "@/components/shop/shop-filters"
+import { AudienceBar, type AudienceFilter } from "@/components/shop/audience-bar"
 
 const PAGE_SIZE = 24
 
 const DEFAULT_FILTERS: ShopFilterValues = {
+  audience: "",
+  kind: "",
   character: "",
   color: "",
   size: "",
@@ -43,6 +46,10 @@ function useDebounced<T>(value: T, delay = 350): T {
     return () => clearTimeout(id)
   }, [value, delay])
   return debounced
+}
+
+function parseAudience(value: string | null): AudienceFilter {
+  return value === "adult" || value === "kids" ? value : ""
 }
 
 function setParam(params: URLSearchParams, key: string, value: string) {
@@ -78,6 +85,8 @@ export function ShopBrowser({
 
   const [search, setSearch] = useState(() => searchParams.get("q") ?? "")
   const [filters, setFilters] = useState<ShopFilterValues>(() => ({
+    audience: parseAudience(searchParams.get("audience")),
+    kind: searchParams.get("kind") === "sets" ? "sets" : "",
     character: searchParams.get("character") ?? "",
     color: searchParams.get("color") ?? "",
     size: searchParams.get("size") ?? "",
@@ -106,6 +115,8 @@ export function ShopBrowser({
     const p = next.page ?? page
 
     setParam(params, "q", q)
+    setParam(params, "audience", f.audience)
+    setParam(params, "kind", f.kind)
     setParam(params, "character", f.character)
     setParam(params, "color", f.color)
     setParam(params, "size", f.size)
@@ -134,6 +145,11 @@ export function ShopBrowser({
 
   function updateFilter<K extends keyof ShopFilterValues>(key: K, value: ShopFilterValues[K]) {
     const next = { ...filters, [key]: value }
+    // A size picked under one audience rarely exists in the other's list
+    // (M vs 110cm) — drop it rather than show an empty grid.
+    if (key === "audience" && next.size && !sizeOptionsFor(next.audience).includes(next.size)) {
+      next.size = ""
+    }
     setFilters(next)
     setPage(1)
     syncUrl({ filters: next, page: 1 })
@@ -164,6 +180,8 @@ export function ShopBrowser({
     debouncedSearch === "" &&
     page === 1 &&
     sort === "newest" &&
+    filters.audience === "" &&
+    filters.kind === "" &&
     filters.character === "" &&
     filters.color === "" &&
     filters.size === "" &&
@@ -175,6 +193,8 @@ export function ShopBrowser({
     queryFn: async () => {
       const params = new URLSearchParams()
       setParam(params, "search", debouncedSearch)
+      setParam(params, "audience", filters.audience)
+      setParam(params, "kind", filters.kind)
       setParam(params, "character", filters.character)
       setParam(params, "color", filters.color)
       setParam(params, "size", filters.size)
@@ -202,6 +222,8 @@ export function ShopBrowser({
   )
 
   const hasActiveFilters =
+    filters.audience !== "" ||
+    filters.kind !== "" ||
     filters.character !== "" ||
     filters.color !== "" ||
     filters.size !== "" ||
@@ -220,6 +242,13 @@ export function ShopBrowser({
           {t("shop.resultsCount", { count: total })}
         </p>
       </div>
+
+      <AudienceBar
+        audience={filters.audience}
+        onAudienceChange={(value) => updateFilter("audience", value)}
+        setsOnly={filters.kind === "sets"}
+        onSetsOnlyChange={(on) => updateFilter("kind", on ? "sets" : "")}
+      />
 
       <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="relative flex-1">

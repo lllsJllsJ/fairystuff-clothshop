@@ -1,0 +1,1 @@
+ALTER TABLE "preorder_shipments" ALTER COLUMN "order_item_id" SET NOT NULL;

@@ -53,7 +53,8 @@ done
 
 echo ""
 echo "==> SCHEMA CHECKS (generated columns, triggers, constraints)"
-docker exec "$PG" psql -U postgres -d clothshop -t -f /tmp/schema-smoke-test.sql | grep -E 'PASS|FAIL'
+# 2>&1: the constraint checks report through RAISE NOTICE (stderr).
+docker exec "$PG" psql -U postgres -d clothshop -t -f /tmp/schema-smoke-test.sql 2>&1 | grep -E 'PASS|FAIL'
 
 echo ""
 echo "==> QUERY-LAYER CHECKS (real src/db/queries/* through real src/db/index.ts)"

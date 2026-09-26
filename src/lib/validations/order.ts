@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { MAX_SIZE_LENGTH } from "@/lib/sizes"
+
 /**
  * Validation shapes for orders and their line items. Same conventions as
  * `validations/product.ts` / carstockpro's `validations/car.ts`. See that
@@ -15,6 +17,8 @@ const money = z.preprocess(
 
 const emptyString = z.literal("").transform(() => "")
 
+/** `accepted` is labelled "Paid" everywhere in the UI (the enum value is
+ * kept to avoid a risky enum rename — see drizzle/0005_preorder_extras.sql). */
 export const orderStatusValues = [
   "new",
   "accepted",
@@ -42,8 +46,12 @@ export const orderItemSchema = z.object({
   productName: z.string().trim().min(1, "required").max(160),
   productType: z.string().trim().max(60).optional().or(emptyString),
   color: z.string().trim().max(40).optional().or(emptyString),
-  size: z.string().trim().max(20).optional().or(emptyString),
+  size: z.string().trim().max(MAX_SIZE_LENGTH).optional().or(emptyString),
+  /** ACTUAL cost price — defaults to the master, overridden by the owner. */
   productCost: money,
+  /** Master (catalogue) cost snapshot, set by the product picker only —
+   * the form never shows an input for it. */
+  masterCost: money,
   sellPrice: money,
   // Lead-time SNAPSHOT (see schema.ts's comment on `orderItems`) — populated
   // by the product picker in `order-line-row.tsx#selectProduct` from the
@@ -78,7 +86,9 @@ export const orderFormSchema = z.object({
   packingCost: money,
   advertisingCost: money,
   status: z.enum(orderStatusValues).default("new"),
-  shippingConfirmed: z.boolean().default(false),
+  /** Customer-facing parcel — shown on /track/[code]. */
+  shippingCarrier: z.string().trim().max(60).optional().or(emptyString),
+  trackingNo: z.string().trim().max(80).optional().or(emptyString),
   refundReason: z.string().trim().max(1000).optional().or(emptyString),
   note: z.string().trim().max(2000).optional().or(emptyString),
   items: z.array(orderItemSchema).min(1, "required").max(100),
@@ -86,3 +96,22 @@ export const orderFormSchema = z.object({
 
 export type OrderFormValues = z.input<typeof orderFormSchema>
 export type OrderFormParsed = z.output<typeof orderFormSchema>
+
+// ---------------------------------------------------------------------------
+// Preorder shipments — admin-only inbound legs of a preorder (CN->CN,
+// CN->TH, TH->TH), any number per order. `cost` feeds the trigger-kept
+// orders.preorderShippingCost.
+// ---------------------------------------------------------------------------
+
+export const preorderLegValues = ["cn_cn", "cn_th", "th_th"] as const
+export type PreorderLeg = (typeof preorderLegValues)[number]
+
+export const preorderShipmentSchema = z.object({
+  leg: z.enum(preorderLegValues),
+  carrier: z.string().trim().max(80).optional().or(emptyString),
+  trackingNo: z.string().trim().max(80).optional().or(emptyString),
+  cost: money,
+  note: z.string().trim().max(500).optional().or(emptyString),
+})
+
+export type PreorderShipmentValues = z.input<typeof preorderShipmentSchema>

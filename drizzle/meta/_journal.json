@@ -22,6 +22,48 @@
       "when": 1788765711026,
       "tag": "0002_busy_spiral",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790420921905,
+      "tag": "0003_safe_mad_thinker",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790420928525,
+      "tag": "0004_aromatic_talkback",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790420932290,
+      "tag": "0005_preorder_extras",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790425617040,
+      "tag": "0006_chilly_lizard",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790425628840,
+      "tag": "0007_backfill_shipment_items",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790425630020,
+      "tag": "0008_careless_maelstrom",
+      "breakpoints": true
     }
   ]
 }

@@ -40,12 +40,9 @@ export function ProductTableView({
 
   const shownColumns = ALL_COLUMNS.filter((c) => visible.has(c))
 
-  // Page total only — the API returns one page at a time, so summing the
-  // whole catalogue's stock would need a separate aggregate query.
-  const pageStock = rows.reduce(
-    (sum, product) => sum + product.variants.reduce((s, v) => s + v.quantity, 0),
-    0
-  )
+  // Page total only — the API returns one page at a time.
+  const pageVariants = rows.flatMap((product) => product.variants)
+  const pageAvailable = pageVariants.filter((v) => v.isAvailable).length
 
   return (
     <div className="overflow-x-auto border border-border bg-card">
@@ -74,8 +71,13 @@ export function ProductTableView({
         <TableFooter>
           <TableRow>
             <TableCell colSpan={shownColumns.length} className="text-right font-medium">
-              <span className="mr-2 font-normal text-muted-foreground">{t("product.stock")}</span>
-              <span className="tabular-nums">{formatNumber(pageStock)}</span>
+              <span className="mr-2 font-normal text-muted-foreground">{t("product.availability")}</span>
+              <span className="tabular-nums">
+                {t("product.availableOf", {
+                  available: formatNumber(pageAvailable),
+                  total: formatNumber(pageVariants.length),
+                })}
+              </span>
             </TableCell>
           </TableRow>
         </TableFooter>

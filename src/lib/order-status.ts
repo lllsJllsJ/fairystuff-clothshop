@@ -19,7 +19,9 @@ export function customerStageFor(status: OrderStatusValue): CustomerOrderStage {
 
 export const DEFAULT_ADMIN_STATUS_LABELS: Record<OrderStatusValue, { th: string; en: string }> = {
   new: { th: "รับออเดอร์ใหม่", en: "New" },
-  accepted: { th: "รับออเดอร์แล้ว", en: "Accepted" },
+  // Enum value `accepted` = the customer has PAID (renamed in the UI to
+  // stop "accepted" being read as "we accepted your order").
+  accepted: { th: "ชำระเงินแล้ว", en: "Paid" },
   preorder: { th: "กำลังพรีออเดอร์", en: "Preorder" },
   packaging: { th: "กำลังแพ็ก", en: "Packaging" },
   shipping: { th: "กำลังจัดส่ง", en: "Shipping" },

@@ -2,9 +2,11 @@ import { NextResponse, type NextRequest } from "next/server"
 
 import {
   getPublicProducts,
+  type PublicKindFilter,
   type PublicProductListParams,
   type PublicSort,
 } from "@/db/queries/storefront"
+import { isProductAudience, isProductKind, type ProductAudience } from "@/lib/product-taxonomy"
 
 const MAX_PAGE_SIZE = 48
 const DEFAULT_PAGE_SIZE = 24
@@ -17,7 +19,7 @@ const SORT_VALUES: readonly PublicSort[] = ["newest", "price_asc", "price_desc"]
  * Public JSON for `ShopBrowser` client-side filtering. Reads ONLY
  * `db/queries/storefront.ts` — never `queries/products.ts` — so the
  * response can never carry `originalPrice`/`buyingSource`/`sourceLink`/
- * `margin`/exact `quantity` (see that file's header comment). No auth: any
+ * `margin` (see that file's header comment). No auth: any
  * client on the internet can call this, so every param is validated and
  * clamped below rather than passed through — an unbounded `pageSize` or a
  * malformed `page` must not reach the query layer.
@@ -29,6 +31,8 @@ export async function GET(request: NextRequest) {
     const params: PublicProductListParams = {
       search: clampString(sp.get("search"), MAX_SEARCH_LENGTH),
       character: clampString(sp.get("character"), MAX_SEARCH_LENGTH),
+      audience: isProductAudience(sp.get("audience")) ? (sp.get("audience") as ProductAudience) : undefined,
+      kind: parseKind(sp.get("kind")),
       color: clampString(sp.get("color"), MAX_SEARCH_LENGTH),
       size: clampString(sp.get("size"), MAX_SEARCH_LENGTH),
       minPrice: clampPrice(sp.get("minPrice")),
@@ -57,6 +61,11 @@ function clampPrice(value: string | null): number | undefined {
   const n = Number(value)
   if (!Number.isFinite(n) || n < 0) return undefined
   return Math.min(n, MAX_PRICE)
+}
+
+function parseKind(value: string | null): PublicKindFilter | undefined {
+  if (value === "sets") return "sets"
+  return isProductKind(value) ? value : undefined
 }
 
 function parseSort(value: string | null): PublicSort {

@@ -1,21 +1,19 @@
 -- ---------------------------------------------------------------------------
 -- Schema smoke test — proves the money math actually works.
 --
--- The generated columns and the recalc_order trigger compute every figure the
--- owner sees: margin, line totals, order totals, and profit. TypeScript cannot
--- verify any of it — Drizzle does not model GENERATED ALWAYS columns, and the
--- trigger lives only in drizzle/0001_init_extras.sql. This file executes them.
+-- The generated columns and the recalc_order / recalc_preorder_shipping
+-- triggers compute every figure the owner sees: margin, line totals, order
+-- totals, actual-vs-master cost, preorder shipping, and profit. TypeScript
+-- cannot verify any of it — Drizzle does not model GENERATED ALWAYS columns,
+-- and the triggers live only in drizzle/0001_init_extras.sql and
+-- drizzle/0005_preorder_extras.sql. This file executes them.
 --
 -- Run against a THROWAWAY database. It inserts and then deletes rows.
 --
 --   docker run -d --name pgtest -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=clothshop \
 --     -p 55433:5432 postgres:16-alpine
---   docker cp drizzle/0000_init.sql         pgtest:/tmp/
---   docker cp drizzle/0001_init_extras.sql  pgtest:/tmp/
---   docker cp scripts/schema-smoke-test.sql pgtest:/tmp/
---   docker exec pgtest psql -U postgres -d clothshop -v ON_ERROR_STOP=1 -f /tmp/0000_init.sql
---   docker exec pgtest psql -U postgres -d clothshop -v ON_ERROR_STOP=1 -f /tmp/0001_init_extras.sql
---   docker exec pgtest psql -U postgres -d clothshop -f /tmp/schema-smoke-test.sql
+--   (apply every drizzle/NNNN_*.sql in order, then this file — or just run
+--   `npm run smoke`, which does exactly that in a throwaway container)
 --   docker rm -f pgtest
 --
 -- Every line below prints PASS or FAIL. Any FAIL means a figure the owner
@@ -28,15 +26,15 @@ begin;
 insert into products (product_code, product_name, product_type, sell_price, original_price, status)
 values ('SMOKE-1', 'smoke test product', 'เสื้อยืด', 890, 350, 'active');
 
-insert into product_variants (product_id, color, size, quantity)
-select id, c, s, q from products, (values ('ดำ','S',3),('ดำ','M',0),('เบจ','S',5)) v(c,s,q)
+insert into product_variants (product_id, color, size, is_available)
+select id, c, s, a from products, (values ('ดำ','S',true),('ดำ','M',false),('เบจ','S',true)) v(c,s,a)
 where product_code = 'SMOKE-1';
 
 insert into orders (customer_name, preorder_code, shipping_cost, packing_cost, advertising_cost, status)
 values ('smoke customer', 'PO-SMOKE00001', 50, 20, 30, 'new');
 
-insert into order_items (order_id, product_id, product_code, product_name, color, size, product_cost, sell_price, quantity)
-select o.id, p.id, 'SMOKE-1', 'smoke test product', 'ดำ', 'S', 350, 890, 2
+insert into order_items (order_id, product_id, product_code, product_name, color, size, product_cost, master_cost, sell_price, quantity)
+select o.id, p.id, 'SMOKE-1', 'smoke test product', 'ดำ', 'S', 350, 350, 890, 2
 from orders o, products p where p.product_code = 'SMOKE-1';
 
 -- 1. products.margin = sell_price - original_price
@@ -61,12 +59,74 @@ select case when items_total = 4450.00 and profit = 2600.00 then 'PASS' else 'FA
   || '  after qty change: items_total=' || items_total || ' profit=' || profit
 from orders;
 
--- 5. STOCK IS MANUAL — an order must never move product_variants.quantity.
---    A FAIL here means someone added a decrement trigger. That is deliberate
---    product behaviour, not a bug: do not "fix" it by making this pass.
-select case when sum(quantity) = 8 then 'PASS' else 'FAIL' end
-  || '  stock untouched by order, total units = ' || sum(quantity)
+-- 4b. actual cost override: items_cost follows product_cost, while
+--     items_master_cost stays on the master snapshot.
+update order_items set product_cost = 400 where product_code = 'SMOKE-1';
+select case when items_cost = 2000.00 and items_master_cost = 1750.00 and profit = 2350.00
+            then 'PASS' else 'FAIL' end
+  || '  actual vs master: items_cost=' || items_cost || ' master=' || items_master_cost
+  || ' profit=' || profit
+from orders;
+
+-- 4c. preorder shipping legs roll into preorder_shipping_cost, total_cost, profit
+insert into preorder_shipments (order_id, order_item_id, leg, tracking_no, cost)
+select order_id, id, 'cn_cn'::preorder_leg, 'YT1', 35 from order_items where product_code = 'SMOKE-1'
+union all
+select order_id, id, 'cn_th'::preorder_leg, 'CNTH1', 120 from order_items where product_code = 'SMOKE-1';
+select case when preorder_shipping_cost = 155.00 and total_cost = 2255.00 and profit = 2195.00
+            then 'PASS' else 'FAIL' end
+  || '  preorder legs: preorder_shipping_cost=' || preorder_shipping_cost
+  || ' total_cost=' || total_cost || ' profit=' || profit
+from orders;
+
+delete from preorder_shipments where leg = 'cn_th';
+select case when preorder_shipping_cost = 35.00 and profit = 2315.00 then 'PASS' else 'FAIL' end
+  || '  after deleting a leg: preorder_shipping_cost=' || preorder_shipping_cost || ' profit=' || profit
+from orders;
+
+-- 4d. a negative shipment cost is rejected by the check constraint
+do $$
+begin
+  begin
+    insert into preorder_shipments (order_id, order_item_id, leg, cost)
+      select order_id, id, 'th_th', -1 from order_items where product_code = 'SMOKE-1';
+    raise notice 'FAIL  negative preorder shipment cost was accepted';
+  exception when check_violation then
+    raise notice 'PASS  negative preorder shipment cost rejected';
+  end;
+end $$;
+
+-- 4e. parcels belong to a line item: deleting the line removes its parcels
+--     (and the order's preorder_shipping_cost follows via the trigger)
+insert into order_items (order_id, product_code, product_name, product_cost, master_cost, sell_price, quantity)
+select id, 'SMOKE-2', 'second lot', 100, 100, 200, 1 from orders;
+insert into preorder_shipments (order_id, order_item_id, leg, cost)
+select order_id, id, 'cn_cn', 10 from order_items where product_code = 'SMOKE-2';
+delete from order_items where product_code = 'SMOKE-2';
+select case when preorder_shipping_cost = 35.00
+             and (select count(*) from preorder_shipments) = 1
+            then 'PASS' else 'FAIL' end
+  || '  line delete cascades its parcels: preorder_shipping_cost=' || preorder_shipping_cost
+from orders;
+
+-- 5. AVAILABILITY IS MANUAL — an order must never flip is_available.
+--    A FAIL here means someone added an order-driven toggle. That is
+--    deliberate product behaviour, not a bug.
+select case when count(*) filter (where is_available) = 2 then 'PASS' else 'FAIL' end
+  || '  availability untouched by order, available variants = '
+  || count(*) filter (where is_available)
 from product_variants;
+
+-- 5b. ORDER HISTORY IS A SNAPSHOT — repricing the product (as an import
+--     upsert does) must not move any figure on an existing order.
+update products set sell_price = 999, original_price = 500 where product_code = 'SMOKE-1';
+select case when oi.sell_price = 890.00 and oi.product_cost = 400.00 and oi.master_cost = 350.00
+             and o.items_total = 4450.00 and o.profit = 2315.00
+            then 'PASS' else 'FAIL' end
+  || '  order unchanged after product reprice: sell=' || oi.sell_price
+  || ' actual=' || oi.product_cost || ' master=' || oi.master_cost || ' profit=' || o.profit
+from order_items oi join orders o on o.id = oi.order_id
+where oi.product_code = 'SMOKE-1';
 
 -- 6. order history survives deleting the product (snapshot, not FK — Risk 4)
 delete from products where product_code = 'SMOKE-1';

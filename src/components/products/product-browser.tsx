@@ -20,6 +20,12 @@ import { cn } from "@/lib/utils"
 import { Link, usePathname, useRouter } from "@/i18n/navigation"
 import type { ProductListResult, ProductSort, ProductStatusValue } from "@/db/queries/products"
 import type { ProductType } from "@/db/queries/product-types"
+import {
+  isProductAudience,
+  isProductKind,
+  type ProductAudience,
+  type ProductKind,
+} from "@/lib/product-taxonomy"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -28,6 +34,7 @@ import { SimpleSelect } from "@/components/ui/simple-select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ProductAdminCard } from "@/components/products/product-admin-card"
 import { ProductTableView } from "@/components/products/product-table-view"
+import { ProductExportButton } from "@/components/products/product-export-button"
 import {
   ALL_COLUMNS,
   COLUMN_LABEL_KEY,
@@ -74,6 +81,14 @@ export function ProductBrowser({ types }: { types: ProductType[] }) {
     () => (searchParams.get("status") as ProductStatusValue | "all") || "all"
   )
   const [type, setType] = useState<string>(() => searchParams.get("type") ?? "")
+  const [audience, setAudience] = useState<ProductAudience | "">(() => {
+    const value = searchParams.get("audience")
+    return isProductAudience(value) ? value : ""
+  })
+  const [kind, setKind] = useState<ProductKind | "">(() => {
+    const value = searchParams.get("kind")
+    return isProductKind(value) ? value : ""
+  })
   const [sort, setSort] = useState<ProductSort>("newest")
   const [page, setPage] = useState(1)
 
@@ -108,6 +123,8 @@ export function ProductBrowser({ types }: { types: ProductType[] }) {
     view?: ProductView
     status?: ProductStatusValue | "all"
     type?: string
+    audience?: string
+    kind?: string
   }) {
     const params = new URLSearchParams(searchParams.toString())
     if (next.view !== undefined) {
@@ -118,9 +135,11 @@ export function ProductBrowser({ types }: { types: ProductType[] }) {
       if (next.status === "all") params.delete("status")
       else params.set("status", next.status)
     }
-    if (next.type !== undefined) {
-      if (!next.type) params.delete("type")
-      else params.set("type", next.type)
+    for (const key of ["type", "audience", "kind"] as const) {
+      const value = next[key]
+      if (value === undefined) continue
+      if (!value) params.delete(key)
+      else params.set(key, value)
     }
     const qs = params.toString()
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
@@ -144,8 +163,20 @@ export function ProductBrowser({ types }: { types: ProductType[] }) {
     syncUrl({ type: next })
   }
 
+  function changeAudience(next: string) {
+    setAudience(isProductAudience(next) ? next : "")
+    setPage(1)
+    syncUrl({ audience: next })
+  }
+
+  function changeKind(next: string) {
+    setKind(isProductKind(next) ? next : "")
+    setPage(1)
+    syncUrl({ kind: next })
+  }
+
   const query = useQuery<ProductListResult>({
-    queryKey: ["admin-products", view, debouncedSearch, status, type, sort, page],
+    queryKey: ["admin-products", view, debouncedSearch, status, type, audience, kind, sort, page],
     queryFn: async () => {
       const params = new URLSearchParams({
         search: debouncedSearch,
@@ -155,6 +186,8 @@ export function ProductBrowser({ types }: { types: ProductType[] }) {
         pageSize: String(pageSize),
       })
       if (type) params.set("type", type)
+      if (audience) params.set("audience", audience)
+      if (kind) params.set("kind", kind)
       const res = await fetch(`/api/admin/products?${params}`)
       if (!res.ok) throw new Error("failed")
       return res.json() as Promise<ProductListResult>
@@ -178,6 +211,25 @@ export function ProductBrowser({ types }: { types: ProductType[] }) {
   )
 
   const typeOptions = useMemo(() => types.map((pt) => pt.name), [types])
+
+  const audienceOptions = useMemo(
+    () => [
+      { value: "", label: t("product.audienceAll") },
+      { value: "adult", label: t("product.audienceAdult") },
+      { value: "kids", label: t("product.audienceKids") },
+    ],
+    [t]
+  )
+
+  const kindOptions = useMemo(
+    () => [
+      { value: "", label: t("product.kindAll") },
+      { value: "single", label: t("product.kindSingle") },
+      { value: "set", label: t("product.kindSet") },
+      { value: "fullset", label: t("product.kindFullset") },
+    ],
+    [t]
+  )
 
   const sortOptions = useMemo(
     () => [
@@ -208,6 +260,9 @@ export function ProductBrowser({ types }: { types: ProductType[] }) {
           <p className="text-body text-muted-foreground">{t("product.subtitle")}</p>
         </div>
         <div className="flex shrink-0 items-center justify-end gap-2">
+          <ProductExportButton
+            filters={{ search: debouncedSearch, status, type, audience, kind }}
+          />
           <Button
             variant="outline"
             render={<Link href="/admin/products/import" />}
@@ -256,6 +311,18 @@ export function ProductBrowser({ types }: { types: ProductType[] }) {
           onValueChange={changeType}
           options={typeFilterOptions}
           className="h-10 w-24 shrink-0"
+        />
+        <SimpleSelect
+          value={audience}
+          onValueChange={changeAudience}
+          options={audienceOptions}
+          className="h-10 w-28 shrink-0"
+        />
+        <SimpleSelect
+          value={kind}
+          onValueChange={changeKind}
+          options={kindOptions}
+          className="h-10 w-28 shrink-0"
         />
         {/* Sort and Columns are BOTH table-view-only. The card grid has no
             column headers to sort from and is browsed visually, so these

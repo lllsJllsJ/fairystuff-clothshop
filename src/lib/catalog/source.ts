@@ -112,23 +112,43 @@ function hostAllowed(hostname: string, suffixes: readonly string[]): boolean {
 }
 
 export function isPrivateAddress(address: string): boolean {
-  const value = address.toLowerCase()
-  if (value === "::1" || value === "0.0.0.0" || value.startsWith("fe80:")) return true
+  let value = address.toLowerCase()
+  // IPv4-mapped IPv6 (`::ffff:10.0.0.1`) must be judged as the IPv4 inside.
+  const mapped = value.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)
+  if (mapped) value = mapped[1]
+  if (value === "::" || value === "::1" || value.startsWith("fe80:")) return true
   if (value.startsWith("fc") || value.startsWith("fd")) return true
   const octets = value.split(".").map(Number)
   if (octets.length !== 4 || octets.some((n) => !Number.isInteger(n))) return false
   return (
+    octets[0] === 0 ||
     octets[0] === 10 ||
     octets[0] === 127 ||
+    (octets[0] === 100 && octets[1] >= 64 && octets[1] <= 127) ||
     (octets[0] === 169 && octets[1] === 254) ||
     (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
-    (octets[0] === 192 && octets[1] === 168)
+    (octets[0] === 192 && octets[1] === 168) ||
+    octets[0] >= 224
   )
 }
 
-async function assertPublicHost(url: URL, kind: "page" | "image"): Promise<void> {
-  if (url.protocol !== "https:") throw new Error("Only HTTPS supplier resources are allowed")
-  if (!hostAllowed(url.hostname, kind === "page" ? PAGE_HOSTS : IMAGE_HOSTS)) {
+/**
+ * `page` / `image`: supplier hosts only (the catalogue scraper).
+ * `open-image`: any public host — the admin product import, where the owner
+ * pastes image URLs from anywhere. Still HTTPS-only, still refuses hosts
+ * that resolve to a private/loopback/link-local address (re-checked on
+ * every redirect hop), size-capped, and the caller requires an `image/*`
+ * content type. Owner-only input; DNS rebinding between this lookup and
+ * fetch's own resolution is an accepted residual risk for that reason.
+ */
+type FetchKind = "page" | "image" | "open-image"
+
+async function assertPublicHost(url: URL, kind: FetchKind): Promise<void> {
+  if (url.protocol !== "https:") throw new Error("Only HTTPS resources are allowed")
+  if (
+    kind !== "open-image" &&
+    !hostAllowed(url.hostname, kind === "page" ? PAGE_HOSTS : IMAGE_HOSTS)
+  ) {
     throw new Error(`Host is not allow-listed: ${url.hostname}`)
   }
   const addresses = await lookup(url.hostname, { all: true })
@@ -139,7 +159,7 @@ async function assertPublicHost(url: URL, kind: "page" | "image"): Promise<void>
 
 async function fetchBounded(
   initialUrl: string,
-  kind: "page" | "image",
+  kind: FetchKind,
   maxBytes: number
 ): Promise<{ bytes: Buffer; contentType: string; finalUrl: string }> {
   let current = new URL(initialUrl)
@@ -274,4 +294,16 @@ export async function downloadSupplierImage(url: string): Promise<Buffer> {
 
 export function sha256(value: Uint8Array): string {
   return createHash("sha256").update(value).digest("hex")
+}
+
+/**
+ * Downloads one image from ANY public HTTPS host for the admin product
+ * import. See `FetchKind` above for the guards that still apply.
+ */
+export async function downloadPublicImage(url: string): Promise<Buffer> {
+  const response = await fetchBounded(url, "open-image", MAX_IMAGE_BYTES)
+  if (!response.contentType.startsWith("image/")) {
+    throw new Error(`Not an image (content type: ${response.contentType || "unknown"})`)
+  }
+  return response.bytes
 }

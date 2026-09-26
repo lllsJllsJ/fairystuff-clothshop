@@ -11,6 +11,7 @@ import {
   ChevronRight,
   ChevronUp,
   ChevronsUpDown,
+  Copy,
   FileSpreadsheet,
   Loader2,
   Plus,
@@ -20,6 +21,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react"
 
+import { cn } from "@/lib/utils"
 import { Link, usePathname, useRouter } from "@/i18n/navigation"
 import { formatBaht, formatDate } from "@/lib/format"
 import { exportToExcel } from "@/lib/export"
@@ -194,6 +196,7 @@ export function OrderList({ statusLabels, locale }: { statusLabels: OrderStatusL
       t("order.list"),
       rows.map((row) => ({
         [t("order.orderNo")]: row.orderNo,
+        [t("order.preorderCode")]: row.preorderCode,
         [t("order.orderDate")]: row.orderDate,
         [t("order.customerName")]: row.customerName,
         [t("order.itemCount")]: row.itemCount,
@@ -357,8 +360,11 @@ export function OrderList({ statusLabels, locale }: { statusLabels: OrderStatusL
                 </span>
               </div>
               <p className="mt-0.5 text-small text-muted-foreground">
-                {formatDate(row.orderDate)} · {row.itemCount} {t("order.itemCount")}
+                {formatDate(row.orderDate)}
               </p>
+              <div className="relative z-10 mt-1.5">
+                <PreorderCell code={row.preorderCode} received={row.receivedCount} total={row.itemCount} />
+              </div>
               <div className="mt-2 flex items-baseline justify-between gap-2">
                 <span className="text-body font-bold text-foreground tabular-nums">
                   {formatBaht(Number(row.itemsTotal))}
@@ -411,7 +417,7 @@ export function OrderList({ statusLabels, locale }: { statusLabels: OrderStatusL
                   onSort={applySort}
                 />
                 <TableHead>{t("order.customerName")}</TableHead>
-                <TableHead className="text-right">{t("order.itemCount")}</TableHead>
+                <TableHead>{t("order.preorderColumn")}</TableHead>
                 <TableHead className="text-right">{t("order.itemsTotal")}</TableHead>
                 <TableHead className="text-right">{t("order.profit")}</TableHead>
                 <TableHead>{t("order.status")}</TableHead>
@@ -431,7 +437,9 @@ export function OrderList({ statusLabels, locale }: { statusLabels: OrderStatusL
                   </TableCell>
                   <TableCell>{formatDate(row.orderDate)}</TableCell>
                   <TableCell className="max-w-40 truncate">{row.customerName}</TableCell>
-                  <TableCell className="text-right tabular-nums">{row.itemCount}</TableCell>
+                  <TableCell>
+                    <PreorderCell code={row.preorderCode} received={row.receivedCount} total={row.itemCount} />
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {formatBaht(Number(row.itemsTotal))}
                   </TableCell>
@@ -656,6 +664,49 @@ function Labelled({
     <div className="space-y-1.5">
       <span className="block text-small font-bold text-muted-foreground">{label}</span>
       {children}
+    </div>
+  )
+}
+
+/**
+ * Preorder code (click to copy — the owner pastes it to customers and into
+ * supplier chats) plus a received-of-total progress chip, so a list full of
+ * preorders can be scanned without opening each one.
+ */
+function PreorderCell({ code, received, total }: { code: string; received: number; total: number }) {
+  const t = useTranslations("order")
+  const done = total > 0 && received >= total
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(code)
+      toast.success(t("copied"))
+    } catch {
+      // Clipboard blocked — the code is still visible to select by hand.
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <button
+        type="button"
+        onClick={copy}
+        title={t("copyPreorderCode")}
+        className="inline-flex items-center gap-1 font-mono text-small font-medium text-foreground hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
+      >
+        {code}
+        <Copy className="size-3 text-muted-foreground" aria-hidden />
+      </button>
+      <span
+        className={cn(
+          "rounded-full px-2 py-0.5 text-small tabular-nums whitespace-nowrap",
+          done
+            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+            : "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+        )}
+      >
+        {t("receivedProgress", { received, total })}
+      </span>
     </div>
   )
 }

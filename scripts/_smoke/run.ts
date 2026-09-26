@@ -11,9 +11,9 @@
  * column names silently resolved to the wrong table.
  */
 import { db } from "../../src/db"
-import { characters, orderItems, orders, productCharacters, productImages, productTypes, productVariants, products, users } from "../../src/db/schema"
+import { characters, orderItems, orders, preorderShipments, productCharacters, productImages, productTypes, productVariants, products, users } from "../../src/db/schema"
 import { getPublicProducts, getPublicProductByCode, getPublicCharacters, getActiveProductCodes } from "../../src/db/queries/storefront"
-import { getProducts, getProductById, getProductCodes } from "../../src/db/queries/products"
+import { getProducts, getProductById, getProductImportIndex } from "../../src/db/queries/products"
 import { getOrders, getOrderById } from "../../src/db/queries/orders"
 import { getOrderByPreorderCode } from "../../src/db/queries/track"
 import { getProductTypes } from "../../src/db/queries/product-types"
@@ -29,6 +29,7 @@ const PRIVATE = [
   "margin",
   "quantity",
   "productType",
+  "masterCost",
   "preorderMinDays",
   "preorderMaxDays",
 ]
@@ -53,6 +54,13 @@ const ORDER_PRIVATE = [
   "packingCost",
   "productCost",
   "lineCost",
+  // Preorder redesign: actual-vs-master and the inbound China -> Thailand
+  // legs are admin-only. (trackingNo / shippingCarrier ARE public.)
+  "masterCost",
+  "itemsMasterCost",
+  "preorderShippingCost",
+  "shipments",
+  "leg",
 ]
 let pass = 0
 let fail = 0
@@ -104,9 +112,9 @@ async function seed() {
   })
 
   await db.insert(productVariants).values([
-    { productId: live.id, color: "ดำ", size: "S", quantity: 3 },
-    { productId: live.id, color: "ดำ", size: "M", quantity: 0 },
-    { productId: live.id, color: "เบจ", size: "S", quantity: 5 },
+    { productId: live.id, color: "ดำ", size: "S", isAvailable: true },
+    { productId: live.id, color: "ดำ", size: "M", isAvailable: false },
+    { productId: live.id, color: "เบจ", size: "S", isAvailable: true },
   ])
   await db.insert(productImages).values([
     { productId: live.id, url: "https://img.example.com/a-800.webp", storageKey: "products/x/a-800.webp", sortOrder: 0 },
@@ -117,12 +125,17 @@ async function seed() {
   const [ord] = await db.insert(orders).values({
     customerName: "คุณมานี", customerPhone: "0812345678", preorderCode,
     shippingCost: "50", packingCost: "20", advertisingCost: "30", status: "new",
+    shippingCarrier: "Flash Express", trackingNo: "TH0012345",
   }).returning({ id: orders.id })
 
-  await db.insert(orderItems).values({
+  const [line] = await db.insert(orderItems).values({
     orderId: ord.id, productId: live.id, productCode: "TEE-001",
     productName: "เสื้อยืดลายดอก", productType: "เสื้อยืด", color: "ดำ", size: "S",
-    productCost: "350", sellPrice: "890", quantity: 2,
+    productCost: "350", masterCost: "350", sellPrice: "890", quantity: 2,
+  }).returning({ id: orderItems.id })
+  // An admin-only inbound leg (per line item) — must never surface on /track.
+  await db.insert(preorderShipments).values({
+    orderId: ord.id, orderItemId: line.id, leg: "cn_cn", carrier: "1688 seller", trackingNo: "YT-SECRET-1", cost: "0",
   })
   return { productId: live.id, orderId: ord.id, preorderCode }
 }
@@ -146,6 +159,15 @@ async function main() {
   check("detail variants expose no private stock quantity",
     !!detail && detail.variants.every((v) => !("quantity" in v)),
     `${detail?.variants.length} variants`)
+  check("detail variants carry public availability (M switched off)",
+    !!detail && detail.variants.filter((v) => !v.isAvailable).map((v) => v.size).join() === "M")
+  check("public size filter only matches AVAILABLE sizes",
+    (await getPublicProducts({ size: "M" })).rows.length === 0 &&
+      (await getPublicProducts({ size: "S" })).rows.length === 1)
+  check("public audience/kind filters",
+    (await getPublicProducts({ audience: "adult" })).rows.length === 1 &&
+      (await getPublicProducts({ audience: "kids" })).rows.length === 0 &&
+      (await getPublicProducts({ kind: "sets" })).rows.length === 0)
   check("draft product is not publicly reachable", (await getPublicProductByCode("DRAFT-9")) === null)
   check("lookup is case-insensitive", (await getPublicProductByCode("tee-001")) !== null)
 
@@ -161,7 +183,7 @@ async function main() {
   check("admin DOES see cost fields", !!admin.rows.find((r) => r.productCode === "TEE-001")?.originalPrice)
   check("getProductById joins variants + images",
     (await getProductById(ids.productId))?.variants.length === 3)
-  check("getProductCodes returns codes", (await getProductCodes()).length === 2)
+  check("getProductImportIndex returns codes + prices", (await getProductImportIndex()).length === 2)
   check("getProductTypes returns reference list", (await getProductTypes()).length === 2)
 
   const ord = await getOrders({})
@@ -173,7 +195,13 @@ async function main() {
   check("getOrders search by customer name", (await getOrders({ search: "มานี" })).rows.length === 1)
   check("getOrders search by order number", (await getOrders({ search: String(ord.rows[0].orderNo) })).rows.length === 1)
   check("getOrders search miss returns none", (await getOrders({ search: "ไม่มีอยู่จริง" })).rows.length === 0)
-  check("getOrderById joins items", (await getOrderById(ids.orderId))?.items.length === 1)
+  check("getOrders search by preorder code fragment",
+    (await getOrders({ search: ids.preorderCode.slice(3, 8).toLowerCase() })).rows.length === 1)
+  check("getOrders carries preorder progress (0 of 1 received)",
+    ord.rows[0]?.receivedCount === 0 && ord.rows[0]?.itemCount === 1)
+  const fullOrder = await getOrderById(ids.orderId)
+  check("getOrderById joins items + shipments",
+    fullOrder?.items.length === 1 && fullOrder?.shipments.length === 1)
 
   const admin_users = await listUsers({})
   check("listUsers executes and returns owner/staff accounts", admin_users.rows.length >= 1,
@@ -190,6 +218,9 @@ async function main() {
   const trackLeaks = scanPrivate(tracked, ORDER_PRIVATE)
   check("getOrderByPreorderCode leaks nothing private (no orderNo/cost/profit fields)",
     trackLeaks.length === 0, trackLeaks.join(", ") || "clean")
+  check("track shows the customer parcel", tracked?.trackingNo === "TH0012345" && tracked?.shippingCarrier === "Flash Express")
+  check("track never carries an inbound preorder tracking number",
+    !JSON.stringify(tracked).includes("YT-SECRET-1"))
 
   console.log("--- transactions (pooled driver; Risk 3 no longer applies) ---")
   const before = (await db.select().from(products)).length
@@ -220,8 +251,8 @@ async function main() {
   console.log("--- aggregates ---")
   const dash = await getDashboardData()
   check("getDashboardData executes", !!dash, Object.keys(dash).join(","))
-  check("dashboard SKU counts distinguish ready and sold out",
-    dash.totalSkus === 3 && dash.readyToShipSkus === 2 && dash.soldOutVariantCount === 1)
+  check("dashboard variant counts distinguish available and switched off",
+    dash.totalSkus === 3 && dash.availableVariantCount === 2 && dash.unavailableVariantCount === 1)
   check("dashboard separates gross and net profit",
     dash.totalProfit === 1080 && dash.netProfit === 980 && dash.advertisingCost === 30,
     `gross=${dash.totalProfit} net=${dash.netProfit} advertising=${dash.advertisingCost}`)

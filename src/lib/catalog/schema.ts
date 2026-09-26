@@ -3,7 +3,6 @@ import { z } from "zod"
 export const CATALOG_MANIFEST_VERSION = 1 as const
 export const CATALOG_STATUS = "active" as const
 export const CATALOG_SIZE = "Free Size" as const
-export const CATALOG_QUANTITY = 99 as const
 
 export const CATALOG_PRODUCT_TYPES = [
   "เสื้อยืด",

@@ -126,9 +126,10 @@ separate API service and no serverless cold start.
   advertising/shipping/packaging costs, monthly cost-versus-profit chart,
   product-type chart, and alerts), product
   CRUD with a page-action card/table toggle, single-line filters, inline table
-  editing, and a per-colour stock
-  grid (one click adds a colourway with every size at 0), drag-free cover-photo selection, Excel import with
-  a preview/confirm step, order management with a multi-line builder
+  editing, a "Sizes & availability" grid (preset adult/kids sizes plus free
+  text, each colour x size switched on/off — no stock counts), photo-first
+  uploads with main-photo selection, Excel import/export with a
+  preview/upsert step, order management with a multi-line builder
   and a sortable order list with single-line filters (order no. and order date),
   Excel/print reports (monthly and annual reports include advertising cost;
   plus profit-by-product and inventory snapshots), and a product-type
@@ -157,7 +158,8 @@ separate API service and no serverless cold start.
   `packaging`, `shipping`, `complete`, `cancelled`, `refund`) and configurable
   per-line preorder states. Partial/full operational refunds preserve reasons
   and timestamps. A guest order always starts at `new` and stays there until
-  the owner accepts it by hand — nothing auto-advances it.
+  the owner marks it **Paid** by hand (`accepted` is labelled Paid) —
+  nothing auto-advances it.
 - Credentials auth (email-or-phone + password) covers owner/staff accounts
   only — there is no public registration. `/forgot-password` and
   `/reset-password` can use Resend when `EMAIL_ENABLED=true`; owner accounts
@@ -169,18 +171,38 @@ separate API service and no serverless cold start.
 - DB-enforced money math: margin, order totals, advertising-aware net profit,
   and line totals are Postgres generated columns / trigger-maintained — never
   computed and trusted client-side.
-- Product codes are generated from the product's type (`TS-001`, `TS-002`, …)
-  and are never hand-typed or edited: the type is picked first, the server
-  mints the code, and it stays fixed for the product's life. Each type owns
-  its prefix, editable in Settings.
+- Product codes are generated, never hand-typed or edited: a single item
+  uses its type's prefix (`TS-001`, `TS-002`, …), while sets and full sets
+  have their own series (`SET-001`, `FULL-001`). The server mints the code
+  on save and it stays fixed for the product's life. Each type owns its
+  prefix, editable in Settings (`SET`/`FULL` are reserved).
 - Reviewed FairyStuff catalogue pipeline: exact workbook prices/formulas,
   canonical supplier links, gallery-image extraction with embedded-workbook
   fallback, Thai names/colours/types, a review manifest, and a guarded,
   transactional replacement command. All imported products start as active
-  with `Free Size`, quantity `99`, and application-generated immutable codes.
+  with one available `Free Size` variant and application-generated immutable
+  codes.
 - Settings retains **Clear all data** as an owner-only, typed-confirmation
   action. There is no mock catalogue, procedural photo generator, or fake
   order loader.
+- **Preorder-shop redesign** (adult + kids, sets, 1688/Taobao sourcing):
+  - Products carry an **audience** (Adults / Kids — kids are sized by height,
+    80cm … 150cm, >150cm) and a **kind** (single / set / full set). The
+    storefront has an All / Adults / Kids switch, a "Sets & full sets"
+    toggle, homepage entry tiles, SET / FULL SET / Kids badges, and shows a
+    switched-off size struck through; checkout rejects it.
+  - **Import / export** share one template (image URLs last, comma-
+    separated, first = main photo). Import previews every row (New / Will
+    update / Code not found / Duplicate in file / Error), upserts on code in
+    small chunks, downloads image URLs server-side, and never touches past
+    orders — a price change only affects new orders.
+  - **Orders**: a Preorder column (click-to-copy code + "2/3 received"),
+    search by preorder code or phone, a **Mark as paid** button, per-item
+    **preorder shipments** (each line can be a different lot) on three legs (CN→CN, CN→TH, TH→TH) with tracking
+    numbers and costs that roll into a **Total shipping cost**, a
+    highlighted **Actual cost price** per line compared against the master
+    (catalogue) cost, and the customer's carrier + tracking number shown on
+    their `/track/<code>` page.
 
 <!-- ai:anchor:installation -->
 
@@ -399,19 +421,27 @@ src/
 │   ├── preorder-code.ts                   # random PO-XXXXXXXXXX code generate/normalize (no db import)
 │   ├── db-errors.ts                       # shared 23505 (unique-violation) detection
 │   ├── r2.ts                              # S3 read/presign/put/delete adapter
-│   ├── product-code.ts                    # type -> prefix -> next code (server-owned)
+│   ├── product-code.ts                    # kind/type -> prefix -> next code (server-owned)
+│   ├── product-taxonomy.ts                # audience + kind vocabulary, reserved SET/FULL prefixes
+│   ├── sizes.ts                           # adult/kids size presets + sortSizes (free text allowed)
+│   ├── carriers.ts                        # customer carriers + tracking-link templates
+│   ├── cost-variance.ts                   # actual-vs-master cost comparison
 │   ├── catalog/                           # FairyStuff parser, manifest, images, replacement
 │   ├── shop-data.ts                       # owner-only transactional clear
 │   ├── character-seed.ts                  # canonical character list + seed/reset (CLI + admin button)
 │   ├── image-resize.ts / image-loader.ts  # browser resize + next/image loader
-│   ├── import/parse-products.ts           # Excel/XLSX parsing
+│   ├── import/product-template.ts         # import/export template: parse + toTemplateRow (client-safe)
+│   ├── import/import-product.ts           # per-row upsert + image download (server-only)
 │   ├── validations/                       # Zod schemas (product, order, auth, checkout)
 │   └── brand.ts                           # brand name/copy placeholders
 ├── i18n/                                  # next-intl routing/navigation/request config
 └── messages/{th,en}.json                  # translation bundles
 drizzle/
 ├── 0000_init.sql                          # drizzle-generated baseline schema — never hand-edit
-└── 0001_init_extras.sql                   # hand-written --custom migration, journaled — applied automatically by db:migrate
+├── 0001_init_extras.sql                   # hand-written --custom migration, journaled — applied automatically by db:migrate
+├── 0002–0004_*.sql                        # drizzle-generated (brand settings; audience/kind/availability/shipments; drop quantity + shipping_confirmed_at)
+├── 0005_preorder_extras.sql               # hand-written --custom: master-cost + preorder-shipping triggers, regenerated total_cost/profit, 1688/Taobao statuses
+└── 0006–0008_*.sql                        # shipments per line item: add order_item_id, backfill (--custom), then NOT NULL
 scripts/
 ├── catalog-{prepare,verify,import}.ts      # reviewed catalogue CLI
 ├── seed.ts                                # product-type reference data

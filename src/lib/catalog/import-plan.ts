@@ -1,4 +1,4 @@
-import { CATALOG_QUANTITY, CATALOG_SIZE } from "./schema"
+import { CATALOG_SIZE } from "./schema"
 
 export type StagedImageRecord = { canonicalKey: string; url: string }
 
@@ -7,7 +7,7 @@ export function catalogVariantInsert(productId: string, color: string) {
     productId,
     color,
     size: CATALOG_SIZE,
-    quantity: CATALOG_QUANTITY,
+    isAvailable: true,
     sortOrder: 0,
   }
 }
