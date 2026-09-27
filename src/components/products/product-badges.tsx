@@ -3,7 +3,7 @@
 import { useTranslations } from "next-intl"
 
 import { cn } from "@/lib/utils"
-import type { ProductAudience, ProductKind } from "@/lib/product-taxonomy"
+import { AUDIENCE_LABEL_KEY, type ProductAudience, type ProductKind } from "@/lib/product-taxonomy"
 
 /** Admin-side labels for a product's audience / kind / availability. */
 
@@ -34,11 +34,15 @@ export function AudienceBadge({
     <span
       className={cn(
         "inline-flex items-center rounded-full px-2 py-0.5 text-small font-medium",
-        audience === "kids" ? "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200" : "bg-muted text-muted-foreground",
+        audience === "kids"
+          ? "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200"
+          : audience === "both"
+            ? "bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-200"
+            : "bg-muted text-muted-foreground",
         className
       )}
     >
-      {audience === "kids" ? t("audienceKids") : t("audienceAdult")}
+      {t(AUDIENCE_LABEL_KEY[audience])}
     </span>
   )
 }

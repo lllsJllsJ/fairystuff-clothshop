@@ -1,0 +1,1 @@
+ALTER TYPE "public"."product_audience" ADD VALUE 'both';

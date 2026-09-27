@@ -11,6 +11,7 @@ import {
   products,
   productVariants,
 } from "@/db/schema"
+import type { ProductAudience } from "@/lib/product-taxonomy"
 
 /**
  * Port of carstockpro's `services/reports.ts`. `ReportSaleRow` ->
@@ -61,7 +62,7 @@ export type ReportInventoryRow = {
   status: ProductStatusValue
   sellPrice: number
   originalPrice: number
-  audience: "adult" | "kids"
+  audience: ProductAudience
   kind: "single" | "set" | "fullset"
   /** Preorder shop: orderable colour x size combinations, not units. */
   availableVariants: number

@@ -10,7 +10,12 @@ import {
   products,
   productVariants,
 } from "@/db/schema"
-import type { ProductAudience, ProductKind } from "@/lib/product-taxonomy"
+import {
+  audiencesMatching,
+  type AudienceFilterValue,
+  type ProductAudience,
+  type ProductKind,
+} from "@/lib/product-taxonomy"
 
 /**
  * ============================================================================
@@ -109,7 +114,8 @@ export type PublicKindFilter = ProductKind | "sets"
 export type PublicProductListParams = {
   search?: string
   character?: string
-  audience?: ProductAudience
+  /** A `both` product matches either value. */
+  audience?: AudienceFilterValue
   kind?: PublicKindFilter
   color?: string
   size?: string
@@ -165,7 +171,9 @@ function activeProductFilters(params: PublicProductListParams) {
     )
   }
 
-  if (params.audience) conditions.push(eq(products.audience, params.audience))
+  if (params.audience) {
+    conditions.push(inArray(products.audience, audiencesMatching(params.audience)))
+  }
   if (params.kind === "sets") {
     conditions.push(inArray(products.kind, ["set", "fullset"]))
   } else if (params.kind) {

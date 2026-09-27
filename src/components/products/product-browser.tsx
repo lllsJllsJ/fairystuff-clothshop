@@ -217,6 +217,7 @@ export function ProductBrowser({ types }: { types: ProductType[] }) {
       { value: "", label: t("product.audienceAll") },
       { value: "adult", label: t("product.audienceAdult") },
       { value: "kids", label: t("product.audienceKids") },
+      { value: "both", label: t("product.audienceBoth") },
     ],
     [t]
   )

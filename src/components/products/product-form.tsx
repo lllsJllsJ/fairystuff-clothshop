@@ -245,6 +245,7 @@ export function ProductForm({
             options={[
               { value: "adult", label: t("product.audienceAdult") },
               { value: "kids", label: t("product.audienceKids") },
+              { value: "both", label: t("product.audienceBoth") },
             ]}
           />
         </Field>

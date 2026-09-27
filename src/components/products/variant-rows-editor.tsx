@@ -218,7 +218,7 @@ export function VariantRowsEditor({
       {/* 1. Sizes */}
       <div className="space-y-2">
         <p className="text-body font-medium">
-          {audience === "kids" ? t("sizesKids") : t("sizesAdult")}
+          {audience === "kids" ? t("sizesKids") : audience === "both" ? t("sizesBoth") : t("sizesAdult")}
         </p>
         <div className="flex flex-wrap gap-2">
           {[...presets, ...extraSizes].map((size) => {

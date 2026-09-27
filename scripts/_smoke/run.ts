@@ -10,6 +10,8 @@
  * SQL. This can, and has: it caught a correlated subquery whose unqualified
  * column names silently resolved to the wrong table.
  */
+import { eq } from "drizzle-orm"
+
 import { db } from "../../src/db"
 import { characters, orderItems, orders, preorderShipments, productCharacters, productImages, productTypes, productVariants, products, users } from "../../src/db/schema"
 import { getPublicProducts, getPublicProductByCode, getPublicCharacters, getActiveProductCodes } from "../../src/db/queries/storefront"
@@ -164,6 +166,11 @@ async function main() {
   check("public size filter only matches AVAILABLE sizes",
     (await getPublicProducts({ size: "M" })).rows.length === 0 &&
       (await getPublicProducts({ size: "S" })).rows.length === 1)
+  await db.update(products).set({ audience: "both" }).where(eq(products.id, ids.productId))
+  check("an Adults & Kids product is listed under BOTH storefront tabs",
+    (await getPublicProducts({ audience: "adult" })).rows.length === 1 &&
+      (await getPublicProducts({ audience: "kids" })).rows.length === 1)
+  await db.update(products).set({ audience: "adult" }).where(eq(products.id, ids.productId))
   check("public audience/kind filters",
     (await getPublicProducts({ audience: "adult" })).rows.length === 1 &&
       (await getPublicProducts({ audience: "kids" })).rows.length === 0 &&

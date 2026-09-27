@@ -70,6 +70,8 @@ test("legacy packed cell: 'Free Size:2' stays one size; 'ดำ S:3' splits colo
 test("audience / kind accept Thai and English words", () => {
   assert.equal(parseAudience("เด็ก"), "kids")
   assert.equal(parseAudience("Adult"), "adult")
+  assert.equal(parseAudience("both"), "both")
+  assert.equal(parseAudience("ผู้ใหญ่และเด็ก"), "both")
   assert.equal(parseKind("Full Set"), "fullset")
   assert.equal(parseKind("เซ็ต"), "set")
   assert.equal(parseKind("bundle"), undefined)

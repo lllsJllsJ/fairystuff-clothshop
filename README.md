@@ -186,8 +186,9 @@ separate API service and no serverless cold start.
   action. There is no mock catalogue, procedural photo generator, or fake
   order loader.
 - **Preorder-shop redesign** (adult + kids, sets, 1688/Taobao sourcing):
-  - Products carry an **audience** (Adults / Kids — kids are sized by height,
-    80cm … 150cm, >150cm) and a **kind** (single / set / full set). The
+  - Products carry an **audience** (Adults / Kids / Adults & Kids — kids are
+    sized by height, 80cm … 150cm, >150cm; an Adults & Kids product offers
+    both and is listed under both storefront tabs) and a **kind** (single / set / full set). The
     storefront has an All / Adults / Kids switch, a "Sets & full sets"
     toggle, homepage entry tiles, SET / FULL SET / Kids badges, and shows a
     switched-off size struck through; checkout rejects it.

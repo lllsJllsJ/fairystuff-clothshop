@@ -9,6 +9,12 @@ test("presets follow the audience", () => {
   assert.equal(sizePresetsFor("kids").at(-1), ">150cm")
 })
 
+test("an Adults & Kids product offers both preset lists, adult first", () => {
+  const presets = sizePresetsFor("both")
+  assert.equal(presets[0], "XS")
+  assert.ok(presets.includes("Free Size") && presets.includes("80cm") && presets.includes(">150cm"))
+})
+
 test("sortSizes puts presets in index order and keeps custom sizes after, in given order", () => {
   assert.deepEqual(sortSizes(["L", "3-4Y", "S", "One size", "M"]), ["S", "M", "L", "3-4Y", "One size"])
   assert.deepEqual(sortSizes([">150cm", "100cm", "80cm"]), ["80cm", "100cm", ">150cm"])

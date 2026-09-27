@@ -10,7 +10,7 @@ import { Price } from "@/components/shop/price"
 import { ProductGallery } from "@/components/shop/product-gallery"
 import { ColorSelector } from "@/components/shop/color-selector"
 import { SizeSelector, type SizeOption } from "@/components/shop/size-selector"
-import { KidsBadge, KindBadge, UnavailableBadge } from "@/components/shop/shop-badges"
+import { AudienceBadge, KindBadge, UnavailableBadge } from "@/components/shop/shop-badges"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useCart } from "@/components/cart/cart-provider"
@@ -150,10 +150,10 @@ export function ProductDetail({
                   .join(" · ")}
               </p>
             )}
-            {(product.kind !== "single" || product.audience === "kids") && (
+            {(product.kind !== "single" || product.audience !== "adult") && (
               <div className="flex flex-wrap gap-1.5">
                 <KindBadge kind={product.kind} />
-                {product.audience === "kids" && <KidsBadge />}
+                <AudienceBadge audience={product.audience} />
               </div>
             )}
             <h1 className="text-h2 font-bold text-foreground">{product.productName}</h1>

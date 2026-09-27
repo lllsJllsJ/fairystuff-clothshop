@@ -61,8 +61,9 @@ export const orderStatus = pgEnum("order_status", [
 ])
 
 /** Who a product is sized for — drives the size presets (src/lib/sizes.ts)
- * and the storefront's Adults / Kids switch. Public. */
-export const productAudience = pgEnum("product_audience", ["adult", "kids"])
+ * and the storefront's Adults / Kids switch. `both` = comes in adult AND
+ * kids sizes; it appears under both storefront tabs. Public. */
+export const productAudience = pgEnum("product_audience", ["adult", "kids", "both"])
 
 /**
  * Single item, a set, or a full set. `set`/`fullset` mint codes in their own

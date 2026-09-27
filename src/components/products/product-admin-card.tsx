@@ -45,8 +45,8 @@ export function ProductAdminCard({ product }: { product: ProductWithRelations })
           <ProductStatusBadge status={product.status} />
           <KindBadge kind={product.kind} />
         </div>
-        {product.audience === "kids" && (
-          <AudienceBadge audience="kids" className="absolute top-2 right-2" />
+        {product.audience !== "adult" && (
+          <AudienceBadge audience={product.audience} className="absolute top-2 right-2" />
         )}
       </div>
 

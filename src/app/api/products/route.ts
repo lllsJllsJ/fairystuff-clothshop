@@ -6,7 +6,7 @@ import {
   type PublicProductListParams,
   type PublicSort,
 } from "@/db/queries/storefront"
-import { isProductAudience, isProductKind, type ProductAudience } from "@/lib/product-taxonomy"
+import { isAudienceFilter, isProductKind } from "@/lib/product-taxonomy"
 
 const MAX_PAGE_SIZE = 48
 const DEFAULT_PAGE_SIZE = 24
@@ -31,7 +31,10 @@ export async function GET(request: NextRequest) {
     const params: PublicProductListParams = {
       search: clampString(sp.get("search"), MAX_SEARCH_LENGTH),
       character: clampString(sp.get("character"), MAX_SEARCH_LENGTH),
-      audience: isProductAudience(sp.get("audience")) ? (sp.get("audience") as ProductAudience) : undefined,
+      audience: (() => {
+        const value = sp.get("audience")
+        return isAudienceFilter(value) ? value : undefined
+      })(),
       kind: parseKind(sp.get("kind")),
       color: clampString(sp.get("color"), MAX_SEARCH_LENGTH),
       size: clampString(sp.get("size"), MAX_SEARCH_LENGTH),

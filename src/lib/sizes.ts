@@ -28,7 +28,9 @@ export const KIDS_SIZES = [
 export const MAX_SIZE_LENGTH = 40
 
 export function sizePresetsFor(audience: ProductAudience): readonly string[] {
-  return audience === "kids" ? KIDS_SIZES : ADULT_SIZES
+  if (audience === "kids") return KIDS_SIZES
+  if (audience === "both") return [...ADULT_SIZES, ...KIDS_SIZES]
+  return ADULT_SIZES
 }
 
 const PRESET_RANK = new Map<string, number>(

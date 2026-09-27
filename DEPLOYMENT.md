@@ -57,7 +57,7 @@ It is idempotent (`drop ... if exists` / `create ... if not exists`
 throughout), so re-running it by hand against an already-migrated database
 (e.g. for debugging) is safe.
 
-The preorder redesign adds `0003`–`0008`, applied by the same
+The preorder redesign adds `0003`–`0009`, applied by the same
 `npm run db:migrate` with no manual step. Upgrading an existing database is
 safe and data-preserving:
 

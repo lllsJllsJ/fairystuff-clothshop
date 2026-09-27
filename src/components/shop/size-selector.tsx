@@ -14,7 +14,8 @@ export type SizeOption = { size: string; available: boolean }
  * `aria-disabled` (DESIGN.md's colour/size interaction rule) — the shopper
  * sees it exists but can't be ordered right now, rather than wondering
  * whether it was ever made. Kids' products are sized by height, so the
- * label and hint change with the audience.
+ * label and hint change with the audience; an "Adults & Kids" product mixes
+ * letter sizes and heights, so it gets a hint that says so.
  */
 export function SizeSelector({
   options,
@@ -40,6 +41,7 @@ export function SizeSelector({
           {value ? <span className="font-normal text-muted-foreground"> · {value}</span> : null}
         </p>
         {isKids && <p className="text-small text-muted-foreground">{t("shop.heightHint")}</p>}
+        {audience === "both" && <p className="text-small text-muted-foreground">{t("shop.bothSizeHint")}</p>}
       </div>
       <RadioChipGroup
         ariaLabel={isKids ? t("shop.selectHeight") : t("shop.selectSize")}

@@ -1,14 +1,14 @@
 import { useTranslations } from "next-intl"
 
 import { cn } from "@/lib/utils"
-import type { ProductKind } from "@/lib/product-taxonomy"
+import type { ProductAudience, ProductKind } from "@/lib/product-taxonomy"
 
 /**
  * Storefront flags, all on DESIGN.md §4's "Alert Badge" shape (4px radius,
  * bold 12px label). Colour carries meaning, not decoration:
  *   - New in       Warning Yellow (time-sensitive promotion)
  *   - Set/Full set Brand Fuchsia (what you're buying)
- *   - Kids         Sky Blue tint (who it's for)
+ *   - Kids / Adults & Kids   Sky Blue tint (who it's for)
  *   - Unavailable  Foreground/white (informational)
  */
 
@@ -48,14 +48,23 @@ export function KindBadge({ kind, className }: { kind: ProductKind; className?: 
   )
 }
 
-export function KidsBadge({ className }: { className?: string }) {
+/** "Kids" or "Adults & Kids" — nothing for an adults-only product (the
+ * default the storefront assumes). */
+export function AudienceBadge({
+  audience,
+  className,
+}: {
+  audience: ProductAudience
+  className?: string
+}) {
   const t = useTranslations()
+  if (audience === "adult") return null
   return (
     <span
       className={cn(BADGE, "bg-[#e3f0fe] text-[#1d5fa8] dark:bg-[#10263f] dark:text-[#9cc8fb]", className)}
       style={BADGE_RADIUS}
     >
-      {t("shop.kidsBadge")}
+      {audience === "kids" ? t("shop.kidsBadge") : t("shop.bothBadge")}
     </span>
   )
 }

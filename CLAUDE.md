@@ -29,7 +29,9 @@ reference.
   component serializes **every field into the RSC payload** — including
   `originalPrice`, `buyingSource`, `sourceLink`, and `margin`, even for
   fields the JSX never renders. (`audience`, `kind`, and a variant's
-  `isAvailable` ARE public by design — customers filter and pick by them.) Clean-looking HTML is
+  `isAvailable` ARE public by design — customers filter and pick by them.
+  An `audience = 'both'` product matches BOTH the Adults and the Kids
+  storefront filter — `audiencesMatching()` in `src/lib/product-taxonomy.ts`.) Clean-looking HTML is
   not proof the page is safe. The structural defense is
   `src/db/queries/storefront.ts`'s `PUBLIC_PRODUCT_COLUMNS` — every public
   read (storefront pages, `GET /api/products`) must derive its select list

@@ -314,6 +314,15 @@ const AUDIENCE_WORDS: Record<string, ProductAudience> = {
   child: "kids",
   children: "kids",
   เด็ก: "kids",
+  both: "both",
+  all: "both",
+  family: "both",
+  "adult+kids": "both",
+  "adults & kids": "both",
+  ทั้งสอง: "both",
+  ทั้งหมด: "both",
+  ผู้ใหญ่และเด็ก: "both",
+  "ผู้ใหญ่+เด็ก": "both",
 }
 
 export function parseAudience(value: string): ProductAudience | undefined {

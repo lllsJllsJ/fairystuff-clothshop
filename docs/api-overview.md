@@ -50,7 +50,7 @@ nothing is trusted to be well-formed.
 |---|---|---|
 | `search` | string | Matches `productName` or `productCode`, substring, case-insensitive. Clamped to 100 chars. |
 | `character` | string | Exact character slug linked through `product_characters`. |
-| `audience` | `adult` \| `kids` | Who the product is sized for. Anything else is ignored. |
+| `audience` | `adult` \| `kids` | Who the product is sized for. A product whose audience is `both` (Adults & Kids) matches either value. Anything else is ignored. |
 | `kind` | `single` \| `set` \| `fullset` \| `sets` | `sets` = set OR full set (the storefront's single toggle). Anything else is ignored. |
 | `color` | string | Exact match on an AVAILABLE variant's `color`. |
 | `size` | string | Exact match on an AVAILABLE variant's `size` (a switched-off size never matches). |
@@ -115,7 +115,7 @@ Every field a public caller would never see — `originalPrice`,
 | `search` | string | Matches `productCode`, `productName`, or `buyingSource`. |
 | `status` | `draft` \| `active` \| `archived` \| `all` | Default `all`. |
 | `type` | string | Exact match on `productType`. |
-| `audience` | `adult` \| `kids` | Optional. Anything else is ignored. |
+| `audience` | `adult` \| `kids` \| `both` | Optional, exact match (`both` = Adults & Kids products). Anything else is ignored. |
 | `kind` | `single` \| `set` \| `fullset` | Optional. Anything else is ignored. |
 | `sort` | `newest` \| `oldest` \| `price_high` \| `price_low` \| `name_asc` | Default `newest`. |
 | `page` | integer | Default `1`. |
@@ -572,7 +572,8 @@ image list. An empty asynchronous code preview is valid because the immutable
 code is minted inside the transaction; each submitted image must instead use
 the exact same-origin `/api/images/<storageKey>` URL for its validated product
 key. Products can link multiple managed characters and store an admin-only
-minimum/maximum preorder-day range, an `audience` (`adult`/`kids`) and a
+minimum/maximum preorder-day range, an `audience` (`adult`/`kids`/`both` —
+`both` offers adult letter sizes AND kids' heights) and a
 `kind` (`single`/`set`/`fullset` — sets and full sets mint `SET-`/`FULL-`
 codes; a single item requires a type, else `type_required`). Variants are
 `{ color, size (free text ≤ 40), isAvailable }`. Order create/update

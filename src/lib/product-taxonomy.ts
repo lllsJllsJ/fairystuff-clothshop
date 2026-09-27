@@ -3,8 +3,29 @@
  * template, and the storefront. Client-safe (no server imports).
  */
 
-export const PRODUCT_AUDIENCES = ["adult", "kids"] as const
+/** `both` = the product comes in adult AND kids sizes (e.g. matching
+ * family sets). It is listed under both storefront tabs. */
+export const PRODUCT_AUDIENCES = ["adult", "kids", "both"] as const
 export type ProductAudience = (typeof PRODUCT_AUDIENCES)[number]
+
+/** What a shopper filters by — a `both` product matches either. */
+export type AudienceFilterValue = Exclude<ProductAudience, "both">
+
+export function isAudienceFilter(value: unknown): value is AudienceFilterValue {
+  return value === "adult" || value === "kids"
+}
+
+/** The product audiences a storefront filter value should match. */
+export function audiencesMatching(filter: AudienceFilterValue): ProductAudience[] {
+  return [filter, "both"]
+}
+
+/** i18n key under `product` for an audience's label. */
+export const AUDIENCE_LABEL_KEY: Record<ProductAudience, "audienceAdult" | "audienceKids" | "audienceBoth"> = {
+  adult: "audienceAdult",
+  kids: "audienceKids",
+  both: "audienceBoth",
+}
 
 export const PRODUCT_KINDS = ["single", "set", "fullset"] as const
 export type ProductKind = (typeof PRODUCT_KINDS)[number]

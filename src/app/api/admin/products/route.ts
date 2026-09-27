@@ -37,7 +37,10 @@ export async function GET(request: NextRequest) {
       search: sp.get("search") ?? "",
       status: (sp.get("status") as ProductStatusValue | "all") ?? "all",
       type: sp.get("type") || undefined,
-      audience: isProductAudience(sp.get("audience")) ? (sp.get("audience") as "adult" | "kids") : undefined,
+      audience: (() => {
+        const value = sp.get("audience")
+        return isProductAudience(value) ? value : undefined
+      })(),
       kind: isProductKind(sp.get("kind")) ? (sp.get("kind") as "single" | "set" | "fullset") : undefined,
       sort: (sp.get("sort") as ProductSort) ?? "newest",
       page: Number(sp.get("page") ?? "1"),

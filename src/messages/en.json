@@ -148,7 +148,8 @@
     "export": "Export",
     "exportFailed": "Export failed",
     "exportEmpty": "No products match these filters",
-    "exported": "Exported {count} products"
+    "exported": "Exported {count} products",
+    "audienceBoth": "Adults & Kids"
   },
   "cart": {
     "title": "Your cart",
@@ -264,7 +265,8 @@
     "pickSizesFirst": "Pick the sizes this product comes in above.",
     "on": "On",
     "off": "Off",
-    "availabilityHint": "Off = customers see the size crossed out and can't order it. Turning off never deletes it."
+    "availabilityHint": "Off = customers see the size crossed out and can't order it. Turning off never deletes it.",
+    "sizesBoth": "Sizes — adult letters and kids' heights"
   },
   "order": {
     "orderNo": "Order no.",
@@ -480,7 +482,7 @@
     "issue": {
       "name_required": "Name is required for a new product",
       "type_required": "A single item needs a product type",
-      "bad_audience": "Audience must be adult or kids",
+      "bad_audience": "Audience must be adult, kids or both",
       "bad_kind": "Kind must be single, set or fullset",
       "bad_status": "Status must be active, draft or archived",
       "bad_price": "A price isn't a valid number",
@@ -631,7 +633,9 @@
     "audienceAll": "All",
     "audienceAdult": "Adults",
     "audienceKids": "Kids",
-    "setsOnly": "Sets & full sets"
+    "setsOnly": "Sets & full sets",
+    "bothBadge": "Adults & Kids",
+    "bothSizeHint": "Adult sizes and kids' heights"
   },
   "errors": {
     "unauthorized": "Please sign in",

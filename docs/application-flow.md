@@ -894,6 +894,7 @@ shape. There are no quantities: this is a preorder shop.
 │ Owner  │ ────────────────▶│ Sizes (preset chips follow Audience):    │
 └────────┘                  │  adult: XS S M L XL 2XL Free Size         │
                             │  kids:  80cm … 150cm >150cm               │
+                            │  both: adult + kids lists                 │
                             │  + custom free text ("3-4Y", "US 7")      │
                             │ 2. colours: [+ Add color] (or one colour) │
                             │ 3. tap a cell to switch ON / OFF:         │

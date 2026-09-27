@@ -27,6 +27,7 @@ import {
   type TemplateRow,
 } from "@/lib/import/product-template"
 import { IMPORT_CHUNK_SIZE, type ProductImportRow } from "@/lib/validations/product"
+import { AUDIENCE_LABEL_KEY } from "@/lib/product-taxonomy"
 import type { ProductImportIndexEntry } from "@/db/queries/products"
 import { importProductsChunk } from "@/app/[locale]/admin/products/import/actions"
 import type { ImportRowResult } from "@/lib/import/import-product"
@@ -314,7 +315,7 @@ function PreviewCard({
         </p>
         <p className="text-small text-muted-foreground">
           {[
-            row.audience && (row.audience === "kids" ? tProduct("audienceKids") : tProduct("audienceAdult")),
+            row.audience && tProduct(AUDIENCE_LABEL_KEY[row.audience]),
             row.kind && row.kind !== "single" && (row.kind === "set" ? tProduct("kindSet") : tProduct("kindFullset")),
             row.productType,
             colors.length > 0 && colors.join(", "),

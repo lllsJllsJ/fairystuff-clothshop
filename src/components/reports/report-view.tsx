@@ -28,6 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { AUDIENCE_LABEL_KEY } from "@/lib/product-taxonomy"
 
 export type ReportTab = "monthly" | "annual" | "profitByProduct" | "inventory"
 
@@ -141,7 +142,7 @@ export function ReportView({
           [t("product.status")]: t(`product.status${r.status.charAt(0).toUpperCase()}${r.status.slice(1)}`),
           [t("product.sellPrice")]: r.sellPrice,
           [t("product.originalPrice")]: r.originalPrice,
-          [t("product.audience")]: r.audience === "kids" ? t("product.audienceKids") : t("product.audienceAdult"),
+          [t("product.audience")]: t(`product.${AUDIENCE_LABEL_KEY[r.audience]}`),
           [t("product.kind")]: t(`product.kind${r.kind === "fullset" ? "Fullset" : r.kind === "set" ? "Set" : "Single"}`),
           [t("reports.availableVariants")]: r.availableVariants,
           [t("reports.totalVariants")]: r.totalVariants,
@@ -376,7 +377,7 @@ export function ReportView({
                     <TableCell className="max-w-56 truncate">{r.productName}</TableCell>
                     <TableCell>{r.productType ?? "-"}</TableCell>
                     <TableCell className="whitespace-nowrap text-small">
-                      {r.audience === "kids" ? t("product.audienceKids") : t("product.audienceAdult")}
+                      {t(`product.${AUDIENCE_LABEL_KEY[r.audience]}`)}
                       {r.kind !== "single" && ` · ${r.kind === "set" ? t("product.kindSet") : t("product.kindFullset")}`}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
