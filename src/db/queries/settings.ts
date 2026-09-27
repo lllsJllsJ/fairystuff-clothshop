@@ -44,6 +44,7 @@ export async function getShopSettings(): Promise<ShopSettings> {
     brandDescriptionEn: null,
     logoUrl: null,
     logoStorageKey: null,
+    heroImageKeys: [],
     updatedAt: new Date(0),
   }
   try {

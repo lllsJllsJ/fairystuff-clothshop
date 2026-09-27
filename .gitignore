@@ -42,5 +42,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-data
+# Root-level only: the catalogue workbook + backups. A bare `data` would
+# also ignore src/app/[locale]/admin/settings/data/.
+/data/
 .playwright-mcp

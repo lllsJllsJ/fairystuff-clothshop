@@ -33,3 +33,11 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/admin/reports", labelKey: "reports", icon: FileBarChart },
   { href: "/admin/settings", labelKey: "settings", icon: Settings },
 ]
+
+/** Dashboard (`/admin`) is the root of every admin path, so it only counts
+ * as active on an exact match — a prefix match would light it up (and win
+ * the header title) on every other admin page. */
+export function isNavItemActive(href: string, pathname: string): boolean {
+  if (href === "/admin") return pathname === href
+  return pathname === href || pathname.startsWith(`${href}/`)
+}

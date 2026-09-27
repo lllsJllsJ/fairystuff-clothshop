@@ -31,7 +31,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { BrandSettings } from "@/components/settings/brand-settings"
 import {
   SettingsSection,
   SettingsRow,
@@ -42,7 +41,7 @@ import {
 type Run = (action: Promise<{ ok: boolean; error?: string }>) => void
 
 /**
- * Every manageable list on this page — characters and order-item statuses
+ * Every manageable list in Settings — characters and order-item statuses
  * here, product types in `product-type-manager.tsx` — uses one shape:
  * a `SettingsSection` whose header carries a single icon-only `+` button,
  * and rows that show their values as text with a pencil and a bin on the
@@ -50,23 +49,15 @@ type Run = (action: Promise<{ ok: boolean; error?: string }>) => void
  * because inline editors put three or four inputs on a row that a phone
  * cannot fit.
  *
- * Shop contacts is deliberately NOT converted: it is a single fixed form
- * of three fields, not a list you add to, so a dialog would add a click
- * for nothing. It sits last, immediately above the Danger zone.
+ * Shop contacts is deliberately NOT a list: it is a single fixed form of
+ * three fields, so a dialog would add a click for nothing.
+ *
+ * Each export below is rendered by its own Settings sub-page
+ * (`admin/settings/{catalog,orders,storefront}/page.tsx`).
  */
-export function WorkflowSettings(props: {
-  settings: ShopSettings
-  characters: Character[]
-  orderLabels: OrderStatusLabel[]
-  customerLabels: CustomerStatusLabel[]
-  itemStatuses: OrderItemStatusDefinition[]
-}) {
+function useRun(): Run {
   const t = useTranslations("settings")
-  const [lineId, setLineId] = useState(props.settings.lineId ?? "")
-  const [instagram, setInstagram] = useState(props.settings.instagramHandle ?? "")
-  const [facebook, setFacebook] = useState(props.settings.facebookUrl ?? "")
-
-  const run: Run = async (action) => {
+  return async (action) => {
     const result = await action
     if (!result.ok) toast.error(t("saveFailed"))
     else {
@@ -74,11 +65,23 @@ export function WorkflowSettings(props: {
       window.location.reload()
     }
   }
+}
+
+export function CharacterSettings({ characters }: { characters: Character[] }) {
+  const run = useRun()
+  return <CharactersSection characters={characters} run={run} />
+}
+
+export function OrderWorkflowSettings(props: {
+  orderLabels: OrderStatusLabel[]
+  customerLabels: CustomerStatusLabel[]
+  itemStatuses: OrderItemStatusDefinition[]
+}) {
+  const t = useTranslations("settings")
+  const run = useRun()
 
   return (
     <div className="space-y-6">
-      <CharactersSection characters={props.characters} run={run} />
-
       <SettingsSection title={t("orderStatusLabels")} hint={t("fixedStatusHint")}>
         {orderStatusValues.map((status) => {
           const current = props.orderLabels.find((row) => row.status === status)
@@ -114,37 +117,41 @@ export function WorkflowSettings(props: {
       </SettingsSection>
 
       <ItemStatusesSection statuses={props.itemStatuses} run={run} />
-
-      {/* Brand sits low on the page, directly above Shop contacts — both
-       * are singleton settings forms rather than lists, and the owner
-       * only touches either occasionally after initial setup. */}
-      <BrandSettings settings={props.settings} />
-
-      {/* Moved down to sit directly above the Danger zone (DataTools). */}
-      <section className="border border-border bg-card p-5">
-        <h2 className="text-subtitle font-bold">{t("shopContacts")}</h2>
-        <p className="mt-1 text-small text-muted-foreground">{t("shopContactsHint")}</p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <SettingField label="LINE ID">
-            <Input value={lineId} onChange={(e) => setLineId(e.target.value)} placeholder="@yourshop" />
-          </SettingField>
-          <SettingField label="Instagram">
-            <Input value={instagram} onChange={(e) => setInstagram(e.target.value)} placeholder="yourshop" />
-          </SettingField>
-          <SettingField label="Facebook">
-            <Input
-              value={facebook}
-              onChange={(e) => setFacebook(e.target.value)}
-              placeholder="facebook.com/yourshop"
-            />
-          </SettingField>
-        </div>
-        <Button className="mt-3" onClick={() => run(saveShopContacts(lineId, instagram, facebook))}>
-          <Save />
-          {t("save")}
-        </Button>
-      </section>
     </div>
+  )
+}
+
+export function ShopContactsSettings({ settings }: { settings: ShopSettings }) {
+  const t = useTranslations("settings")
+  const run = useRun()
+  const [lineId, setLineId] = useState(settings.lineId ?? "")
+  const [instagram, setInstagram] = useState(settings.instagramHandle ?? "")
+  const [facebook, setFacebook] = useState(settings.facebookUrl ?? "")
+
+  return (
+    <section className="border border-border bg-card p-5">
+      <h2 className="text-subtitle font-bold">{t("shopContacts")}</h2>
+      <p className="mt-1 text-small text-muted-foreground">{t("shopContactsHint")}</p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <SettingField label="LINE ID">
+          <Input value={lineId} onChange={(e) => setLineId(e.target.value)} placeholder="@yourshop" />
+        </SettingField>
+        <SettingField label="Instagram">
+          <Input value={instagram} onChange={(e) => setInstagram(e.target.value)} placeholder="yourshop" />
+        </SettingField>
+        <SettingField label="Facebook">
+          <Input
+            value={facebook}
+            onChange={(e) => setFacebook(e.target.value)}
+            placeholder="facebook.com/yourshop"
+          />
+        </SettingField>
+      </div>
+      <Button className="mt-3" onClick={() => run(saveShopContacts(lineId, instagram, facebook))}>
+        <Save />
+        {t("save")}
+      </Button>
+    </section>
   )
 }
 

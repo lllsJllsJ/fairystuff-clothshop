@@ -16,7 +16,7 @@
  * sync with the loader's `AVAILABLE_WIDTHS` if this ever changes.
  */
 
-import { BRAND_LOGO_WIDTHS } from "@/lib/brand-image-keys"
+import { BRAND_LOGO_WIDTHS, HERO_IMAGE_WIDTHS } from "@/lib/brand-image-keys"
 
 export const PRODUCT_IMAGE_WIDTHS = [480, 800, 1600] as const
 export type ProductImageWidth = (typeof PRODUCT_IMAGE_WIDTHS)[number]
@@ -148,4 +148,23 @@ export function buildBrandLogoKey(
   timestamp: number = Date.now()
 ): string {
   return `brand/logo-${timestamp}-${width}.webp`
+}
+
+/**
+ * Resizes a picked File into the hero carousel's widths. Every width is
+ * always written (like product photos): the loader maps any render width to
+ * the nearest of 640/1280/1920 and never checks which exist.
+ */
+export async function resizeHeroImage(
+  file: File
+): Promise<ResizedImage<(typeof HERO_IMAGE_WIDTHS)[number]>[]> {
+  return resizeToWidths(file, HERO_IMAGE_WIDTHS, { fillAllWidths: true })
+}
+
+/** Storage key for one hero rendition: `brand/hero-<timestamp>-<width>.webp`. */
+export function buildHeroImageKey(
+  width: (typeof HERO_IMAGE_WIDTHS)[number],
+  timestamp: number = Date.now()
+): string {
+  return `brand/hero-${timestamp}-${width}.webp`
 }

@@ -133,8 +133,9 @@ separate API service and no serverless cold start.
   and a sortable order list with single-line filters (order no. and order date),
   Excel/print reports (monthly and annual reports include advertising cost;
   plus profit-by-product and inventory snapshots), and a product-type
-  reference-list manager, character manager, workflow-label settings, and
-  configurable supplier/item statuses.
+  reference-list manager, character manager, workflow-label settings,
+  configurable supplier/item statuses, and up to 3 home-page hero photos
+  shown as an autoplaying carousel.
 - Owner-only user management (`/admin/users`): a searchable, filterable list
   of every account that can sign in, with role changes (`owner`/`staff` —
   there is no `customer` role), account deletion, manual email verification
@@ -396,7 +397,7 @@ src/
 │   │   │   ├── orders/                    # list/new/detail-edit
 │   │   │   ├── reports/                   # monthly/annual/profit/inventory
 │   │   │   ├── users/                     # account list, roles, verify, reset, delete
-│   │   │   └── settings/                  # contacts, characters, workflows, danger zone
+│   │   │   └── settings/                  # sub-menu: storefront / catalog / orders / data
 │   │   └── layout.tsx                     # owns <html lang>, PUBLIC_NAMESPACES
 │   ├── layout.tsx                         # passthrough root layout
 │   ├── sitemap.ts / robots.ts / not-found.tsx

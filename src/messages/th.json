@@ -499,6 +499,10 @@
   },
   "settings": {
     "title": "ตั้งค่า",
+    "navStorefront": "หน้าร้าน",
+    "navCatalog": "สินค้า",
+    "navOrders": "คำสั่งซื้อ",
+    "navData": "ข้อมูล",
     "productTypes": "ประเภทสินค้า",
     "addProductType": "เพิ่มประเภทสินค้า",
     "renameProductType": "แก้ไขชื่อประเภทสินค้า",
@@ -538,6 +542,14 @@
     "brandLogoHint": "แสดงที่ส่วนหัวและส่วนท้ายของหน้าร้าน ควรใช้ภาพสัดส่วนจัตุรัส",
     "uploadLogo": "อัปโหลดโลโก้",
     "removeLogo": "ลบโลโก้",
+    "heroImages": "ภาพหน้าแรก (Hero)",
+    "heroImagesHint": "สูงสุด {max} ภาพ แสดงเป็นสไลด์ด้านบนของหน้าแรกตามลำดับนี้",
+    "heroImagesSizeHint": "ขนาดแนะนำ: 1600 × 2000 px แนวตั้ง (4:5) อย่างน้อย 1080 × 1350 px รองรับ JPG, PNG หรือ WebP ระบบจะย่อขนาดให้อัตโนมัติ และภาพที่สัดส่วนต่างออกไปจะถูกครอปเป็น 4:5 จากกึ่งกลาง",
+    "uploadHeroImage": "อัปโหลดภาพ",
+    "heroImagesLeft": "เหลือ {remaining} ภาพ",
+    "removeHeroImage": "ลบภาพที่ {n}",
+    "moveHeroImageEarlier": "เลื่อนภาพที่ {n} ไปก่อน",
+    "moveHeroImageLater": "เลื่อนภาพที่ {n} ไปหลัง",
     "codePrefix": "รหัสนำหน้า",
     "codePrefixPlaceholder": "เช่น TS",
     "codePrefixHint": "ใช้สร้างรหัสสินค้า เช่น TS-001",
@@ -583,7 +595,11 @@
     "entryKidsTitle": "สำหรับเด็ก",
     "entryKidsBody": "ไซซ์ตามส่วนสูง 80 – 150 ซม.+",
     "entrySetsTitle": "เซ็ตและฟูลเซ็ต",
-    "entrySetsBody": "ครบชุดในคราวเดียว"
+    "entrySetsBody": "ครบชุดในคราวเดียว",
+    "heroSlides": "ภาพแนะนำ",
+    "heroSlide": "ภาพที่ {n} จาก {total}",
+    "heroPrev": "ภาพก่อนหน้า",
+    "heroNext": "ภาพถัดไป"
   },
   "footer": {
     "quickLinks": "ลิงก์ด่วน",

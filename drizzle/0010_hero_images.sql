@@ -1,0 +1,1 @@
+ALTER TABLE "shop_settings" ADD COLUMN "hero_image_keys" text[] DEFAULT '{}'::text[] NOT NULL;

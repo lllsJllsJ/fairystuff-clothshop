@@ -12,9 +12,11 @@
  * `brand/logo-...` URL to a width like 1600 that was never uploaded,
  * 404ing the image — see brand-image-keys.ts's BRAND_LOGO_WIDTHS.
  *
- * IMPORTANT: both width lists must stay in sync with
- * `PRODUCT_IMAGE_WIDTHS` (lib/image-resize.ts) and `BRAND_LOGO_WIDTHS`
- * (lib/brand-image-keys.ts). Duplicated here rather than imported because
+ * The hero carousel photos are a third set (`HERO_IMAGE_WIDTHS`).
+ *
+ * IMPORTANT: every width list must stay in sync with
+ * `PRODUCT_IMAGE_WIDTHS` (lib/image-resize.ts) and `BRAND_LOGO_WIDTHS` /
+ * `HERO_IMAGE_WIDTHS` (lib/brand-image-keys.ts). Duplicated here rather than imported because
  * those modules are `"use client"` boundaries and this loader must also
  * run in server/build contexts (Next may invoke a custom loader during
  * SSR and static generation, not just in the browser).
@@ -22,6 +24,7 @@
 
 const PRODUCT_IMAGE_WIDTHS = [480, 800, 1600] as const
 const BRAND_LOGO_WIDTHS = [128, 256, 512] as const
+const HERO_IMAGE_WIDTHS = [640, 1280, 1920] as const
 
 type ImageLoaderParams = {
   src: string
@@ -30,7 +33,11 @@ type ImageLoaderParams = {
 }
 
 export default function productImageLoader({ src, width }: ImageLoaderParams): string {
-  const widths = src.includes("/brand/logo-") ? BRAND_LOGO_WIDTHS : PRODUCT_IMAGE_WIDTHS
+  const widths = src.includes("/brand/logo-")
+    ? BRAND_LOGO_WIDTHS
+    : src.includes("/brand/hero-")
+      ? HERO_IMAGE_WIDTHS
+      : PRODUCT_IMAGE_WIDTHS
   return replaceWidthSuffix(src, nearestWidth(width, widths))
 }
 

@@ -9,7 +9,12 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 
 import { PRODUCT_IMAGE_WIDTHS, productImageRenditionKeys } from "@/lib/product-image-keys"
-import { brandLogoRenditionKeys } from "@/lib/brand-image-keys"
+import {
+  brandLogoRenditionKeys,
+  heroImageRenditionKeys,
+  isBrandLogoKey,
+  isHeroImageKey,
+} from "@/lib/brand-image-keys"
 
 /**
  * S3-compatible object-storage client. Server-only — this reads secret
@@ -177,14 +182,26 @@ export async function deleteProductImageRenditions(storageKey: string): Promise<
  * since there is only ever one logo.
  */
 export async function presignBrandLogoPut(keys: string[]): Promise<PresignedUpload[]> {
-  const prefix = "brand/logo-"
+  return presignBrandPut(keys, isBrandLogoKey, "brand logo")
+}
+
+/** Same as `presignBrandLogoPut`, for the `brand/hero-...` carousel photos. */
+export async function presignHeroImagePut(keys: string[]): Promise<PresignedUpload[]> {
+  return presignBrandPut(keys, isHeroImageKey, "hero image")
+}
+
+async function presignBrandPut(
+  keys: string[],
+  isValidKey: (key: string) => boolean,
+  kind: string
+): Promise<PresignedUpload[]> {
   const bucket = bucketName()
   const client = r2Client()
 
   return Promise.all(
     keys.map(async (key) => {
-      if (!key.startsWith(prefix)) {
-        throw new Error(`Refusing to presign "${key}" — it is not a brand logo key.`)
+      if (!isValidKey(key)) {
+        throw new Error(`Refusing to presign "${key}" — it is not a ${kind} key.`)
       }
       const command = new PutObjectCommand({
         Bucket: bucket,
@@ -202,4 +219,9 @@ export async function presignBrandLogoPut(keys: string[]): Promise<PresignedUplo
 /** Deletes every width behind a brand logo's canonical database key. */
 export async function deleteBrandLogoRenditions(storageKey: string): Promise<void> {
   await Promise.all(brandLogoRenditionKeys(storageKey).map(deleteObjectByKey))
+}
+
+/** Deletes every width behind a hero photo's canonical database key. */
+export async function deleteHeroImageRenditions(storageKey: string): Promise<void> {
+  await Promise.all(heroImageRenditionKeys(storageKey).map(deleteObjectByKey))
 }

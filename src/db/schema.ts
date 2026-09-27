@@ -396,6 +396,15 @@ export const shopSettings = pgTable("shop_settings", {
    * deleted, mirroring productImages.storageKey. */
   logoUrl: text("logo_url"),
   logoStorageKey: text("logo_storage_key"),
+  /** Home-page hero carousel, in display order (max 3 — MAX_HERO_IMAGES in
+   * src/lib/brand-image-keys.ts). Each entry is the canonical (1920w)
+   * `brand/hero-...` storage key; the public URL is derived from it with
+   * heroImageUrl(), never stored, so a row can't point the storefront at an
+   * arbitrary URL. Empty = the hero shows its decorative colour blocks. */
+  heroImageKeys: text("hero_image_keys")
+    .array()
+    .notNull()
+    .default(sql`'{}'::text[]`),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

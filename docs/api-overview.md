@@ -365,6 +365,11 @@ the product one because the key shape carries no `productId` segment at all
 exactly — the request schema, the regex, and `presignBrandLogoPut()`'s own
 prefix check all re-validate this shape independently.
 
+Also signs the home-page hero carousel photos: a request whose keys ALL match
+`brand/hero-<timestamp>-(640|1280|1920).webp` is signed via
+`presignHeroImagePut()` instead (one request = one photo's renditions). A mix
+of logo and hero keys in one request is rejected with `400`.
+
 **Example response — `200`**
 
 ```json
@@ -387,7 +392,8 @@ Each `url` is valid for 300 seconds and accepts exactly one `PUT` with
 
 Public, read-only proxy for object storage. Accepts keys matching EITHER
 `products/<uuid>/<generated-name>-(480|800|1600).webp` (product photos) or
-`brand/logo-<timestamp>-(128|256|512).webp` (the single brand logo — see
+`brand/logo-<timestamp>-(128|256|512).webp` (the single brand logo) or
+`brand/hero-<timestamp>-(640|1280|1920).webp` (home hero carousel photos — see
 `src/lib/brand-image-keys.ts`); all other paths return `404`. Successful
 responses stream `image/webp` with `ETag`, `nosniff`, and
 `Cache-Control: public, max-age=31536000, immutable`. A matching

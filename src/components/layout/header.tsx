@@ -5,7 +5,7 @@ import { Shirt } from "lucide-react"
 
 import type { Session } from "next-auth"
 import { Link, usePathname } from "@/i18n/navigation"
-import { NAV_ITEMS } from "@/components/layout/nav-items"
+import { NAV_ITEMS, isNavItemActive } from "@/components/layout/nav-items"
 import { LocaleToggle } from "@/components/layout/locale-toggle"
 import { UserMenu } from "@/components/layout/user-menu"
 
@@ -14,7 +14,7 @@ export function Header({ user }: { user: Session["user"] }) {
   const pathname = usePathname()
 
   const current = NAV_ITEMS.find(
-    (item) => pathname === item.href || pathname.startsWith(`${item.href}/`)
+    (item) => isNavItemActive(item.href, pathname)
   )
   const title = current ? t(`nav.${current.labelKey}`) : t("app.name")
 

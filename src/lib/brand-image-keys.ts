@@ -25,3 +25,31 @@ export function brandLogoRenditionKeys(storageKey: string): string[] {
   if (!suffix.test(storageKey)) return [storageKey]
   return BRAND_LOGO_WIDTHS.map((width) => storageKey.replace(suffix, `-${width}.webp`))
 }
+
+/** Home-page hero carousel photos — up to MAX_HERO_IMAGES, each stored as
+ * `brand/hero-<timestamp>-<width>.webp`. Wider renditions than the logo
+ * because a hero photo renders at up to half the 1440px page width on
+ * desktop (and full width on phones at 2-3x DPR). Keep in sync with
+ * lib/image-loader.ts's HERO_IMAGE_WIDTHS. */
+export const HERO_IMAGE_WIDTHS = [640, 1280, 1920] as const
+export const MAX_HERO_IMAGES = 3
+
+const HERO_IMAGE_KEY = /^brand\/hero-\d+-(?:640|1280|1920)\.webp$/
+
+export function isHeroImageKey(storageKey: string): boolean {
+  return HERO_IMAGE_KEY.test(storageKey)
+}
+
+/** Stable same-origin URL for a hero photo's canonical (widest) key. */
+export function heroImageUrl(storageKey: string): string {
+  if (!isHeroImageKey(storageKey)) {
+    throw new Error(`Invalid hero image key: ${storageKey}`)
+  }
+  return `/api/images/${storageKey}`
+}
+
+export function heroImageRenditionKeys(storageKey: string): string[] {
+  const suffix = /-(?:640|1280|1920)\.webp$/
+  if (!suffix.test(storageKey)) return [storageKey]
+  return HERO_IMAGE_WIDTHS.map((width) => storageKey.replace(suffix, `-${width}.webp`))
+}

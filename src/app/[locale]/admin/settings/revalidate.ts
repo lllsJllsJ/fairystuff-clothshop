@@ -25,7 +25,8 @@ import { revalidateStorefront } from "@/app/[locale]/admin/products/revalidate"
 export function revalidateSettings(): void {
   revalidateStorefront()
   for (const locale of routing.locales) {
-    revalidatePath(`/${locale}/admin/settings`)
+    // "layout" covers every Settings sub-page (storefront/catalog/orders/data).
+    revalidatePath(`/${locale}/admin/settings`, "layout")
     revalidatePath(`/${locale}/about`)
   }
 }

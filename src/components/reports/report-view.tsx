@@ -313,8 +313,8 @@ export function ReportView({
           </p>
         )}
 
-        {/* Two tiles per row at every width. */}
-        <div className="grid grid-cols-2 gap-3">
+        {/* Two tiles per row on phones/tablets (and in print), four on desktop. */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <SummaryTile
             label={tab === "inventory" ? t("product.list") : tab === "profitByProduct" ? t("variant.quantity") : t("reports.ordersCount")}
             value={formatNumber(summary.count)}

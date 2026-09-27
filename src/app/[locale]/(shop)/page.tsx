@@ -16,6 +16,7 @@ import { QuickFilterRail } from "@/components/shop/quick-filter-rail"
 import { ContactCta } from "@/components/shop/contact-cta"
 import { AudienceEntry } from "@/components/shop/audience-entry"
 import { Link } from "@/i18n/navigation"
+import { heroImageUrl, isHeroImageKey } from "@/lib/brand-image-keys"
 
 export const revalidate = 300
 
@@ -88,7 +89,11 @@ export default async function HomePage({
 
   return (
     <>
-      <Hero brandName={resolvedBrandName(settings)} tagline={resolvedBrandDescription(settings, locale)} />
+      <Hero
+        brandName={resolvedBrandName(settings)}
+        tagline={resolvedBrandDescription(settings, locale)}
+        images={settings.heroImageKeys.filter(isHeroImageKey).map(heroImageUrl)}
+      />
 
       <AudienceEntry />
 

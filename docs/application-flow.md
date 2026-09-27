@@ -52,34 +52,36 @@
 43. [Print Order Receipt](#print-order-receipt)
 44. [Delete Order](#delete-order)
 45. [Reports — View + Excel Export + Print](#reports--view--excel-export--print)
-46. [Settings — Create Product Type](#settings--create-product-type)
-47. [Settings — Rename Product Type (Cascade)](#settings--rename-product-type-cascade)
-48. [Settings — Delete Product Type (Blocked When In Use)](#settings--delete-product-type-blocked-when-in-use)
-49. [Settings — Reorder Product Types](#settings--reorder-product-types)
-50. [Settings — Clear Shop Data](#settings--clear-shop-data)
-51. [Settings — Shop Contacts](#settings--shop-contacts)
-52. [Settings — Brand](#settings--brand)
-53. [Settings — Character Taxonomy](#settings--character-taxonomy)
-54. [Settings — Order Status Labels](#settings--order-status-labels)
-55. [Settings — Line-Item Status Lifecycle](#settings--line-item-status-lifecycle)
-56. [Users — List + Filter](#users--list--filter)
-57. [Users — Change Role](#users--change-role)
-58. [Users — Delete Account](#users--delete-account)
-59. [Users — Mark Email Verified](#users--mark-email-verified)
-60. [Users — Send Password Reset](#users--send-password-reset)
+46. [Settings — Sub-menu Navigation](#settings--sub-menu-navigation)
+47. [Settings — Create Product Type](#settings--create-product-type)
+48. [Settings — Rename Product Type (Cascade)](#settings--rename-product-type-cascade)
+49. [Settings — Delete Product Type (Blocked When In Use)](#settings--delete-product-type-blocked-when-in-use)
+50. [Settings — Reorder Product Types](#settings--reorder-product-types)
+51. [Settings — Clear Shop Data](#settings--clear-shop-data)
+52. [Settings — Shop Contacts](#settings--shop-contacts)
+53. [Settings — Brand](#settings--brand)
+54. [Settings — Home Hero Photos (Carousel)](#settings--home-hero-photos-carousel)
+55. [Settings — Character Taxonomy](#settings--character-taxonomy)
+56. [Settings — Order Status Labels](#settings--order-status-labels)
+57. [Settings — Line-Item Status Lifecycle](#settings--line-item-status-lifecycle)
+58. [Users — List + Filter](#users--list--filter)
+59. [Users — Change Role](#users--change-role)
+60. [Users — Delete Account](#users--delete-account)
+61. [Users — Mark Email Verified](#users--mark-email-verified)
+62. [Users — Send Password Reset](#users--send-password-reset)
 
 **Catalogue CLI**
-61. [Catalogue Prepare — Workbook Extraction](#catalogue-prepare--workbook-extraction)
-62. [Catalogue Prepare — Supplier Enrichment + Workbook Fallback](#catalogue-prepare--supplier-enrichment--workbook-fallback)
-63. [Catalogue Verify + Import Dry Run](#catalogue-verify--import-dry-run)
-64. [Catalogue Apply — Storage Staging](#catalogue-apply--storage-staging)
-65. [Catalogue Apply — Transactional Replacement](#catalogue-apply--transactional-replacement)
-66. [Catalogue Apply — Rollback + Object Cleanup](#catalogue-apply--rollback--object-cleanup)
+63. [Catalogue Prepare — Workbook Extraction](#catalogue-prepare--workbook-extraction)
+64. [Catalogue Prepare — Supplier Enrichment + Workbook Fallback](#catalogue-prepare--supplier-enrichment--workbook-fallback)
+65. [Catalogue Verify + Import Dry Run](#catalogue-verify--import-dry-run)
+66. [Catalogue Apply — Storage Staging](#catalogue-apply--storage-staging)
+67. [Catalogue Apply — Transactional Replacement](#catalogue-apply--transactional-replacement)
+68. [Catalogue Apply — Rollback + Object Cleanup](#catalogue-apply--rollback--object-cleanup)
 
 **Cross-cutting**
-67. [Storefront Revalidation After a Product Mutation](#storefront-revalidation-after-a-product-mutation)
-68. [Unauthorized / Forbidden Denial Paths](#unauthorized--forbidden-denial-paths)
-69. [Transaction Rollback on Mid-Write Failure](#transaction-rollback-on-mid-write-failure)
+69. [Storefront Revalidation After a Product Mutation](#storefront-revalidation-after-a-product-mutation)
+70. [Unauthorized / Forbidden Denial Paths](#unauthorized--forbidden-denial-paths)
+71. [Transaction Rollback on Mid-Write Failure](#transaction-rollback-on-mid-write-failure)
 
 ---
 
@@ -1269,10 +1271,36 @@ Advertising is order-level rather than line-level, so it appears in monthly
 and annual summaries, tables, Excel exports, and net profit. It is not
 arbitrarily allocated across products in the profit-by-product tab.
 
+## Settings — Sub-menu Navigation
+
+`/admin/settings` is split into four sub-pages sharing
+`admin/settings/layout.tsx` (title + `SettingsNav` sub-menu: a vertical list
+from `md` up, a horizontally scrollable tab strip on phones). Each sub-page
+fetches only its own data.
+
+```
+GET /admin/settings ──307 redirect──▶ /admin/settings/storefront
+
+/admin/settings/storefront ─▶ getShopSettings()        ─▶ Brand, Hero photos, Shop contacts
+/admin/settings/catalog    ─▶ getProductTypes()
+                              + getCharacters()        ─▶ Product types, Characters
+/admin/settings/orders     ─▶ getOrderStatusLabels()
+                              + getCustomerStatusLabels()
+                              + getOrderItemStatuses() ─▶ Admin/customer labels, Line-item statuses
+/admin/settings/data       ─▶ (no reads)               ─▶ Danger zone (DataTools)
+
+any settings action ─▶ revalidateSettings()
+                    ─▶ revalidatePath("/<locale>/admin/settings", "layout")  (all 4 sub-pages)
+```
+
+Failure: owner gating is inherited from `admin/layout.tsx` (`requireOwner()`)
+and re-checked in every action; a read error on one sub-page only breaks that
+sub-page, not the others.
+
 ## Settings — Create Product Type
 
 `createProductType` Server Action, triggered from the "add" row in
-`ProductTypeManager` on `/admin/settings`.
+`ProductTypeManager` on `/admin/settings/catalog`.
 
 ```
 ┌────────┐ type name (+ optional nameEn), Enter/click  ┌───────────────────┐
@@ -2417,6 +2445,36 @@ first) is deliberately **not** exposed on the button: a click must never
 silently detach a character from live products. Failure: a non-owner gets
 `forbidden`, a database error rolls the whole thing back and returns
 `seed_failed` with the list untouched.
+
+## Settings — Home Hero Photos (Carousel)
+
+The owner uploads up to 3 photos (Admin -> Settings -> Home page hero photos)
+that the home page hero shows as a crossfading carousel, in the saved order.
+Stored as `shop_settings.hero_image_keys` (`text[]` of canonical
+`brand/hero-<timestamp>-1920.webp` keys) — the public URL is derived with
+`heroImageUrl()`, never stored.
+
+```
+Owner picks 1-3 files -> resizeHeroImage() (browser, 3 widths: 640/1280/1920)
+                       -> POST /api/uploads/presign-logo (hero keys) -> signed PUT URLs
+                       -> browser PUTs each rendition (one photo at a time)
+Owner reorders / removes -> local state only
+Owner clicks Save -> saveHeroImages(keys[])
+                   -> isOwner() + zod: <=3, unique, every key isHeroImageKey()
+                   -> UPSERT shop_settings(default).hero_image_keys
+                   -> delete renditions of keys dropped from the list (best-effort)
+                   -> revalidateSettings() -> "/" in both locales re-rendered
+Home page -> settings.heroImageKeys.filter(isHeroImageKey).map(heroImageUrl)
+          -> Hero -> HeroCarousel (client): autoplay 5s, pause on hover/focus,
+             no autoplay under prefers-reduced-motion, prev/next + dots + swipe
+          -> no photos? decorative colour blocks (previous design)
+```
+
+Failure: a failed presign/PUT shows a toast and keeps the photos already in
+the list; nothing is persisted until Save. A save with a malformed, duplicate,
+or 4th key is rejected (`invalid`) before touching the database. Photos
+uploaded but never saved are left orphaned in storage (same as an unsaved
+logo upload).
 
 ## Settings — Order Status Labels
 

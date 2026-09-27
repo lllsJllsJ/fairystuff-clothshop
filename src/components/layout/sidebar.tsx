@@ -5,7 +5,7 @@ import { Shirt, Store } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Link, usePathname } from "@/i18n/navigation"
-import { NAV_ITEMS } from "@/components/layout/nav-items"
+import { NAV_ITEMS, isNavItemActive } from "@/components/layout/nav-items"
 
 /**
  * Admin sidebar — fuchsia bar, white text (DESIGN.md §4 Main Navigation
@@ -27,8 +27,7 @@ export function Sidebar() {
 
       <nav className="flex-1 space-y-1 px-3 py-4">
         {NAV_ITEMS.map((item) => {
-          const active =
-            pathname === item.href || pathname.startsWith(`${item.href}/`)
+          const active = isNavItemActive(item.href, pathname)
           const Icon = item.icon
           return (
             <Link

@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl"
 
 import { cn } from "@/lib/utils"
 import { Link, usePathname } from "@/i18n/navigation"
-import { NAV_ITEMS } from "@/components/layout/nav-items"
+import { NAV_ITEMS, isNavItemActive } from "@/components/layout/nav-items"
 
 /**
  * Mobile bottom nav. No role split (there's only one admin role), so this
@@ -19,8 +19,7 @@ export function BottomNav() {
     <nav className="fixed inset-x-0 bottom-0 z-[var(--z-fixed)] border-t border-border bg-background md:hidden">
       <div className="mx-auto flex max-w-lg items-center justify-around px-2 pb-[env(safe-area-inset-bottom)]">
         {NAV_ITEMS.map((item) => {
-          const active =
-            pathname === item.href || pathname.startsWith(`${item.href}/`)
+          const active = isNavItemActive(item.href, pathname)
           const Icon = item.icon
           return (
             <Link

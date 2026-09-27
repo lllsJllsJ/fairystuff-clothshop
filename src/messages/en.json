@@ -499,6 +499,10 @@
   },
   "settings": {
     "title": "Settings",
+    "navStorefront": "Storefront",
+    "navCatalog": "Catalogue",
+    "navOrders": "Orders",
+    "navData": "Data",
     "productTypes": "Product types",
     "addProductType": "Add product type",
     "renameProductType": "Rename product type",
@@ -538,6 +542,14 @@
     "brandLogoHint": "Shown in the header and footer. Square images work best.",
     "uploadLogo": "Upload logo",
     "removeLogo": "Remove logo",
+    "heroImages": "Home page hero photos",
+    "heroImagesHint": "Up to {max} photos, shown as a slideshow at the top of the home page in this order.",
+    "heroImagesSizeHint": "Recommended size: 1600 × 2000 px portrait (4:5), at least 1080 × 1350 px. JPG, PNG, or WebP; photos are resized automatically, and other shapes are cropped to 4:5 from the centre.",
+    "uploadHeroImage": "Upload photos",
+    "heroImagesLeft": "{remaining} left",
+    "removeHeroImage": "Remove photo {n}",
+    "moveHeroImageEarlier": "Move photo {n} earlier",
+    "moveHeroImageLater": "Move photo {n} later",
     "codePrefix": "Code prefix",
     "codePrefixPlaceholder": "e.g. TS",
     "codePrefixHint": "Used to build product codes, e.g. TS-001",
@@ -583,7 +595,11 @@
     "entryKidsTitle": "For little ones",
     "entryKidsBody": "Sized by height, 80 – 150 cm+",
     "entrySetsTitle": "Sets & full sets",
-    "entrySetsBody": "Complete the look"
+    "entrySetsBody": "Complete the look",
+    "heroSlides": "Featured photos",
+    "heroSlide": "Photo {n} of {total}",
+    "heroPrev": "Previous photo",
+    "heroNext": "Next photo"
   },
   "footer": {
     "quickLinks": "Quick links",

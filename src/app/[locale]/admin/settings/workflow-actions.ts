@@ -19,8 +19,8 @@ import { getCurrentUser } from "@/lib/auth-helpers"
 import { isOwner } from "@/lib/roles"
 import { isValidFacebookUrl, normalizeFacebookUrl } from "@/lib/facebook"
 import { seedCharacters } from "@/lib/character-seed"
-import { isBrandLogoKey } from "@/lib/brand-image-keys"
-import { deleteBrandLogoRenditions } from "@/lib/r2"
+import { MAX_HERO_IMAGES, isBrandLogoKey, isHeroImageKey } from "@/lib/brand-image-keys"
+import { deleteBrandLogoRenditions, deleteHeroImageRenditions } from "@/lib/r2"
 import { revalidateSettings } from "./revalidate"
 
 type Result = { ok: true } | { ok: false; error: string }
@@ -119,6 +119,49 @@ export async function saveBrandSettings(
   if (oldKey && oldKey !== brand.logoStorageKey) {
     deleteBrandLogoRenditions(oldKey).catch((error) => {
       console.error("Failed to delete old brand logo", oldKey, error)
+    })
+  }
+
+  revalidateSettings()
+  return { ok: true }
+}
+
+/**
+ * Home-page hero carousel — the full ordered list of canonical
+ * `brand/hero-...` keys (max MAX_HERO_IMAGES), always the CURRENT desired
+ * state, like `saveBrandSettings`'s logo pair. Every key must match the hero
+ * key shape (defense in depth alongside /api/uploads/presign-logo): the
+ * storefront derives a public URL from each one. Photos dropped from the
+ * list are deleted from storage best-effort, after the write commits.
+ */
+export async function saveHeroImages(keys: string[]): Promise<Result> {
+  if (!(await owner())) return { ok: false, error: "forbidden" }
+  const parsed = z
+    .array(z.string().trim().max(300).refine(isHeroImageKey))
+    .max(MAX_HERO_IMAGES)
+    .refine((list) => new Set(list).size === list.length)
+    .safeParse(keys)
+  if (!parsed.success) return { ok: false, error: "invalid" }
+
+  const [existing] = await db
+    .select({ heroImageKeys: shopSettings.heroImageKeys })
+    .from(shopSettings)
+    .where(eq(shopSettings.id, "default"))
+    .limit(1)
+
+  await db
+    .insert(shopSettings)
+    .values({ id: "default", heroImageKeys: parsed.data })
+    .onConflictDoUpdate({
+      target: shopSettings.id,
+      set: { heroImageKeys: parsed.data, updatedAt: new Date() },
+    })
+
+  const kept = new Set(parsed.data)
+  for (const oldKey of existing?.heroImageKeys ?? []) {
+    if (kept.has(oldKey)) continue
+    deleteHeroImageRenditions(oldKey).catch((error) => {
+      console.error("Failed to delete old hero image", oldKey, error)
     })
   }
 
