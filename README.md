@@ -311,7 +311,7 @@ cp .env.example .env.local   # fill in real values, see Environment Variables be
 ### Docker setup
 
 There is no Dockerfile for the app itself, and none is needed: Railway
-builds it from source with Railpack (`railway.json`). Docker **is** used for
+builds it from source with Railpack (configured in `.railway/railway.ts`). Docker **is** used for
 two other things:
 
 - **The local dev database and object storage** — `docker-compose.yml` at
@@ -513,10 +513,25 @@ scripts/
 ## Build & Deployment
 
 **The hosting target is Railway.** The app runs there as a long-lived Node
-container — not serverless functions — built by Railpack per `railway.json`
-(`npm run build` at build time, `npm run db:migrate` before deployment, and
-`npm run start` to serve). See
+container — not serverless functions — built by Railpack per
+`.railway/railway.ts` (`npm run build` at build time, `npm run db:migrate`
+before deployment, and `npm run start` to serve). See
 [DEPLOYMENT.md](DEPLOYMENT.md) for the full setup walkthrough.
+
+**Service settings are Infrastructure as Code** (`.railway/railway.ts`,
+Railway's replacement for the deprecated `railway.json`). The file is
+declarative — anything it omits (an env var, the GitHub source) is removed
+on apply — so always preview first:
+
+```bash
+railway config plan    # read every Delete/Update line
+railway config apply   # only after the plan is exactly what you expect
+```
+
+It manages the app service only (`export const partial`): the Postgres
+database, its volume, and the storage bucket are intentionally not declared,
+so a mistake in this file can never touch production data. Secrets are kept
+as `preserve()` — their values live in Railway, never in the repo.
 
 ### Local build
 

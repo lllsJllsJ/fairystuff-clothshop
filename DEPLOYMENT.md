@@ -1,7 +1,7 @@
 # Deployment
 
 The hosting target is **Railway**. The app runs there as a long-lived Node
-26.8.1 container, built and started per `railway.json` (Railpack,
+26.8.1 container, built and started per `.railway/railway.ts` (Railpack,
 `npm run build`, `npm run db:migrate`, then `npm run start`) — not serverless
 functions, so there's no per-request cold start and no function-invocation
 connection-count pressure on Postgres. npm 11.19.0 is pinned alongside Node so
@@ -152,11 +152,15 @@ secret/environment-variable store.
 ## 7. Build and deploy (Railway)
 
 1. Create a Railway project and connect this repository (or a fork of it).
-   Railway detects `railway.json` and uses it: `builder: "RAILPACK"`,
-   `buildCommand: "npm run build"`, `preDeployCommand: "npm run db:migrate"`,
-   and `startCommand: "npm run start"`. **Do not override these commands** —
-   the ones in `railway.json` are correct. Railpack resolves Node 26.8.1 and
-   npm 11.19.0 from `package.json`.
+   Service settings live in `.railway/railway.ts` (Railway Infrastructure as
+   Code): `build: "npm run build"`, `preDeployCommand: "npm run db:migrate"`,
+   and `start: "npm run start"`, built with Railpack (Railway's default).
+   **Do not override these commands in the dashboard** — change them in the
+   file, then `railway config plan` and `railway config apply`. The file is
+   declarative and scoped to the app service (`export const partial`), so a
+   new project must first create the app service, then `railway config plan`
+   to confirm nothing is deleted. Railpack resolves Node 26.8.1 and npm
+   11.19.0 from `package.json`.
 2. Attach a Postgres service to the project (step 1 above) — Railway wires
    `DATABASE_URL` into the app service automatically once they're linked.
 3. Set every remaining variable from step 6 in the app service's
