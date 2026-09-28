@@ -13,12 +13,23 @@ import { BottomNav } from "@/components/layout/bottom-nav";
  * be trusted to have already run. Server actions under admin/* repeat the
  * check a third time; see the security note at the top of src/auth.ts.
  *
- * Admin routes require a session, so they stay `ƒ` dynamic regardless —
- * that's expected and correct (see the acceptance note in src/proxy.ts).
+ * Admin routes require a session, so they must be `ƒ` dynamic — that's
+ * expected and correct (see the acceptance note in src/proxy.ts).
  * `setRequestLocale()` is still called here (before `requireOwner()`) so
  * every translation and the locale-aware redirect inside it resolve from
  * next-intl's request cache rather than a fresh `headers()` read.
  */
+
+/**
+ * Declared, not inferred. Next only infers `ƒ` by prerendering a route at
+ * build and catching its `cookies()` read — but `[locale]/layout.tsx`'s
+ * `generateStaticParams` returns NO params when the build can't reach the
+ * database (always, on Railway; see lib/static-params.ts), so admin is never
+ * prerendered, gets marked `●`, and `requireOwner()`'s cookie read then
+ * throws `DYNAMIC_SERVER_USAGE` (a 500) on the first real request.
+ */
+export const dynamic = "force-dynamic";
+
 export default async function AdminLayout({
   children,
   params,

@@ -332,6 +332,17 @@ from there (routes stay `●`, but no `th.html`/`en.html` is emitted). Any new
 `[locale]` route that reads the database must use it — never
 `routing.locales.map(...)` directly.
 
+**The flip side: with no params, Next never gets to *infer* a route is
+dynamic.** Inference happens by prerendering a route at build and catching
+its `cookies()`/`headers()`/`searchParams` read. A route that is never
+prerendered stays `●`, and its first real request then dies with
+`digest: 'DYNAMIC_SERVER_USAGE'` (a 500) — exactly what hit `/admin` in
+production. So every `[locale]` route that reads the request must **declare**
+`export const dynamic = "force-dynamic"` (the admin layout does, for the whole
+admin subtree; `track/[code]` and `reset-password` do on their pages). Don't
+trust the build table for this — `●` is printed either way; a runtime request
+is the only proof.
+
 Check `docs/health-check.md`'s standing security block after any change to
 `queries/storefront.ts` or `/api/products` — it is the regression test for
 the private-field leak, and there is no database-level backstop behind it.
