@@ -286,7 +286,11 @@ unpopulated, not that the code regressed.
 
 Failure: product/character reads are wrapped in try/catch — a database error during
 prerender (e.g. a database-less CI build) falls back to an empty result
-instead of failing the build; a live database error at revalidation time
+instead of failing the build. When the database is unreachable at build time
+(every Railway build — `DATABASE_URL` is on the private network),
+`prerenderLocaleParams()` returns no params, so the page is not prerendered
+at all and renders on its first request instead of serving a cached empty
+shop; a live database error at revalidation time
 means the previously-cached page keeps serving until the next successful
 revalidation.
 

@@ -318,6 +318,20 @@ falls back to an empty result, so this build succeeds even against a dummy
 `DATABASE_URL` that can't actually connect — check the build output marks
 `/` and `/shop/[code]` as static/ISR (`●`), not dynamic (`ƒ`).
 
+**But an empty fallback must never be prerendered into the ISR cache.**
+Railway's build container cannot reach the database at all (`DATABASE_URL`
+is on the private `*.railway.internal` network, which exists only at
+runtime), so every production build takes the fallback path. Prerendering
+the locales anyway baked a blank shop ("Your Label", no products, no
+contacts) into the cache, and production served it to the first visitors
+after every deploy. `src/lib/static-params.ts#prerenderLocaleParams` is the
+`generateStaticParams` for `[locale]/layout.tsx` and every `(shop)` route: it
+probes the database once per build and returns NO params when it is
+unreachable, so each page renders on its first real request and is cached
+from there (routes stay `●`, but no `th.html`/`en.html` is emitted). Any new
+`[locale]` route that reads the database must use it — never
+`routing.locales.map(...)` directly.
+
 Check `docs/health-check.md`'s standing security block after any change to
 `queries/storefront.ts` or `/api/products` — it is the regression test for
 the private-field leak, and there is no database-level backstop behind it.

@@ -5,12 +5,12 @@ import { routing } from "@/i18n/routing"
 import { ABOUT_STORY_EN, ABOUT_STORY_TH } from "@/lib/brand"
 import { getShopSettings, resolvedBrandDescription, resolvedBrandName } from "@/db/queries/settings"
 import { ContactCta } from "@/components/shop/contact-cta"
+import { prerenderLocaleParams } from "@/lib/static-params"
 
 export const revalidate = 300
 
-export function generateStaticParams() {
-  return routing.locales.map((locale) => ({ locale }))
-}
+// Empty when the database is unreachable at build time — see lib/static-params.ts.
+export const generateStaticParams = prerenderLocaleParams
 
 export async function generateMetadata({
   params,

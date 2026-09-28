@@ -5,6 +5,7 @@ import { getMessages, setRequestLocale } from "next-intl/server";
 
 import { routing } from "@/i18n/routing";
 import { fontVariables } from "@/lib/fonts";
+import { prerenderLocaleParams } from "@/lib/static-params";
 import { Providers } from "@/components/providers";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -33,9 +34,9 @@ const PUBLIC_NAMESPACES = new Set([
   "errors",
 ]);
 
-export function generateStaticParams() {
-  return routing.locales.map((locale) => ({ locale }));
-}
+// Empty when the database is unreachable at build time (every storefront
+// page under this layout reads it) — see lib/static-params.ts.
+export const generateStaticParams = prerenderLocaleParams;
 
 /**
  * The locale-specific half of the root layout split (see the long comment

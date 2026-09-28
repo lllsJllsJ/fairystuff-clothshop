@@ -1,8 +1,8 @@
 import type { Metadata } from "next"
 import { getTranslations, setRequestLocale } from "next-intl/server"
 
-import { routing } from "@/i18n/routing"
 import { TrackLookupForm } from "@/components/track/track-lookup-form"
+import { prerenderLocaleParams } from "@/lib/static-params"
 
 export const revalidate = 300
 
@@ -11,9 +11,8 @@ export const revalidate = 300
 // sitting in their LINE chat, which is exactly where the design puts it.
 export const metadata: Metadata = { robots: { index: false, follow: false } }
 
-export function generateStaticParams() {
-  return routing.locales.map((locale) => ({ locale }))
-}
+// Empty when the database is unreachable at build time — see lib/static-params.ts.
+export const generateStaticParams = prerenderLocaleParams
 
 export default async function TrackLookupPage({
   params,

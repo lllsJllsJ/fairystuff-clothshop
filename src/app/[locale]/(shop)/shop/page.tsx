@@ -10,6 +10,7 @@ import {
   type PublicCharacterFacet,
 } from "@/db/queries/storefront"
 import { ShopBrowser } from "@/components/shop/shop-browser"
+import { prerenderLocaleParams } from "@/lib/static-params"
 
 export const revalidate = 300
 
@@ -23,9 +24,8 @@ const COLOR_FACET_SAMPLE_SIZE = 200
 
 const EMPTY_LIST: PublicProductListResult = { rows: [], count: 0, page: 1, pageSize: PAGE_SIZE }
 
-export function generateStaticParams() {
-  return routing.locales.map((locale) => ({ locale }))
-}
+// Empty when the database is unreachable at build time — see lib/static-params.ts.
+export const generateStaticParams = prerenderLocaleParams
 
 export async function generateMetadata({
   params,

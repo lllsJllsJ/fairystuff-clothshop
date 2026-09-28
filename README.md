@@ -545,8 +545,12 @@ npm run start
 A database-less build (no live `DATABASE_URL`, e.g. in CI) still succeeds:
 every prerender path that hits the database (`/`, `/shop`, `/shop/[code]`'s
 `generateStaticParams`, `sitemap.ts`) wraps its query in a try/catch and falls
-back to an empty result, letting ISR fill in real content once a live
-database is behind the deployment.
+back to an empty result. Those empty pages are never cached, though: when the
+database is unreachable at build time (always, on Railway — the build cannot
+see the private `*.railway.internal` network), `prerenderLocaleParams()`
+(`src/lib/static-params.ts`) returns no static params, so each storefront page
+renders on its first request against the live database and is cached by ISR
+from there.
 
 ### ISR cache lives on the container's disk
 

@@ -17,15 +17,15 @@ import { ContactCta } from "@/components/shop/contact-cta"
 import { AudienceEntry } from "@/components/shop/audience-entry"
 import { Link } from "@/i18n/navigation"
 import { heroImageUrl, isHeroImageKey } from "@/lib/brand-image-keys"
+import { prerenderLocaleParams } from "@/lib/static-params"
 
 export const revalidate = 300
 
 const NEW_IN_COUNT = 6
 const EMPTY_LIST: PublicProductListResult = { rows: [], count: 0, page: 1, pageSize: NEW_IN_COUNT }
 
-export function generateStaticParams() {
-  return routing.locales.map((locale) => ({ locale }))
-}
+// Empty when the database is unreachable at build time — see lib/static-params.ts.
+export const generateStaticParams = prerenderLocaleParams
 
 export async function generateMetadata({
   params,

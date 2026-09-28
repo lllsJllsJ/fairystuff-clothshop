@@ -1,9 +1,9 @@
 import { getTranslations, setRequestLocale } from "next-intl/server"
 
-import { routing } from "@/i18n/routing"
 import { getShopSettings, resolvedBrandName } from "@/db/queries/settings"
 import { SiteHeader } from "@/components/shop/site-header"
 import { SiteFooter } from "@/components/shop/site-footer"
+import { prerenderLocaleParams } from "@/lib/static-params"
 
 /**
  * Shared chrome for every public storefront route (plan §3, §11 Phase 4).
@@ -14,9 +14,8 @@ import { SiteFooter } from "@/components/shop/site-footer"
  */
 export const revalidate = 300
 
-export function generateStaticParams() {
-  return routing.locales.map((locale) => ({ locale }))
-}
+// Empty when the database is unreachable at build time — see lib/static-params.ts.
+export const generateStaticParams = prerenderLocaleParams
 
 export default async function ShopLayout({
   children,
