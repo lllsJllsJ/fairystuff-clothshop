@@ -45,10 +45,13 @@ export function ProductForm({
   product,
   types,
   characters,
+  colors,
 }: {
   product?: ProductWithRelations
   types: ProductType[]
   characters: Character[]
+  /** The Settings colour palette (names, in display order). */
+  colors: string[]
 }) {
   const t = useTranslations()
   const router = useRouter()
@@ -394,6 +397,7 @@ export function ProductForm({
         <VariantRowsEditor
           value={variants}
           audience={audience}
+          palette={colors}
           onChange={(next) => setValue("variants", next, { shouldValidate: true })}
         />
         {errors.variants?.message && (

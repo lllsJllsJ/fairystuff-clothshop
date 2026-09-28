@@ -1,6 +1,6 @@
 "use server"
 
-import { count, eq, max } from "drizzle-orm"
+import { count, eq, inArray, max } from "drizzle-orm"
 import { z } from "zod"
 
 import { db } from "@/db"
@@ -13,14 +13,19 @@ import {
   orderStatus,
   orderStatusLabels,
   productCharacters,
+  productColors,
+  products,
+  productVariants,
   shopSettings,
 } from "@/db/schema"
 import { getCurrentUser } from "@/lib/auth-helpers"
 import { isOwner } from "@/lib/roles"
 import { isValidFacebookUrl, normalizeFacebookUrl } from "@/lib/facebook"
 import { seedCharacters } from "@/lib/character-seed"
+import { toEnglishColor } from "@/lib/colors"
 import { MAX_HERO_IMAGES, isBrandLogoKey, isHeroImageKey } from "@/lib/brand-image-keys"
 import { deleteBrandLogoRenditions, deleteHeroImageRenditions } from "@/lib/r2"
+import { revalidateStorefront } from "@/app/[locale]/admin/products/revalidate"
 import { revalidateSettings } from "./revalidate"
 
 type Result = { ok: true } | { ok: false; error: string }
@@ -220,6 +225,89 @@ export async function deleteCharacter(characterId: string): Promise<Result> {
   const [used] = await db.select({ value: count() }).from(productCharacters).where(eq(productCharacters.characterId, parsed.data))
   if ((used?.value ?? 0) > 0) return { ok: false, error: "in_use" }
   await db.delete(characters).where(eq(characters.id, parsed.data)); revalidateSettings(); return { ok: true }
+}
+
+/* ------------------------------------------------------- colour palette */
+
+/** A colour name as stored verbatim on productVariants.color. "-" is the
+ * one-colour sentinel there, so it can never be a palette entry. */
+const colorName = label.transform((value) => toEnglishColor(value)).refine((value) => value !== "-")
+
+export async function createProductColor(name: string): Promise<Result> {
+  if (!(await owner())) return { ok: false, error: "forbidden" }
+  const parsed = colorName.safeParse(name)
+  if (!parsed.success) return { ok: false, error: "invalid" }
+  const [last] = await db.select({ value: max(productColors.sortOrder) }).from(productColors)
+  try {
+    await db.insert(productColors).values({ name: parsed.data, sortOrder: (last?.value ?? -1) + 1 })
+  } catch { return { ok: false, error: "duplicate" } }
+  revalidateSettings(); return { ok: true }
+}
+
+/**
+ * Renames a palette colour AND every product variant carrying the old name,
+ * in one transaction — otherwise the products would silently drop out of the
+ * palette. Order lines (`order_items.color`) are snapshots and are never
+ * touched. A product that already has both names (e.g. "Gray" and "Grey")
+ * would violate the variants' (product, colour, size) unique key; that
+ * rolls the whole rename back and reports `duplicate`.
+ */
+export async function updateProductColor(colorId: string, name: string): Promise<Result> {
+  if (!(await owner())) return { ok: false, error: "forbidden" }
+  const parsed = z.object({ id, name: colorName }).safeParse({ id: colorId, name })
+  if (!parsed.success) return { ok: false, error: "invalid" }
+  let touchedProductIds: string[] = []
+  try {
+    touchedProductIds = await db.transaction(async (tx) => {
+      const [current] = await tx
+        .select({ name: productColors.name })
+        .from(productColors)
+        .where(eq(productColors.id, parsed.data.id))
+      if (!current) throw new Error("not_found")
+      if (current.name === parsed.data.name) return []
+      await tx.update(productColors).set({ name: parsed.data.name }).where(eq(productColors.id, parsed.data.id))
+      const renamed = await tx
+        .update(productVariants)
+        .set({ color: parsed.data.name, updatedAt: new Date() })
+        .where(eq(productVariants.color, current.name))
+        .returning({ productId: productVariants.productId })
+      return Array.from(new Set(renamed.map((row) => row.productId)))
+    })
+  } catch (error) {
+    if (error instanceof Error && error.message === "not_found") return { ok: false, error: "not_found" }
+    return { ok: false, error: "duplicate" }
+  }
+  revalidateSettings()
+  // Each renamed product's own /shop/<code> page shows its colours too.
+  if (touchedProductIds.length > 0) {
+    const touched = await db
+      .select({ productCode: products.productCode })
+      .from(products)
+      .where(inArray(products.id, touchedProductIds))
+    for (const row of touched) revalidateStorefront(row.productCode)
+  }
+  return { ok: true }
+}
+
+/** Removes a colour from the palette only — products keep the colour text. */
+export async function deleteProductColor(colorId: string): Promise<Result> {
+  if (!(await owner())) return { ok: false, error: "forbidden" }
+  const parsed = id.safeParse(colorId)
+  if (!parsed.success) return { ok: false, error: "invalid" }
+  await db.delete(productColors).where(eq(productColors.id, parsed.data))
+  revalidateSettings(); return { ok: true }
+}
+
+export async function reorderProductColors(orderedIds: string[]): Promise<Result> {
+  if (!(await owner())) return { ok: false, error: "forbidden" }
+  const parsed = z.array(id).max(500).safeParse(orderedIds)
+  if (!parsed.success) return { ok: false, error: "invalid" }
+  await db.transaction(async (tx) => {
+    for (const [sortOrder, colorId] of parsed.data.entries()) {
+      await tx.update(productColors).set({ sortOrder }).where(eq(productColors.id, colorId))
+    }
+  })
+  revalidateSettings(); return { ok: true }
 }
 
 export async function saveOrderLabel(kind: "admin" | "customer", key: string, labelTh: string, labelEn: string): Promise<Result> {

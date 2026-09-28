@@ -243,6 +243,14 @@ reference.
   against it retries the **entire** `db.transaction(...)` with a fresh code
   (bounded at 3 attempts) — a unique-violation aborts the transaction
   outright, so the retry can never reuse the same `tx`.
+- **Colour names are English-only.** `productVariants.color` is free text,
+  but every write path (product editor, Excel import, Settings palette,
+  `learnProductColors`) runs it through `toEnglishColor()`
+  (`src/lib/colors.ts`) — a Thai name maps to English, a known English name
+  to its canonical case. `product_colors` is a suggestion list, not a FK:
+  deleting an entry never touches a product; renaming one cascades to
+  variants (never to `orderItems.color`, a snapshot). Keep the Thai map in
+  step with `drizzle/0012_seed_product_colors.sql`.
 - **Cover photo = `sortOrder` 0.** No separate "is cover" flag — whichever
   `productImages` row has `sortOrder = 0` is the cover ("Main photo" in the
   editor), full stop. Setting a main photo means reordering, not flagging.

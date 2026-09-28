@@ -139,6 +139,10 @@ export function ProductImageGallery({
         <h2 className="text-subtitle font-bold">{t("images")}</h2>
         <p className="text-small text-muted-foreground">{t("imagesHint")}</p>
       </div>
+      {/* The shop shows photos in a 4:5 frame up to ~560px wide (1120px on a
+          retina screen); the largest stored rendition is 1600px
+          (lib/image-resize.ts), so 1600 x 2000 is the size that stays sharp. */}
+      <p className="text-small text-muted-foreground">{t("imagesSizeHint")}</p>
 
       <div
         onDragOver={(e) => {

@@ -62,26 +62,27 @@
 53. [Settings — Brand](#settings--brand)
 54. [Settings — Home Hero Photos (Carousel)](#settings--home-hero-photos-carousel)
 55. [Settings — Character Taxonomy](#settings--character-taxonomy)
-56. [Settings — Order Status Labels](#settings--order-status-labels)
-57. [Settings — Line-Item Status Lifecycle](#settings--line-item-status-lifecycle)
-58. [Users — List + Filter](#users--list--filter)
-59. [Users — Change Role](#users--change-role)
-60. [Users — Delete Account](#users--delete-account)
-61. [Users — Mark Email Verified](#users--mark-email-verified)
-62. [Users — Send Password Reset](#users--send-password-reset)
+56. [Settings — Colour Palette](#settings--colour-palette)
+57. [Settings — Order Status Labels](#settings--order-status-labels)
+58. [Settings — Line-Item Status Lifecycle](#settings--line-item-status-lifecycle)
+59. [Users — List + Filter](#users--list--filter)
+60. [Users — Change Role](#users--change-role)
+61. [Users — Delete Account](#users--delete-account)
+62. [Users — Mark Email Verified](#users--mark-email-verified)
+63. [Users — Send Password Reset](#users--send-password-reset)
 
 **Catalogue CLI**
-63. [Catalogue Prepare — Workbook Extraction](#catalogue-prepare--workbook-extraction)
-64. [Catalogue Prepare — Supplier Enrichment + Workbook Fallback](#catalogue-prepare--supplier-enrichment--workbook-fallback)
-65. [Catalogue Verify + Import Dry Run](#catalogue-verify--import-dry-run)
-66. [Catalogue Apply — Storage Staging](#catalogue-apply--storage-staging)
-67. [Catalogue Apply — Transactional Replacement](#catalogue-apply--transactional-replacement)
-68. [Catalogue Apply — Rollback + Object Cleanup](#catalogue-apply--rollback--object-cleanup)
+64. [Catalogue Prepare — Workbook Extraction](#catalogue-prepare--workbook-extraction)
+65. [Catalogue Prepare — Supplier Enrichment + Workbook Fallback](#catalogue-prepare--supplier-enrichment--workbook-fallback)
+66. [Catalogue Verify + Import Dry Run](#catalogue-verify--import-dry-run)
+67. [Catalogue Apply — Storage Staging](#catalogue-apply--storage-staging)
+68. [Catalogue Apply — Transactional Replacement](#catalogue-apply--transactional-replacement)
+69. [Catalogue Apply — Rollback + Object Cleanup](#catalogue-apply--rollback--object-cleanup)
 
 **Cross-cutting**
-69. [Storefront Revalidation After a Product Mutation](#storefront-revalidation-after-a-product-mutation)
-70. [Unauthorized / Forbidden Denial Paths](#unauthorized--forbidden-denial-paths)
-71. [Transaction Rollback on Mid-Write Failure](#transaction-rollback-on-mid-write-failure)
+70. [Storefront Revalidation After a Product Mutation](#storefront-revalidation-after-a-product-mutation)
+71. [Unauthorized / Forbidden Denial Paths](#unauthorized--forbidden-denial-paths)
+72. [Transaction Rollback on Mid-Write Failure](#transaction-rollback-on-mid-write-failure)
 
 ---
 
@@ -397,6 +398,11 @@ Failure: a code that doesn't exist, or exists but is `draft`/`archived`,
 returns `null` from `getPublicProductByCode` and the page calls `notFound()`
 — identical 404 behavior either way, so a draft code never leaks its
 existence through a different response shape or status.
+
+Gallery: the main viewer is a 4:5 frame with `object-contain`, so a size
+chart or a supplier screenshot of any shape is shown whole (letterboxed on
+`bg-muted`) instead of being cropped; thumbnails and shop grid tiles stay
+`object-cover`.
 
 ## Colour Selection
 
@@ -918,8 +924,16 @@ OFF keeps the row and its id (`isAvailable = false`) so carts and
 removing a colour deletes rows. Adding a size or colour creates only the new
 cells (ON) — it never silently switches on gaps an older sparse product had.
 
-Failure: two colours with the same name are refused at rename; the server
-re-validates `productFormSchema` regardless.
+The colour cell (`ColorNameCell`) edits a local draft and renames only when
+an option is picked, on Enter, or on blur — rows are keyed by colour name, so
+renaming per keystroke used to remount the input and drop focus after one
+character. Options come from the Settings colour palette (**Settings — Colour
+Palette**); "+ Add color" takes the first unused palette entry, and a typed
+name is converted to English (`toEnglishColor`: ขาว → White, black → Black).
+
+Failure: a rename to a name another row already uses (or to blank) is
+refused and the cell snaps back; the server re-validates `productFormSchema`
+regardless.
 
 ## Excel Import — Parse → Preview → Commit
 
@@ -2475,6 +2489,41 @@ the list; nothing is persisted until Save. A save with a malformed, duplicate,
 or 4th key is rejected (`invalid`) before touching the database. Photos
 uploaded but never saved are left orphaned in storage (same as an unsaved
 logo upload).
+
+## Settings — Colour Palette
+
+`/admin/settings/catalog` → `ColorSettings` (add / rename / reorder / delete),
+plus implicit adds from the product editor. The palette (`product_colors`) is
+the option list for the colour picker in **Variant Rows Save**; a variant
+still stores its colour as plain text, so the palette only suggests names.
+Colour names are **English-only**: `toEnglishColor` (`src/lib/colors.ts`)
+turns a Thai name into English (ขาว → White) and a known English name into its
+canonical spelling (purple → Purple) in the product editor, the Excel import,
+the Settings dialog, and `learnProductColors`.
+
+```
+┌────────┐ + / pencil / bin / ↑↓ ┌──────────────────────────────┐
+│ Owner  │ ─────────────────────▶│ workflow-actions.ts          │
+└────────┘                       │ isOwner() re-check, zod      │
+                                 └──────────────┬───────────────┘
+      create  -> insert product_colors (sortOrder = max + 1)
+      rename  -> tx: update product_colors
+                     update product_variants.color = new   (NOT order_items)
+                     -> revalidateSettings + each touched /shop/<code>
+      delete  -> delete product_colors row only (products keep the text)
+      reorder -> tx: sortOrder = index
+
+┌────────┐ types a new colour in  ┌──────────────────────────────┐
+│ Owner  │ the product editor ───▶│ create/updateProduct commits │
+└────────┘ and saves              │ -> learnProductColors (best- │
+                                  │    effort, on conflict skip)  │
+                                  └──────────────────────────────┘
+```
+
+Failure: a rename that would give one product two variants with the same
+(colour, size) — it already has both names — hits the variants' unique key,
+rolls the whole rename back and returns `duplicate`. A duplicate palette name
+is also `duplicate`. `learnProductColors` never fails the product save.
 
 ## Settings — Order Status Labels
 

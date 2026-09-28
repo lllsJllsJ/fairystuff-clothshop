@@ -133,7 +133,8 @@ separate API service and no serverless cold start.
   and a sortable order list with single-line filters (order no. and order date),
   Excel/print reports (monthly and annual reports include advertising cost;
   plus profit-by-product and inventory snapshots), and a product-type
-  reference-list manager, character manager, workflow-label settings,
+  reference-list manager, colour palette (also learned from colours typed
+  on a product), character manager, workflow-label settings,
   configurable supplier/item statuses, and up to 3 home-page hero photos
   shown as an autoplaying carousel.
 - Owner-only user management (`/admin/users`): a searchable, filterable list
@@ -411,6 +412,7 @@ src/
 │       ├── storefront.ts                  # PUBLIC_PRODUCT_COLUMNS + public reads
 │       ├── products.ts / orders.ts        # admin (full-column) reads
 │       ├── characters.ts / settings.ts    # taxonomy + workflow configuration
+│       ├── product-colors.ts              # colour palette for the product editor
 │       ├── track.ts                       # PUBLIC_ORDER_COLUMNS + public preorder-code reads
 │       ├── users.ts                       # ADMIN_USER_COLUMNS + account reads (no hash)
 │       ├── dashboard.ts / reports.ts      # aggregation queries

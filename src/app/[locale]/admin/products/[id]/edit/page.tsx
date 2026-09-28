@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server"
 import { getProductById } from "@/db/queries/products"
 import { getProductTypes } from "@/db/queries/product-types"
 import { getCharacters } from "@/db/queries/characters"
+import { getProductColors } from "@/db/queries/product-colors"
 import { ProductForm } from "@/components/products/product-form"
 import { BackLink } from "@/components/layout/back-link"
 
@@ -15,10 +16,11 @@ export default async function EditProductPage({
   const { id } = await params
   const t = await getTranslations()
 
-  const [product, types, characters] = await Promise.all([
+  const [product, types, characters, colors] = await Promise.all([
     getProductById(id),
     getProductTypes(),
     getCharacters(),
+    getProductColors(),
   ])
   if (!product) notFound()
 
@@ -26,7 +28,12 @@ export default async function EditProductPage({
     <div className="mx-auto max-w-3xl">
       <BackLink fallbackHref="/admin/products" />
       <h1 className="mt-3 mb-5 text-h3 font-bold text-foreground">{t("product.editProduct")}</h1>
-      <ProductForm product={product} types={types} characters={characters} />
+      <ProductForm
+        product={product}
+        types={types}
+        characters={characters}
+        colors={colors.map((c) => c.name)}
+      />
     </div>
   )
 }

@@ -149,7 +149,8 @@
     "exportFailed": "Export failed",
     "exportEmpty": "No products match these filters",
     "exported": "Exported {count} products",
-    "audienceBoth": "Adults & Kids"
+    "audienceBoth": "Adults & Kids",
+    "imagesSizeHint": "Recommended size: 1600 × 2000 px portrait (4:5), at least 1200 × 1500 px. Size charts: at least 1200 px wide. Smaller images look blurry in the shop."
   },
   "cart": {
     "title": "Your cart",
@@ -577,7 +578,17 @@
     "saved": "Settings saved",
     "saveFailed": "Could not save settings",
     "preorderFlag": "preorder",
-    "preorderFlagHint": "Preorder from supplier (shows shipment tracking)"
+    "preorderFlagHint": "Preorder from supplier (shows shipment tracking)",
+    "colors": "Colours",
+    "colorsHint": "English colour names offered in the product editor, in this order. A Thai name is converted to English, and a new colour typed on a product is added here when the product is saved.",
+    "addColor": "Add colour",
+    "renameColor": "Rename colour",
+    "renameColorHint": "Every product using this colour is renamed too. Past orders keep the old name.",
+    "colorName": "Colour name",
+    "colorNamePlaceholder": "e.g. Navy",
+    "noColors": "No colours yet",
+    "duplicateColor": "That colour already exists (or a product already has both names).",
+    "deleteColorConfirm": "Remove \"{name}\" from the list? Products that use it keep the colour."
   },
   "home": {
     "heroTitle": "Clothing that speaks for you",

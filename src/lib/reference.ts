@@ -1,10 +1,11 @@
 import "server-only"
 
-import { eq } from "drizzle-orm"
+import { eq, max } from "drizzle-orm"
 import type { NodePgDatabase } from "drizzle-orm/node-postgres"
 
-import { productTypes } from "@/db/schema"
+import { productColors, productTypes } from "@/db/schema"
 import type * as schema from "@/db/schema"
+import { toEnglishColor } from "@/lib/colors"
 import { derivePrefix } from "@/lib/product-code"
 
 /**
@@ -66,6 +67,36 @@ export async function learnProductType(
       codePrefix: derivePrefix(null, slugify(name), name, taken),
       sortOrder: LEARNED_SORT_ORDER,
     })
+  } catch {
+    // Non-fatal — see the doc comment above.
+  }
+}
+
+/** The one-colour sentinel on productVariants.color — never a palette entry. */
+const NO_COLOR = "-"
+
+/**
+ * Adds any colour a product was saved with to the `productColors` palette,
+ * so a colour typed in the product editor's picker becomes an option next
+ * time — this is what makes "add a new colour" work from the product page
+ * without a trip to Settings. Appended after the existing palette.
+ *
+ * Best-effort, exactly like learnProductType: a failure never fails the
+ * product write that triggered it.
+ */
+export async function learnProductColors(db: DbLike, colors: string[]): Promise<void> {
+  const names = Array.from(
+    new Set(colors.map((c) => toEnglishColor(c)).filter((c) => c && c !== NO_COLOR))
+  )
+  if (names.length === 0) return
+
+  try {
+    const [last] = await db.select({ value: max(productColors.sortOrder) }).from(productColors)
+    const start = (last?.value ?? -1) + 1
+    await db
+      .insert(productColors)
+      .values(names.map((name, i) => ({ name, sortOrder: start + i })))
+      .onConflictDoNothing({ target: productColors.name })
   } catch {
     // Non-fatal — see the doc comment above.
   }

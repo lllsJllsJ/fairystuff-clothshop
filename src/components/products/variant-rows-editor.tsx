@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useTranslations } from "next-intl"
 import { Check, Plus, X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { toEnglishColor } from "@/lib/colors"
 import type { ProductAudience } from "@/lib/product-taxonomy"
 import { MAX_SIZE_LENGTH, normalizeSizes, sizePresetsFor, sortSizes } from "@/lib/sizes"
 import type { ProductVariantValues } from "@/lib/validations/product"
@@ -30,9 +31,6 @@ import { Input } from "@/components/ui/input"
 
 /** "-" is the one-colour sentinel — see productVariants.color in schema.ts. */
 const NO_COLOR = "-"
-
-/** Offered in the colour dropdown; anything typed instead is kept verbatim. */
-const COLOR_PRESETS = ["Black", "White", "Pink", "Yellow", "Grey", "Blue"]
 
 function uniqueInOrder(values: string[]): string[] {
   return Array.from(new Set(values))
@@ -70,10 +68,15 @@ export function VariantRowsEditor({
   value,
   onChange,
   audience,
+  palette,
 }: {
   value: ProductVariantValues[]
   onChange: (variants: ProductVariantValues[]) => void
   audience: ProductAudience
+  /** Settings' colour palette, in order — the dropdown options and what
+   * "Add colour" picks from. Anything typed instead is kept verbatim and
+   * joins the palette when the product is saved (learnProductColors). */
+  palette: string[]
 }) {
   const t = useTranslations("variant")
   const tProduct = useTranslations("product")
@@ -140,7 +143,7 @@ export function VariantRowsEditor({
   function addColor() {
     const used = new Set(colors)
     const name =
-      COLOR_PRESETS.find((preset) => !used.has(preset)) ?? `Colour ${colors.length + 1}`
+      palette.find((preset) => !used.has(preset)) ?? `Colour ${colors.length + 1}`
     if (colors.length === 1 && colors[0] === NO_COLOR) {
       // Going from "one colour" to named colours: the existing rows become
       // the first named colour instead of leaving a "-" block behind.
@@ -154,12 +157,19 @@ export function VariantRowsEditor({
     emit([...colors, name], sizes, (c) => c === name)
   }
 
-  function renameColor(from: string, raw: string) {
-    const to = raw.trim() === t("noColorLabel") ? NO_COLOR : raw.trim()
-    if (!to || to === from) return
-    if (colors.includes(to)) return // would merge two colours — refuse silently; UI shows the name unchanged
+  /** Returns false when the rename is refused (blank, or would merge two
+   * colours) — the cell then snaps back to the current name. */
+  function renameColor(from: string, raw: string): boolean {
+    const trimmed = raw.trim()
+    if (!trimmed) return false
+    // Colours are English-only: "ขาว" becomes "White", and "black" takes
+    // the palette's spelling "Black" (lib/colors.ts).
+    const to = trimmed === t("noColorLabel") ? NO_COLOR : toEnglishColor(trimmed, palette)
+    if (to === from) return true
+    if (colors.includes(to)) return false // would merge two colours
     setPendingColors((prev) => prev.map((c) => (c === from ? to : c)))
     onChange(value.map((v) => (v.color === from ? { ...v, color: to } : v)))
+    return true
   }
 
   function removeColor(color: string) {
@@ -201,7 +211,12 @@ export function VariantRowsEditor({
   }
 
   const displayColor = (color: string) => (color === NO_COLOR ? t("noColorLabel") : color)
-  const colorOptions = [t("noColorLabel"), ...COLOR_PRESETS]
+  // The palette first, then any colour this product has that isn't in it
+  // yet (typed here, or from before the palette existed).
+  const colorOptions = [
+    t("noColorLabel"),
+    ...uniqueInOrder([...palette, ...colors.filter((c) => c !== NO_COLOR)]),
+  ]
   const available = value.filter((v) => v.isAvailable !== false).length
 
   return (
@@ -318,9 +333,9 @@ export function VariantRowsEditor({
                 {(colors.length > 0 ? colors : [NO_COLOR]).map((color) => (
                   <tr key={color}>
                     <td className="w-44">
-                      <CreatableCombobox
+                      <ColorNameCell
                         value={displayColor(color)}
-                        onValueChange={(next) => renameColor(color, next)}
+                        onCommit={(next) => renameColor(color, next)}
                         options={colorOptions}
                         placeholder={t("colorPlaceholder")}
                         createLabel={(query) => tProduct("addOption", { value: query })}
@@ -372,5 +387,74 @@ export function VariantRowsEditor({
         <p className="text-small text-muted-foreground">{t("availabilityHint")}</p>
       </div>
     </section>
+  )
+}
+
+/**
+ * One colour's name. Typing edits a local draft only — the rename is
+ * committed when an option is picked, on Enter, or when focus leaves.
+ *
+ * Renaming on every keystroke (as this used to) re-keyed the row, since rows
+ * are keyed by colour name: React remounted the input after the first
+ * character and focus was lost, so only one letter could ever be typed.
+ * Committing once also keeps a half-typed name that happens to match another
+ * colour ("B" while typing "Blue" next to "B") from being refused midway.
+ */
+function ColorNameCell({
+  value,
+  onCommit,
+  options,
+  placeholder,
+  createLabel,
+}: {
+  value: string
+  /** Returns false if the name was refused; the draft then resets. */
+  onCommit: (next: string) => boolean
+  options: string[]
+  placeholder: string
+  createLabel: (query: string) => string
+}) {
+  const [draft, setDraft] = useState(value)
+  /** Set once a rename lands: the row is about to remount under its new
+   * key, and a late blur from this instance must not rename it again from
+   * a stale closure. */
+  const renamed = useRef(false)
+
+  function commit(next: string) {
+    if (renamed.current) return
+    if (next.trim() === value) {
+      setDraft(value)
+      return
+    }
+    if (onCommit(next)) renamed.current = true
+    else setDraft(value)
+  }
+
+  const query = draft.trim().toLowerCase()
+  const hasMatch = !!query && options.some((o) => o.toLowerCase().includes(query))
+
+  return (
+    <CreatableCombobox
+      value={draft}
+      onValueChange={(next, reason) => {
+        setDraft(next)
+        if (reason === "item-press") commit(next)
+      }}
+      onBlur={() => commit(draft)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          // Never submit the whole product form from here. When the list
+          // shows a match, base-ui picks the highlighted one (item-press);
+          // only a brand-new name is committed here.
+          e.preventDefault()
+          if (!hasMatch) commit(draft)
+        } else if (e.key === "Escape") {
+          setDraft(value)
+        }
+      }}
+      options={options}
+      placeholder={placeholder}
+      createLabel={createLabel}
+    />
   )
 }

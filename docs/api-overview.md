@@ -623,6 +623,21 @@ characters, fixed admin/customer status labels, configurable line-item
 statuses, and `clearShopData`. Deleting referenced character or item-status
 rows is blocked. Exactly one line-item status may be the default.
 
+The colour palette (`product_colors`) has `createProductColor`,
+`updateProductColor`, `deleteProductColor`, and `reorderProductColors`
+(`settings/workflow-actions.ts`, each owner-checked). Results are
+`{ ok: true } | { ok: false, error: "forbidden" | "invalid" | "duplicate" |
+"not_found" }`. A rename also rewrites `product_variants.color` for every
+variant carrying the old name, in the same transaction (never
+`order_items.color` — a snapshot); a rename that would collide on a
+product's (colour, size) key returns `duplicate` and changes nothing. Deleting
+a colour is never blocked — it only removes the suggestion. `createProduct`/
+`updateProduct` add any new variant colour to the palette after commit
+(`learnProductColors`, best-effort). Colour names are English-only: every
+entry point converts a Thai name to English via `toEnglishColor`
+(`src/lib/colors.ts`), and migration `0012` converted existing variant and
+image colours the same way.
+
 `submitCheckout` re-resolves active products, variants, and current prices
 server-side; it never trusts the client's cart snapshot for anything but
 which items/quantities were requested. A UUID checkout key makes retries

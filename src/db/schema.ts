@@ -185,6 +185,21 @@ export const characters = pgTable("characters", {
     .defaultNow(),
 })
 
+// The owner's colour palette — the options offered in the product editor's
+// colour picker. A variant stores its colour as plain text
+// (productVariants.color), NOT a foreign key: this list only suggests names.
+// Deleting a colour here never touches a product; renaming one cascades to
+// productVariants.color (settings/workflow-actions.ts#updateProductColor)
+// but never to orderItems.color, which is a snapshot.
+export const productColors = pgTable("product_colors", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull().unique(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+})
+
 // ---------------------------------------------------------------------------
 // products — no `color` column; colour lives on variants (colour x size
 // matrix). Public columns: productCode, productName, productType,

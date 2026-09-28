@@ -5,6 +5,8 @@ import { ChevronDownIcon, PlusIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
+export type AutocompleteChangeReason = Autocomplete.Root.ChangeEventReason
+
 /**
  * A searchable dropdown whose value is free text: the user can pick a known
  * option or type a brand/model/trim that isn't in the managed list yet. The
@@ -32,7 +34,10 @@ export function CreatableCombobox({
   onKeyDown,
 }: {
   value: string
-  onValueChange: (value: string) => void
+  /** `reason` is base-ui's change reason — `"item-press"` when an option was
+   *  picked (by click or Enter), `"input-change"` while typing. A caller that
+   *  must not act on every keystroke commits on `"item-press"` and on blur. */
+  onValueChange: (value: string, reason: AutocompleteChangeReason) => void
   options: string[]
   placeholder?: string
   /** Rendered when the query matches nothing, e.g. `Add "Hilux Champ"`. */
@@ -51,7 +56,7 @@ export function CreatableCombobox({
     <Autocomplete.Root
       items={options}
       value={value}
-      onValueChange={(v) => onValueChange(v)}
+      onValueChange={(v, details) => onValueChange(v, details.reason)}
       disabled={disabled}
       filter={matchesQuery(options)}
       openOnInputClick

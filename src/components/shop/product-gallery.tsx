@@ -34,6 +34,14 @@ const GALLERY_WIDTH_CLASS =
  * `240px` floor keeps it sane in landscape, where `44svh` would otherwise
  * collapse to a thumbnail.
  *
+ * **Fit.** The viewer uses `object-contain`, not `cover`: a product's
+ * photos include size charts and supplier screenshots of any shape (a
+ * 400x155 chart is 2.6:1 against a 4:5 frame), and `cover` cropped them to
+ * an unreadable middle slice. A 4:5 photo still fills the frame exactly;
+ * anything else is letterboxed on `bg-muted`. Thumbnails and grid tiles
+ * (product-tile.tsx) stay `cover` — they are previews, and the grid shows
+ * only the main photo.
+ *
  * `GalleryViewer` is keyed by the selected colour so a colour change
  * remounts it — that's what resets `active` back to 0 and the scroller
  * back to the first frame on a colour switch, with no effect and no ref
@@ -118,7 +126,7 @@ function GalleryViewer({
               fill
               sizes="(max-width: 1024px) 100vw, 50vw"
               priority={index === 0}
-              className="object-cover"
+              className="object-contain"
             />
           </div>
         ))}

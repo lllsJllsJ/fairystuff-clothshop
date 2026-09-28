@@ -57,13 +57,13 @@ test("blank colours AND sizes means 'leave variants as they are'", () => {
   assert.equal(parseVariants(undefined, "", undefined), undefined)
 })
 
-test("legacy packed cell: 'Free Size:2' stays one size; 'ดำ S:3' splits colour", () => {
+test("legacy packed cell: 'Free Size:2' stays one size; 'ดำ S:3' splits colour (converted to English)", () => {
   assert.deepEqual(parseVariants(undefined, "Free Size:2", undefined), [
     { color: "-", size: "Free Size", isAvailable: true },
   ])
   assert.deepEqual(parseVariants(undefined, "ดำ S:3, ดำ M:0", undefined), [
-    { color: "ดำ", size: "S", isAvailable: true },
-    { color: "ดำ", size: "M", isAvailable: true },
+    { color: "Black", size: "S", isAvailable: true },
+    { color: "Black", size: "M", isAvailable: true },
   ])
 })
 

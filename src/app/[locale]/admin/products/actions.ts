@@ -14,7 +14,7 @@ import {
   withCodeRetry,
 } from "@/lib/product-code"
 import { isProductKind, type ProductKind } from "@/lib/product-taxonomy"
-import { learnProductType } from "@/lib/reference"
+import { learnProductColors, learnProductType } from "@/lib/reference"
 import { isOwner } from "@/lib/roles"
 import {
   productFormSchema,
@@ -205,6 +205,7 @@ export async function createProduct(
 
   // Best-effort — never fails the product write above (lib/reference.ts).
   await learnProductType(db, v.productType)
+  await learnProductColors(db, v.variants.map((variant) => variant.color))
   revalidateStorefront(assignedCode)
   return { ok: true, id: insertedId }
 }
@@ -414,6 +415,7 @@ export async function updateProduct(
   )
 
   await learnProductType(db, v.productType)
+  await learnProductColors(db, v.variants.map((variant) => variant.color))
   revalidateStorefront(savedCode)
   return { ok: true, id }
 }

@@ -6,6 +6,7 @@ import {
   type ProductAudience,
   type ProductKind,
 } from "@/lib/product-taxonomy"
+import { toEnglishColor } from "@/lib/colors"
 import { isPresetSize, MAX_SIZE_LENGTH, normalizeSizes } from "@/lib/sizes"
 
 /**
@@ -382,13 +383,16 @@ export function parseVariants(
   sizesCell: string,
   unavailableCell: string | undefined
 ): TemplateVariant[] | undefined {
-  const colors = splitList(colorsCell)
+  // Colours are English-only (lib/colors.ts): "ขาว" in the sheet is "White".
+  const colors = Array.from(new Set(splitList(colorsCell).map((c) => toEnglishColor(c))))
   if (!sizesCell.trim() && colors.length === 0) return undefined
 
   const off = new Set(
     splitList(unavailableCell).map((pair) => {
-      const [a, b] = pair.split("/").map((part) => part.trim().toLowerCase())
-      return b === undefined ? `${ONE_COLOR}|${a}` : `${a}|${b}`
+      const [a, b] = pair.split("/").map((part) => part.trim())
+      return b === undefined
+        ? `${ONE_COLOR}|${a.toLowerCase()}`
+        : `${toEnglishColor(a).toLowerCase()}|${b.toLowerCase()}`
     })
   )
 
@@ -435,7 +439,7 @@ function parseLegacyVariants(
     let size = left
     const space = left.indexOf(" ")
     if (!isPresetSize(left) && space > 0) {
-      color = left.slice(0, space)
+      color = toEnglishColor(left.slice(0, space))
       size = left.slice(space + 1).trim()
     }
     size = size.slice(0, MAX_SIZE_LENGTH)
