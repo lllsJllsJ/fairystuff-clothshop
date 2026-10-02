@@ -55,7 +55,7 @@ nothing is trusted to be well-formed.
 | `color` | string | Exact match on an AVAILABLE variant's `color`. |
 | `size` | string | Exact match on an AVAILABLE variant's `size` (a switched-off size never matches). |
 | `minPrice`, `maxPrice` | number | Clamped to `[0, 10_000_000]`. |
-| `sort` | `newest` \| `price_asc` \| `price_desc` | Defaults to `newest`. Anything else falls back to `newest`. |
+| `sort` | `newest` \| `price_asc` \| `price_desc` \| `popular` | Defaults to `newest`. Anything else falls back to `newest`. `popular` lists the owner's hand-picked Popular products first, in the order they set, then everything else newest-first. |
 | `page` | integer | Clamped to `[1, 10_000]`. |
 | `pageSize` | integer | Clamped to `[1, 48]`, default `24`. |
 
@@ -79,6 +79,7 @@ GET /api/products?search=dress&character=mickey&sort=price_asc&page=1
       "description": "...",
       "sellPrice": "1290.00",
       "createdAt": "2026-01-14T08:00:00.000Z",
+      "isPopular": false,
       "coverImageUrl": "https://img.example.com/products/.../1600.webp",
       "colors": ["ดำ", "ครีม"],
       "isOrderable": true,
@@ -451,8 +452,14 @@ export const PUBLIC_PRODUCT_COLUMNS = {
   description: products.description,
   sellPrice: products.sellPrice,
   createdAt: products.createdAt,
+  isPopular: sql<boolean>`${products.popularRank} is not null`,
 } as const
 ```
+
+`isPopular` is the one computed entry: whether the owner hand-picked the
+product as Popular (Settings → Storefront). Only the boolean is public — the
+underlying `products.popular_rank` position orders the `popular` sort and the
+home page's Popular section but is never returned.
 
 Layered on top for list/detail views: a computed `coverImageUrl`, a
 deduplicated `colors` array, `isOrderable` (false when every size is
@@ -622,6 +629,16 @@ The Settings mutation surface includes product types, shop contacts,
 characters, fixed admin/customer status labels, configurable line-item
 statuses, and `clearShopData`. Deleting referenced character or item-status
 rows is blocked. Exactly one line-item status may be the default.
+
+`savePopularProducts(orderedIds)` (`settings/workflow-actions.ts`,
+owner-checked) replaces the hand-picked Popular list: the array is the
+storefront order, at most 8 unique product UUIDs, and an empty array clears
+the list. It is the only writer of `products.popular_rank` — one transaction
+nulls every existing rank and renumbers the given ids `0..n-1`. Results are
+`{ ok: true } | { ok: false, error: "forbidden" | "invalid" | "not_found" |
+"update_failed" }`; `not_found` (an id whose product no longer exists) rolls
+the whole save back. No product create/update/import action names the column,
+so editing or re-importing a product never clears a pick.
 
 The colour palette (`product_colors`) has `createProductColor`,
 `updateProductColor`, `deleteProductColor`, and `reorderProductColors`

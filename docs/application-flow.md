@@ -61,28 +61,29 @@
 52. [Settings — Shop Contacts](#settings--shop-contacts)
 53. [Settings — Brand](#settings--brand)
 54. [Settings — Home Hero Photos (Carousel)](#settings--home-hero-photos-carousel)
-55. [Settings — Character Taxonomy](#settings--character-taxonomy)
-56. [Settings — Colour Palette](#settings--colour-palette)
-57. [Settings — Order Status Labels](#settings--order-status-labels)
-58. [Settings — Line-Item Status Lifecycle](#settings--line-item-status-lifecycle)
-59. [Users — List + Filter](#users--list--filter)
-60. [Users — Change Role](#users--change-role)
-61. [Users — Delete Account](#users--delete-account)
-62. [Users — Mark Email Verified](#users--mark-email-verified)
-63. [Users — Send Password Reset](#users--send-password-reset)
+55. [Settings — Popular Products](#settings--popular-products)
+56. [Settings — Character Taxonomy](#settings--character-taxonomy)
+57. [Settings — Colour Palette](#settings--colour-palette)
+58. [Settings — Order Status Labels](#settings--order-status-labels)
+59. [Settings — Line-Item Status Lifecycle](#settings--line-item-status-lifecycle)
+60. [Users — List + Filter](#users--list--filter)
+61. [Users — Change Role](#users--change-role)
+62. [Users — Delete Account](#users--delete-account)
+63. [Users — Mark Email Verified](#users--mark-email-verified)
+64. [Users — Send Password Reset](#users--send-password-reset)
 
 **Catalogue CLI**
-64. [Catalogue Prepare — Workbook Extraction](#catalogue-prepare--workbook-extraction)
-65. [Catalogue Prepare — Supplier Enrichment + Workbook Fallback](#catalogue-prepare--supplier-enrichment--workbook-fallback)
-66. [Catalogue Verify + Import Dry Run](#catalogue-verify--import-dry-run)
-67. [Catalogue Apply — Storage Staging](#catalogue-apply--storage-staging)
-68. [Catalogue Apply — Transactional Replacement](#catalogue-apply--transactional-replacement)
-69. [Catalogue Apply — Rollback + Object Cleanup](#catalogue-apply--rollback--object-cleanup)
+65. [Catalogue Prepare — Workbook Extraction](#catalogue-prepare--workbook-extraction)
+66. [Catalogue Prepare — Supplier Enrichment + Workbook Fallback](#catalogue-prepare--supplier-enrichment--workbook-fallback)
+67. [Catalogue Verify + Import Dry Run](#catalogue-verify--import-dry-run)
+68. [Catalogue Apply — Storage Staging](#catalogue-apply--storage-staging)
+69. [Catalogue Apply — Transactional Replacement](#catalogue-apply--transactional-replacement)
+70. [Catalogue Apply — Rollback + Object Cleanup](#catalogue-apply--rollback--object-cleanup)
 
 **Cross-cutting**
-70. [Storefront Revalidation After a Product Mutation](#storefront-revalidation-after-a-product-mutation)
-71. [Unauthorized / Forbidden Denial Paths](#unauthorized--forbidden-denial-paths)
-72. [Transaction Rollback on Mid-Write Failure](#transaction-rollback-on-mid-write-failure)
+71. [Storefront Revalidation After a Product Mutation](#storefront-revalidation-after-a-product-mutation)
+72. [Unauthorized / Forbidden Denial Paths](#unauthorized--forbidden-denial-paths)
+73. [Transaction Rollback on Mid-Write Failure](#transaction-rollback-on-mid-write-failure)
 
 ---
 
@@ -261,13 +262,25 @@ locales at build time (`generateStaticParams`), revalidates every 300s.
                           ┌───yes─────┴─────no────┐
                           ▼                        ▼
               re-render: getPublicProducts     serve cached HTML
-              (newest 6) + getPublicCharacters + shop contacts
+              (popularOnly, hand-picked order, max 8)
+              + getPublicProducts (newest 6)
+              + getPublicCharacters + shop contacts
               via db/queries/storefront.ts
               (PUBLIC_PRODUCT_COLUMNS only)
                           │
                           ▼
                 cache updated, served
 ```
+
+Section order: Hero → **Popular** → audience entry → New in → collections →
+story → contact. The Popular section shows the owner's hand-picked list
+(see [Settings — Popular Products](#settings--popular-products)) in the saved
+order, with an "All products" link to `/shop?sort=popular`. It is omitted
+entirely when nothing is picked — and during a database-less prerender, where
+the read falls back to empty — so it never renders as an empty grid. Tiles
+inside it carry no "Popular" badge (the heading says it); the same products
+do carry it in every other grid. Whichever product grid comes first gets the
+eager-loaded images (Popular when present, otherwise New in).
 
 The character facet feeds two link-only sections — `QuickFilterRail` (chips
 above the "New in" grid) and `CollectionStrip` (promo cards). Both are
@@ -363,6 +376,11 @@ change (debounced 350ms for the search box). Public, no auth. See
                                             ▼
                                   { rows, count, page, pageSize }
 ```
+
+`sort=popular` orders by `popular_rank ASC NULLS LAST, created_at DESC` — the
+hand-picked products first, then the rest newest-first. Each row carries
+`isPopular` (the tile badge); the rank itself is never returned, and
+`popularOnly` (the home page's filter) is not reachable from a query param.
 
 Failure: `500` with `{ error: "failed" }` on any unexpected error (caught,
 logged server-side); the client's `useQuery` surfaces this as an error state
@@ -479,6 +497,9 @@ state (search-first pattern).
                               useQuery re-keys on the new params
                               -> GET /api/products fires
 ```
+
+The sort dropdown offers Newest, Most popular (`sort=popular`), and price
+low/high; the home page's Popular section deep-links to `/shop?sort=popular`.
 
 Failure: none — a malformed/missing param simply falls back to its default
 (e.g. `sort` falls back to `newest`) rather than erroring; see
@@ -2493,6 +2514,52 @@ the list; nothing is persisted until Save. A save with a malformed, duplicate,
 or 4th key is rejected (`invalid`) before touching the database. Photos
 uploaded but never saved are left orphaned in storage (same as an unsaved
 logo upload).
+
+## Settings — Popular Products
+
+The owner hand-picks up to 8 products and their order (Admin → Settings →
+Storefront → Popular products). Stored as `products.popular_rank` (null = not
+popular, `0..n-1` = display order). Read by the home page's Popular section,
+the tile badge (`isPopular`), and the `/shop` "Most popular" sort.
+
+```
+┌────────┐ focus search box   ┌───────────────────────────────┐
+│ Owner  │ ──────────────────▶│ GET /api/admin/products        │
+└────────┘  (debounced 300ms) │ ?search=&status=active (owner) │
+    │                         └───────────────────────────────┘
+    │ + add / ↑↓ move / x remove  -> local state only
+    │
+    │ Save
+    ▼
+savePopularProducts(orderedIds[])
+    │ isOwner() re-check
+    │ zod: <= 8, every id a UUID, no duplicates ──fail──▶ "invalid"
+    ▼
+db.transaction
+    UPDATE products SET popular_rank = NULL WHERE popular_rank IS NOT NULL
+    for each id, index:
+        UPDATE products SET popular_rank = index WHERE id = ?
+        no row? ──▶ throw ──▶ ROLLBACK ──▶ "not_found"
+    │ COMMIT
+    ▼
+revalidateSettings() -> "/" and "/shop" re-rendered in both locales
+    │
+    ▼
+Home: Popular section (saved order) · tiles: "Popular" badge
+/shop: "Most popular" sort puts the picks first
+```
+
+Failure: nothing is persisted until Save; a rejected or failed save shows a
+toast and keeps the on-screen list. A product deleted after it was added to
+the list makes the save roll back (`not_found`) rather than store a list with
+a gap. A picked product that is later drafted or archived keeps its slot and
+is shown in Settings with its status and a "not shown" note, but disappears
+from the storefront (every public read pins `status = 'active'`). Deleting a
+product removes its pick with the row — so does Clear Shop Data and the
+catalogue CLI's transactional replacement, both of which delete every product.
+Product create/edit/inline-edit and the Excel import never write
+`popular_rank`. Tiles in other products' "related products" grids
+pick up a changed badge within the 300s ISR window.
 
 ## Settings — Colour Palette
 

@@ -8,11 +8,14 @@ import { ProductTile } from "@/components/shop/product-tile"
 export function ProductGrid({
   products,
   newCodes,
+  showPopular = true,
   priorityCount = 0,
 }: {
   products: PublicProductSummary[]
   /** Product codes to flag with the "new" badge (e.g. the home "New in" strip). */
   newCodes?: Set<string>
+  /** Show the "Popular" badge on hand-picked products (default on). */
+  showPopular?: boolean
   /** How many of the first tiles get `priority`/`eager` loading (above the fold). */
   priorityCount?: number
 }) {
@@ -34,6 +37,7 @@ export function ProductGrid({
           key={product.id}
           product={product}
           isNew={newCodes?.has(product.productCode) ?? false}
+          showPopular={showPopular}
           priority={index < priorityCount}
         />
       ))}

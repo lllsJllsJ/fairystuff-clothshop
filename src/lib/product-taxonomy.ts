@@ -51,3 +51,10 @@ export function isProductAudience(value: unknown): value is ProductAudience {
 export function isProductKind(value: unknown): value is ProductKind {
   return typeof value === "string" && (PRODUCT_KINDS as readonly string[]).includes(value)
 }
+
+/**
+ * How many products the owner may hand-pick as "Popular" (Settings ->
+ * Storefront). Also the size of the home page's Popular section, which
+ * shows the whole list.
+ */
+export const MAX_POPULAR_PRODUCTS = 8

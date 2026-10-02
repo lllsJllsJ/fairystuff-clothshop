@@ -1,4 +1,5 @@
 import { useTranslations } from "next-intl"
+import { Flame } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import type { ProductAudience, ProductKind } from "@/lib/product-taxonomy"
@@ -7,6 +8,9 @@ import type { ProductAudience, ProductKind } from "@/lib/product-taxonomy"
  * Storefront flags, all on DESIGN.md §4's "Alert Badge" shape (4px radius,
  * bold 12px label). Colour carries meaning, not decoration:
  *   - New in       Warning Yellow (time-sensitive promotion)
+ *   - Popular      Brand Fuchsia outline on the card surface (the owner's
+ *                  pick) — outlined so it can't be mistaken for the filled
+ *                  Set/Full set flag it often sits next to
  *   - Set/Full set Brand Fuchsia (what you're buying)
  *   - Kids / Adults & Kids   Sky Blue tint (who it's for)
  *   - Unavailable  Foreground/white (informational)
@@ -30,6 +34,20 @@ export function NewBadge({ className }: { className?: string }) {
   return (
     <span className={cn(BADGE, "bg-warning text-warning-foreground", className)} style={BADGE_RADIUS}>
       {t("shop.newBadge")}
+    </span>
+  )
+}
+
+/** The owner's hand-picked "Popular" flag (Settings -> Storefront). */
+export function PopularBadge({ className }: { className?: string }) {
+  const t = useTranslations()
+  return (
+    <span
+      className={cn(BADGE, "gap-1 border border-primary bg-card text-primary", className)}
+      style={BADGE_RADIUS}
+    >
+      <Flame className="size-3.5" aria-hidden />
+      {t("shop.popularBadge")}
     </span>
   )
 }

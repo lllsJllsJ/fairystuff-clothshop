@@ -17,11 +17,14 @@ import { ContactCta } from "@/components/shop/contact-cta"
 import { AudienceEntry } from "@/components/shop/audience-entry"
 import { Link } from "@/i18n/navigation"
 import { heroImageUrl, isHeroImageKey } from "@/lib/brand-image-keys"
+import { MAX_POPULAR_PRODUCTS } from "@/lib/product-taxonomy"
 import { prerenderLocaleParams } from "@/lib/static-params"
 
 export const revalidate = 300
 
 const NEW_IN_COUNT = 6
+/** Tiles loaded eagerly in whichever product grid is first on the page. */
+const ABOVE_FOLD_TILES = 4
 const EMPTY_LIST: PublicProductListResult = { rows: [], count: 0, page: 1, pageSize: NEW_IN_COUNT }
 
 // Empty when the database is unreachable at build time — see lib/static-params.ts.
@@ -80,12 +83,21 @@ export default async function HomePage({
 }) {
   const { locale } = await params
   setRequestLocale(locale)
-  const [t, settings, newIn, characters] = await Promise.all([
+  const [t, settings, popular, newIn, characters] = await Promise.all([
     getTranslations(),
     getShopSettings(),
+    safeGetPublicProducts({
+      page: 1,
+      pageSize: MAX_POPULAR_PRODUCTS,
+      sort: "popular",
+      popularOnly: true,
+    }),
     safeGetPublicProducts({ page: 1, pageSize: NEW_IN_COUNT, sort: "newest" }),
     safeGetPublicCharacters(),
   ])
+  // Hand-picked in Settings -> Storefront. Nothing picked (or the database
+  // unreachable during a build) means no section at all, not an empty grid.
+  const hasPopular = popular.rows.length > 0
 
   return (
     <>
@@ -94,6 +106,32 @@ export default async function HomePage({
         tagline={resolvedBrandDescription(settings, locale)}
         images={settings.heroImageKeys.filter(isHeroImageKey).map(heroImageUrl)}
       />
+
+      {hasPopular && (
+        <section aria-labelledby="popular-heading" className="bg-background">
+          <div className="mx-auto max-w-[1440px] px-4 pt-12 sm:px-6 lg:px-8">
+            <div className="mb-6 flex items-end justify-between gap-4">
+              <div>
+                <h2 id="popular-heading" className="text-h2 font-bold text-foreground">
+                  {t("shop.popular")}
+                </h2>
+                <p className="text-body text-muted-foreground">{t("home.popularSubtitle")}</p>
+              </div>
+              <Link
+                href={{ pathname: "/shop", query: { sort: "popular" } }}
+                className="shrink-0 text-link hover:text-link-hover hover:underline"
+              >
+                {t("shop.allProducts")}
+              </Link>
+            </div>
+            <ProductGrid
+              products={popular.rows}
+              showPopular={false}
+              priorityCount={ABOVE_FOLD_TILES}
+            />
+          </div>
+        </section>
+      )}
 
       <AudienceEntry />
 
@@ -118,7 +156,7 @@ export default async function HomePage({
           <ProductGrid
             products={newIn.rows}
             newCodes={new Set(newIn.rows.map((p) => p.productCode))}
-            priorityCount={4}
+            priorityCount={hasPopular ? 0 : ABOVE_FOLD_TILES}
           />
           <div className="mt-6 text-center sm:hidden">
             <Link href="/shop" className="text-link hover:text-link-hover hover:underline">

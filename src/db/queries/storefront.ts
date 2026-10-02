@@ -1,6 +1,20 @@
 import "server-only"
 
-import { and, asc, count, desc, eq, exists, gte, ilike, inArray, lte, or, sql } from "drizzle-orm"
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  gte,
+  ilike,
+  inArray,
+  isNotNull,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm"
 
 import { db } from "@/db"
 import {
@@ -38,6 +52,9 @@ import {
  * anything exported from this file. `audience`, `kind`, and a variant's
  * `isAvailable` ARE public by design — they're what the customer filters
  * and picks by (a switched-off size shows struck through, not hidden).
+ * So is `isPopular` — whether the owner hand-picked the product as Popular
+ * (Settings -> Storefront). Only that boolean is selected; the underlying
+ * `popularRank` position is used for ordering and never returned.
  *
  * Why this matters more here than it would in a typical app: a Server
  * Component that fetches a full product row and hands it to a client
@@ -57,6 +74,7 @@ export const PUBLIC_PRODUCT_COLUMNS = {
   description: products.description,
   sellPrice: products.sellPrice,
   createdAt: products.createdAt,
+  isPopular: sql<boolean>`${products.popularRank} is not null`,
 } as const
 
 type BasePublicProduct = {
@@ -68,6 +86,8 @@ type BasePublicProduct = {
   description: string | null
   sellPrice: string
   createdAt: Date
+  /** Hand-picked by the owner as Popular — drives the tile badge. */
+  isPopular: boolean
 }
 
 export type PublicProductSummary = BasePublicProduct & {
@@ -106,7 +126,9 @@ export type PublicProductDetail = BasePublicProduct & {
   images: PublicProductImage[]
 }
 
-export type PublicSort = "newest" | "price_asc" | "price_desc"
+/** `popular` = the owner's hand-picked list first, in the order they set,
+ * then everything else newest-first. */
+export type PublicSort = "newest" | "price_asc" | "price_desc" | "popular"
 
 /** `sets` = set OR full set — the storefront's single "Sets" toggle. */
 export type PublicKindFilter = ProductKind | "sets"
@@ -121,6 +143,9 @@ export type PublicProductListParams = {
   size?: string
   minPrice?: number
   maxPrice?: number
+  /** Only the hand-picked Popular products (the home page's section).
+   * Deliberately NOT a `GET /api/products` query param. */
+  popularOnly?: boolean
   sort?: PublicSort
   page?: number
   pageSize?: number
@@ -180,6 +205,10 @@ function activeProductFilters(params: PublicProductListParams) {
     conditions.push(eq(products.kind, params.kind))
   }
 
+  if (params.popularOnly) {
+    conditions.push(isNotNull(products.popularRank))
+  }
+
   if (params.minPrice != null) {
     conditions.push(gte(products.sellPrice, String(params.minPrice)))
   }
@@ -230,12 +259,14 @@ function activeProductFilters(params: PublicProductListParams) {
 function orderByForPublicSort(sort: PublicSort) {
   switch (sort) {
     case "price_asc":
-      return asc(products.sellPrice)
+      return [asc(products.sellPrice)]
     case "price_desc":
-      return desc(products.sellPrice)
+      return [desc(products.sellPrice)]
+    case "popular":
+      return [sql`${products.popularRank} asc nulls last`, desc(products.createdAt)]
     case "newest":
     default:
-      return desc(products.createdAt)
+      return [desc(products.createdAt)]
   }
 }
 
@@ -255,7 +286,7 @@ export async function getPublicProducts(
       .select(PUBLIC_PRODUCT_COLUMNS)
       .from(products)
       .where(where)
-      .orderBy(orderBy)
+      .orderBy(...orderBy)
       .limit(pageSize)
       .offset((page - 1) * pageSize),
     db.select({ value: count() }).from(products).where(where),

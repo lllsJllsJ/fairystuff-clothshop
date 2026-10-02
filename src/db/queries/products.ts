@@ -1,7 +1,7 @@
 import "server-only"
 
 import type { Column } from "drizzle-orm"
-import { and, asc, count, desc, eq, ilike, inArray, or } from "drizzle-orm"
+import { and, asc, count, desc, eq, ilike, inArray, isNotNull, or } from "drizzle-orm"
 
 import { db } from "@/db"
 import {
@@ -228,4 +228,46 @@ export async function getProductImportIndex(): Promise<ProductImportIndexEntry[]
       originalPrice: products.originalPrice,
     })
     .from(products)
+}
+
+export type PopularProductEntry = {
+  id: string
+  productCode: string
+  productName: string
+  status: ProductStatusValue
+  coverImageUrl: string | null
+}
+
+/**
+ * The owner's hand-picked Popular list, in display order, for Settings ->
+ * Storefront. Unlike the storefront read this includes draft/archived picks
+ * (shown with their status so the owner can see why one is missing from the
+ * shop). A narrow projection on purpose — it is handed to a client
+ * component, and nothing there needs a cost field.
+ */
+export async function getPopularProducts(): Promise<PopularProductEntry[]> {
+  const rows = await db
+    .select({
+      id: products.id,
+      productCode: products.productCode,
+      productName: products.productName,
+      status: products.status,
+    })
+    .from(products)
+    .where(isNotNull(products.popularRank))
+    .orderBy(asc(products.popularRank))
+  if (rows.length === 0) return []
+
+  const covers = await db
+    .select({ productId: productImages.productId, url: productImages.url })
+    .from(productImages)
+    .where(
+      and(
+        inArray(productImages.productId, rows.map((row) => row.id)),
+        eq(productImages.sortOrder, 0)
+      )
+    )
+  const coverByProduct = new Map(covers.map((cover) => [cover.productId, cover.url]))
+
+  return rows.map((row) => ({ ...row, coverImageUrl: coverByProduct.get(row.id) ?? null }))
 }

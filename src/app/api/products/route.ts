@@ -13,7 +13,7 @@ const DEFAULT_PAGE_SIZE = 24
 const MAX_PAGE = 10_000
 const MAX_SEARCH_LENGTH = 100
 const MAX_PRICE = 10_000_000
-const SORT_VALUES: readonly PublicSort[] = ["newest", "price_asc", "price_desc"]
+const SORT_VALUES: readonly PublicSort[] = ["newest", "price_asc", "price_desc", "popular"]
 
 /**
  * Public JSON for `ShopBrowser` client-side filtering. Reads ONLY

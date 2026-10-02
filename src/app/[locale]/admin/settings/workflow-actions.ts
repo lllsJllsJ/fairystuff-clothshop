@@ -1,6 +1,6 @@
 "use server"
 
-import { count, eq, inArray, max } from "drizzle-orm"
+import { count, eq, inArray, isNotNull, max } from "drizzle-orm"
 import { z } from "zod"
 
 import { db } from "@/db"
@@ -25,6 +25,7 @@ import { seedCharacters } from "@/lib/character-seed"
 import { toEnglishColor } from "@/lib/colors"
 import { MAX_HERO_IMAGES, isBrandLogoKey, isHeroImageKey } from "@/lib/brand-image-keys"
 import { deleteBrandLogoRenditions, deleteHeroImageRenditions } from "@/lib/r2"
+import { popularProductIdsSchema } from "@/lib/validations/product"
 import { revalidateStorefront } from "@/app/[locale]/admin/products/revalidate"
 import { revalidateSettings } from "./revalidate"
 
@@ -168,6 +169,48 @@ export async function saveHeroImages(keys: string[]): Promise<Result> {
     deleteHeroImageRenditions(oldKey).catch((error) => {
       console.error("Failed to delete old hero image", oldKey, error)
     })
+  }
+
+  revalidateSettings()
+  return { ok: true }
+}
+
+/**
+ * Replaces the hand-picked Popular list. `orderedIds` IS the storefront
+ * order (index 0 shows first); an empty list clears the section. The only
+ * writer of `products.popularRank` — clear-then-renumber in one transaction
+ * so a failed save can never leave two products on the same rank or a
+ * half-applied order. `updatedAt` is left alone: this is merchandising, not
+ * a product edit.
+ */
+export async function savePopularProducts(orderedIds: string[]): Promise<Result> {
+  if (!(await owner())) return { ok: false, error: "forbidden" }
+  const parsed = popularProductIdsSchema.safeParse(orderedIds)
+  if (!parsed.success) return { ok: false, error: "invalid" }
+
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(products)
+        .set({ popularRank: null })
+        .where(isNotNull(products.popularRank))
+      for (const [index, productId] of parsed.data.entries()) {
+        const [row] = await tx
+          .update(products)
+          .set({ popularRank: index })
+          .where(eq(products.id, productId))
+          .returning({ id: products.id })
+        // A product deleted since the picker loaded — roll the whole save
+        // back rather than store a list with a hole in it.
+        if (!row) throw new Error("not_found")
+      }
+    })
+  } catch (error) {
+    if (error instanceof Error && error.message === "not_found") {
+      return { ok: false, error: "not_found" }
+    }
+    console.error("savePopularProducts failed", error)
+    return { ok: false, error: "update_failed" }
   }
 
   revalidateSettings()

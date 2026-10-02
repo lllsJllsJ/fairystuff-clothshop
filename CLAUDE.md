@@ -251,6 +251,16 @@ reference.
   deleting an entry never touches a product; renaming one cascades to
   variants (never to `orderItems.color`, a snapshot). Keep the Thai map in
   step with `drizzle/0012_seed_product_colors.sql`.
+- **Popular is hand-picked, and `products.popularRank` has exactly one
+  writer.** null = not popular, `0..n-1` = storefront order.
+  `savePopularProducts` (`admin/settings/workflow-actions.ts`) clears and
+  renumbers it in one transaction; no product create/update/inline-edit/
+  import may name the column (so an edit or re-import never drops a pick),
+  and nothing derives it from orders. The public sees only the boolean
+  `isPopular` in `PUBLIC_PRODUCT_COLUMNS` — public by design, like
+  `audience`/`kind`. Max `MAX_POPULAR_PRODUCTS` (`src/lib/product-taxonomy.ts`).
+  The pick lives on the product row, so anything that deletes products
+  (delete, Clear shop data, the catalogue CLI's full replacement) drops it.
 - **Cover photo = `sortOrder` 0.** No separate "is cover" flag — whichever
   `productImages` row has `sortOrder = 0` is the cover ("Main photo" in the
   editor), full stop. Setting a main photo means reordering, not flagging.

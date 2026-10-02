@@ -234,6 +234,14 @@ export const products = pgTable(
      */
     margin: numeric("margin", { precision: 12, scale: 2 }),
     status: productStatus("status").notNull().default("active"),
+    /**
+     * Hand-picked "Popular" slot: null = not popular, 0..n-1 = display
+     * order on the storefront. Written ONLY by savePopularProducts
+     * (admin/settings/workflow-actions.ts) — no product create/update/import
+     * names it, so editing or re-importing a product never clears a pick.
+     * Public, but only as the boolean `isPopular` (queries/storefront.ts).
+     */
+    popularRank: integer("popular_rank"),
     createdBy: uuid("created_by").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -253,6 +261,9 @@ export const products = pgTable(
     index("products_audience_idx").on(table.audience),
     index("products_kind_idx").on(table.kind),
     index("products_created_at_idx").on(table.createdAt.desc()),
+    index("products_popular_rank_idx")
+      .on(table.popularRank)
+      .where(sql`${table.popularRank} is not null`),
     check(
       "products_preorder_days_check",
       sql`((${table.preorderMinDays} is null and ${table.preorderMaxDays} is null) or (${table.preorderMinDays} between 1 and 3650 and ${table.preorderMaxDays} between ${table.preorderMinDays} and 3650))`

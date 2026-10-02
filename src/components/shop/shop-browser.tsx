@@ -215,6 +215,7 @@ export function ShopBrowser({
   const sortOptions = useMemo(
     () => [
       { value: "newest", label: t("shop.sortNewest") },
+      { value: "popular", label: t("shop.sortPopular") },
       { value: "price_asc", label: t("shop.sortPriceAsc") },
       { value: "price_desc", label: t("shop.sortPriceDesc") },
     ],

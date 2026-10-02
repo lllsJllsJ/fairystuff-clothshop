@@ -120,6 +120,10 @@ separate API service and no serverless cold start.
   character/search/filter/sort, preorder product detail with colour/size
   selection, local cart, and an about page — Thai (default) and English, both
   path-prefixed (`/th`, `/en`).
+- Hand-picked **Popular** products: the owner chooses up to 8 products and
+  their order in Admin → Settings → Storefront; they appear in a Popular
+  section directly under the home-page hero, carry a "Popular" badge on
+  product tiles, and lead the `/shop` "Most popular" sort.
 - SEO: per-locale `sitemap.xml` with hreflang alternates, `robots.txt`,
   per-product metadata + JSON-LD, ISR-cached static rendering.
 - Owner-only admin: dashboard (SKU/order totals, gross and net profit,
@@ -445,7 +449,8 @@ drizzle/
 ├── 0001_init_extras.sql                   # hand-written --custom migration, journaled — applied automatically by db:migrate
 ├── 0002–0004_*.sql                        # drizzle-generated (brand settings; audience/kind/availability/shipments; drop quantity + shipping_confirmed_at)
 ├── 0005_preorder_extras.sql               # hand-written --custom: master-cost + preorder-shipping triggers, regenerated total_cost/profit, 1688/Taobao statuses
-└── 0006–0008_*.sql                        # shipments per line item: add order_item_id, backfill (--custom), then NOT NULL
+├── 0006–0008_*.sql                        # shipments per line item: add order_item_id, backfill (--custom), then NOT NULL
+└── 0013_*.sql                             # drizzle-generated: products.popular_rank (hand-picked Popular list) + partial index
 scripts/
 ├── catalog-{prepare,verify,import}.ts      # reviewed catalogue CLI
 ├── seed.ts                                # product-type reference data

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { productFormSchema, productImageSchema } from "./validations/product"
+import { MAX_POPULAR_PRODUCTS } from "./product-taxonomy"
+import {
+  popularProductIdsSchema,
+  productFormSchema,
+  productImageSchema,
+} from "./validations/product"
 
 function validProduct() {
   return {
@@ -36,6 +41,27 @@ test("product image must use the same-origin URL for its exact storage key", () 
   assert.equal(productImageSchema.safeParse(image).success, true)
   assert.equal(
     productImageSchema.safeParse({ ...image, url: "https://example.com/untrusted.webp" }).success,
+    false
+  )
+})
+
+function uuid(n: number) {
+  return `123e4567-e89b-42d3-a456-${String(n).padStart(12, "0")}`
+}
+
+test("popular list accepts an empty list and keeps the given order", () => {
+  assert.deepEqual(popularProductIdsSchema.parse([]), [])
+  assert.deepEqual(popularProductIdsSchema.parse([uuid(2), uuid(1)]), [uuid(2), uuid(1)])
+})
+
+test("popular list rejects duplicates, non-uuids, and more than the cap", () => {
+  assert.equal(popularProductIdsSchema.safeParse([uuid(1), uuid(1)]).success, false)
+  assert.equal(popularProductIdsSchema.safeParse(["TS-001"]).success, false)
+
+  const atCap = Array.from({ length: MAX_POPULAR_PRODUCTS }, (_, i) => uuid(i))
+  assert.equal(popularProductIdsSchema.safeParse(atCap).success, true)
+  assert.equal(
+    popularProductIdsSchema.safeParse([...atCap, uuid(MAX_POPULAR_PRODUCTS)]).success,
     false
   )
 })

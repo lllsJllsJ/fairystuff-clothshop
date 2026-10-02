@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import { PRODUCT_AUDIENCES, PRODUCT_KINDS } from "@/lib/product-taxonomy"
+import { MAX_POPULAR_PRODUCTS, PRODUCT_AUDIENCES, PRODUCT_KINDS } from "@/lib/product-taxonomy"
 import { MAX_SIZE_LENGTH } from "@/lib/sizes"
 
 /**
@@ -216,3 +216,14 @@ export const productImageSchema = z.object({
 })
 
 export type ProductImageInput = z.infer<typeof productImageSchema>
+
+// ---------------------------------------------------------------------------
+// Popular — the hand-picked list saved from Settings -> Storefront. The
+// array IS the display order (index 0 shows first), so it is never sorted or
+// deduplicated here: a duplicate id is a client bug and is rejected.
+// ---------------------------------------------------------------------------
+
+export const popularProductIdsSchema = z
+  .array(z.uuid())
+  .max(MAX_POPULAR_PRODUCTS, "max")
+  .refine((ids) => new Set(ids).size === ids.length, "duplicate")

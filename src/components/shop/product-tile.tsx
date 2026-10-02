@@ -5,7 +5,13 @@ import { Shirt } from "lucide-react"
 import { Link } from "@/i18n/navigation"
 import type { PublicProductSummary } from "@/db/queries/storefront"
 import { Price } from "@/components/shop/price"
-import { AudienceBadge, KindBadge, NewBadge, UnavailableBadge } from "@/components/shop/shop-badges"
+import {
+  AudienceBadge,
+  KindBadge,
+  NewBadge,
+  PopularBadge,
+  UnavailableBadge,
+} from "@/components/shop/shop-badges"
 
 const SWATCH_LIMIT = 4
 
@@ -19,11 +25,14 @@ const SWATCH_LIMIT = 4
 export function ProductTile({
   product,
   isNew = false,
+  showPopular = true,
   priority = false,
   sizes = "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw",
 }: {
   product: PublicProductSummary
   isNew?: boolean
+  /** Off inside the home page's Popular section, where every tile is one. */
+  showPopular?: boolean
   priority?: boolean
   sizes?: string
 }) {
@@ -55,6 +64,7 @@ export function ProductTile({
         )}
 
         <div className="absolute top-2 left-2 flex flex-col items-start gap-1">
+          {showPopular && product.isPopular && <PopularBadge />}
           {isNew && <NewBadge />}
           <KindBadge kind={product.kind} />
         </div>
