@@ -259,7 +259,18 @@ async function main() {
   const dash = await getDashboardData()
   check("getDashboardData executes", !!dash, Object.keys(dash).join(","))
   check("dashboard variant counts distinguish available and switched off",
-    dash.totalSkus === 3 && dash.availableVariantCount === 2 && dash.unavailableVariantCount === 1)
+    dash.availableVariantCount === 2 && dash.unavailableVariantCount === 1)
+  // Products, not colour x size rows: the active + two drafts seeded above.
+  // The archived product carries a size so that counting variant rows (the
+  // old behaviour: 3 + 1 = 4) or counting archived products both fail this.
+  const [archived] = await db.insert(products).values({
+    productCode: "ARCHIVED-1", productName: "archived, not a SKU",
+    sellPrice: "1", originalPrice: "1", status: "archived",
+  }).returning({ id: products.id })
+  await db.insert(productVariants).values({ productId: archived.id, color: "-", size: "M" })
+  const dashWithArchived = await getDashboardData()
+  check("dashboard SKUs count non-archived products, not sizes",
+    dashWithArchived.totalSkus === 3, `totalSkus=${dashWithArchived.totalSkus}`)
   check("dashboard separates gross and net profit",
     dash.totalProfit === 1080 && dash.netProfit === 980 && dash.advertisingCost === 30,
     `gross=${dash.totalProfit} net=${dash.netProfit} advertising=${dash.advertisingCost}`)

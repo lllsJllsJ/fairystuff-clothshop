@@ -53,6 +53,8 @@ export type TypeSlice = { type: string; count: number }
 export type ProductRef = { id: string; label: string }
 
 export type DashboardData = {
+  /** Products in the catalogue (active + draft; archived excluded) — one
+   * per product, NOT per colour x size. The sizes are the two counts below. */
   totalSkus: number
   /** Variants a customer can order right now (isAvailable). */
   availableVariantCount: number
@@ -231,7 +233,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   }
 
   return {
-    totalSkus: allVariants.length,
+    totalSkus: activeProducts.length + draftProducts.length,
     availableVariantCount,
     totalProducts: productsList.length,
     activeProducts: activeProducts.length,
