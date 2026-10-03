@@ -22,10 +22,13 @@ import { prerenderLocaleParams } from "@/lib/static-params"
 
 export const revalidate = 300
 
-const NEW_IN_COUNT = 6
+const FEATURED_COUNT = 6
+/** A product wears the "New" badge for this long after it was created. */
+const NEW_BADGE_DAYS = 14
+const MS_PER_DAY = 24 * 60 * 60 * 1000
 /** Tiles loaded eagerly in whichever product grid is first on the page. */
 const ABOVE_FOLD_TILES = 4
-const EMPTY_LIST: PublicProductListResult = { rows: [], count: 0, page: 1, pageSize: NEW_IN_COUNT }
+const EMPTY_LIST: PublicProductListResult = { rows: [], count: 0, page: 1, pageSize: FEATURED_COUNT }
 
 // Empty when the database is unreachable at build time — see lib/static-params.ts.
 export const generateStaticParams = prerenderLocaleParams
@@ -63,7 +66,7 @@ async function safeGetPublicProducts(
     return await getPublicProducts(params)
   } catch (error) {
     console.error("[home] getPublicProducts failed during prerender", error)
-    return { ...EMPTY_LIST, page: params?.page ?? 1, pageSize: params?.pageSize ?? NEW_IN_COUNT }
+    return { ...EMPTY_LIST, page: params?.page ?? 1, pageSize: params?.pageSize ?? FEATURED_COUNT }
   }
 }
 
@@ -76,6 +79,14 @@ async function safeGetPublicCharacters(): Promise<PublicCharacterFacet[]> {
   }
 }
 
+/** Codes of the products added recently enough to be flagged "New". */
+function recentlyAddedCodes(rows: PublicProductListResult["rows"]): Set<string> {
+  const cutoff = Date.now() - NEW_BADGE_DAYS * MS_PER_DAY
+  return new Set(
+    rows.filter((row) => new Date(row.createdAt).getTime() >= cutoff).map((row) => row.productCode)
+  )
+}
+
 export default async function HomePage({
   params,
 }: {
@@ -83,7 +94,7 @@ export default async function HomePage({
 }) {
   const { locale } = await params
   setRequestLocale(locale)
-  const [t, settings, popular, newIn, characters] = await Promise.all([
+  const [t, settings, popular, featured, characters] = await Promise.all([
     getTranslations(),
     getShopSettings(),
     safeGetPublicProducts({
@@ -92,7 +103,7 @@ export default async function HomePage({
       sort: "popular",
       popularOnly: true,
     }),
-    safeGetPublicProducts({ page: 1, pageSize: NEW_IN_COUNT, sort: "newest" }),
+    safeGetPublicProducts({ page: 1, pageSize: FEATURED_COUNT, sort: "recommended" }),
     safeGetPublicCharacters(),
   ])
   // Hand-picked in Settings -> Storefront. Nothing picked (or the database
@@ -135,14 +146,14 @@ export default async function HomePage({
 
       <AudienceEntry />
 
-      <section aria-labelledby="new-in-heading" className="bg-background">
+      <section aria-labelledby="featured-heading" className="bg-background">
         <div className="mx-auto max-w-[1440px] px-4 py-17 sm:px-6 lg:px-8">
           <div className="mb-6 flex items-end justify-between gap-4">
             <div>
-              <h2 id="new-in-heading" className="text-h2 font-bold text-foreground">
-                {t("shop.newIn")}
+              <h2 id="featured-heading" className="text-h2 font-bold text-foreground">
+                {t("shop.featured")}
               </h2>
-              <p className="text-body text-muted-foreground">{t("home.newInSubtitle")}</p>
+              <p className="text-body text-muted-foreground">{t("home.featuredSubtitle")}</p>
             </div>
             <Link
               href="/shop"
@@ -154,8 +165,8 @@ export default async function HomePage({
           <QuickFilterRail characters={characters} />
 
           <ProductGrid
-            products={newIn.rows}
-            newCodes={new Set(newIn.rows.map((p) => p.productCode))}
+            products={featured.rows}
+            newCodes={recentlyAddedCodes(featured.rows)}
             priorityCount={hasPopular ? 0 : ABOVE_FOLD_TILES}
           />
           <div className="mt-6 text-center sm:hidden">

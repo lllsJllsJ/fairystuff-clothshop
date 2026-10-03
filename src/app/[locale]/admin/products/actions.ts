@@ -1,6 +1,6 @@
 "use server"
 
-import { and, eq, inArray } from "drizzle-orm"
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm"
 import { z } from "zod"
 
 import { db } from "@/db"
@@ -20,6 +20,7 @@ import {
   productFormSchema,
   productImageSchema,
   productInlineUpdateSchema,
+  productOrderIdsSchema,
   type ProductFormValues,
   type ProductImageInput,
   type ProductInlineUpdateValues,
@@ -501,4 +502,51 @@ export async function deleteProduct(id: string): Promise<ActionResult> {
 
   revalidateStorefront(row.productCode)
   return { ok: true, id }
+}
+
+/**
+ * Saves the storefront order arranged in admin/products/arrange.
+ * `orderedIds` is the whole list, index 0 first; an empty list resets the
+ * catalogue to newest-first. The only writer of `products.displayOrder`:
+ * every position is cleared and the given ids renumbered 0..n-1 in one
+ * transaction, so a product left out of the list (archived, or created
+ * while the owner was arranging) ends up null — i.e. at the top, as a new
+ * product. An id that no longer exists simply matches nothing.
+ * `updatedAt` is left alone: this is merchandising, not a product edit.
+ */
+export async function saveProductOrder(orderedIds: string[]): Promise<ActionResult> {
+  const user = await getCurrentUser()
+  if (!user) return { ok: false, error: "unauthorized" }
+  if (!isOwner(user.role)) return { ok: false, error: "forbidden" }
+
+  const parsed = productOrderIdsSchema.safeParse(orderedIds)
+  if (!parsed.success) return { ok: false, error: "invalid" }
+  const ids = parsed.data
+
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(products)
+        .set({ displayOrder: null })
+        .where(isNotNull(products.displayOrder))
+      if (ids.length === 0) return
+
+      const idList = sql.join(
+        ids.map((id) => sql`${id}`),
+        sql`, `
+      )
+      await tx.execute(sql`
+        update ${products}
+        set display_order = ordered.position - 1
+        from unnest(array[${idList}]::uuid[]) with ordinality as ordered(id, position)
+        where ${products.id} = ordered.id
+      `)
+    })
+  } catch (error) {
+    console.error("saveProductOrder failed", error)
+    return { ok: false, error: "update_failed" }
+  }
+
+  revalidateStorefront()
+  return { ok: true }
 }

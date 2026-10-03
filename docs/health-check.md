@@ -51,9 +51,11 @@ curl -s "$BASE/api/products" \
   | grep -Ei 'productType|preorderMinDays|preorderMaxDays|originalPrice|buyingSource|sourceLink|margin' \
   && echo "FAIL: private field leaked" || echo "PASS"
 
-# 1b. `isPopular` (boolean) is public by design; the rank behind it is not
-curl -s "$BASE/api/products?sort=popular" | grep -Ei 'popularRank|popular_rank' \
-  && echo "FAIL: popular rank leaked" || echo "PASS"
+# 1b. `isPopular` (boolean) is public by design; the rank behind it and the
+#     owner-arranged position are ordering-only and never returned
+curl -s "$BASE/api/products?sort=popular" \
+  | grep -Ei 'popularRank|popular_rank|displayOrder|display_order' \
+  && echo "FAIL: ordering column leaked" || echo "PASS"
 
 # 2. Nor any order-side cost figure (the product API never selects orders,
 #    so a hit here means a query was rewired to the wrong module)

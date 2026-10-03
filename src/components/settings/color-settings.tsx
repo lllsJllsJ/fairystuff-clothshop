@@ -4,7 +4,6 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { useTranslations } from "next-intl"
 import { toast } from "sonner"
-import { ArrowDown, ArrowUp } from "lucide-react"
 
 import type { ProductColor } from "@/db/queries/product-colors"
 import {
@@ -13,18 +12,18 @@ import {
   reorderProductColors,
   updateProductColor,
 } from "@/app/[locale]/admin/settings/workflow-actions"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { SortableList } from "@/components/ui/sortable"
 import {
   SettingsSection,
-  SettingsRow,
+  SortableSettingsRow,
   SettingsFormDialog,
   DialogField,
 } from "@/components/settings/settings-section"
 
 /**
  * The colour palette offered in the product editor's colour picker. Same
- * list shape as product types (add / rename / reorder / delete); the order
+ * list shape as product types (add / rename / drag to reorder / delete); the order
  * here is the dropdown order and the order "Add colour" picks from.
  *
  * A colour typed in the product editor is added here automatically on save
@@ -38,10 +37,27 @@ export function ColorSettings({ colors }: { colors: ProductColor[] }) {
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<ProductColor | null>(null)
 
-  function run(fn: () => Promise<{ ok: boolean; error?: string }>, onOk?: () => void) {
+  // A drop reorders the list at once and saves in the background; the
+  // server's order replaces this as soon as the refreshed `colors` arrives.
+  const [draggedOrder, setDraggedOrder] = useState<string[] | null>(null)
+  const [syncedColors, setSyncedColors] = useState(colors)
+  if (colors !== syncedColors) {
+    setSyncedColors(colors)
+    setDraggedOrder(null)
+  }
+  const ordered = draggedOrder
+    ? draggedOrder.flatMap((id) => colors.find((c) => c.id === id) ?? [])
+    : colors
+
+  function run(
+    fn: () => Promise<{ ok: boolean; error?: string }>,
+    onOk?: () => void,
+    onFail?: () => void
+  ) {
     startTransition(async () => {
       const res = await fn()
       if (!res.ok) {
+        onFail?.()
         if (res.error === "duplicate") toast.error(t("settings.duplicateColor"))
         else if (res.error === "forbidden") toast.error(t("errors.forbidden"))
         else toast.error(t("settings.saveFailed"))
@@ -58,13 +74,9 @@ export function ColorSettings({ colors }: { colors: ProductColor[] }) {
     run(() => deleteProductColor(color.id))
   }
 
-  function handleMove(index: number, direction: -1 | 1) {
-    const target = index + direction
-    if (target < 0 || target >= colors.length) return
-    const ids = colors.map((c) => c.id)
-    const [moved] = ids.splice(index, 1)
-    ids.splice(target, 0, moved)
-    run(() => reorderProductColors(ids))
+  function handleReorder(ids: string[]) {
+    setDraggedOrder(ids)
+    run(() => reorderProductColors(ids), undefined, () => setDraggedOrder(null))
   }
 
   return (
@@ -78,43 +90,25 @@ export function ColorSettings({ colors }: { colors: ProductColor[] }) {
         {colors.length === 0 ? (
           <li className="py-6 text-center text-small text-muted-foreground">{t("settings.noColors")}</li>
         ) : (
-          colors.map((color, index) => (
-            <SettingsRow
-              key={color.id}
-              title={color.name}
-              disabled={pending}
-              leading={
-                <div className="flex shrink-0 items-center">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleMove(index, -1)}
-                    disabled={pending || index === 0}
-                    aria-label={t("settings.moveUp")}
-                    className="text-muted-foreground hover:text-foreground disabled:opacity-30"
-                  >
-                    <ArrowUp />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleMove(index, 1)}
-                    disabled={pending || index === colors.length - 1}
-                    aria-label={t("settings.moveDown")}
-                    className="text-muted-foreground hover:text-foreground disabled:opacity-30"
-                  >
-                    <ArrowDown />
-                  </Button>
-                </div>
-              }
-              onEdit={() => setEditing(color)}
-              onDelete={() => handleDelete(color)}
-              editLabel={t("common.edit")}
-              deleteLabel={t("common.delete")}
-            />
-          ))
+          <SortableList
+            id="product-colors"
+            ids={ordered.map((color) => color.id)}
+            onReorder={handleReorder}
+          >
+            {ordered.map((color) => (
+              <SortableSettingsRow
+                key={color.id}
+                id={color.id}
+                dragLabel={t("settings.dragHandle", { name: color.name })}
+                title={color.name}
+                disabled={pending}
+                onEdit={() => setEditing(color)}
+                onDelete={() => handleDelete(color)}
+                editLabel={t("common.edit")}
+                deleteLabel={t("common.delete")}
+              />
+            ))}
+          </SortableList>
         )}
       </SettingsSection>
 

@@ -83,7 +83,7 @@ export default async function ShopPage({
   setRequestLocale(locale)
 
   const [page1, colorFacetSample, characters] = await Promise.all([
-    safeGetPublicProducts({ page: 1, pageSize: PAGE_SIZE, sort: "newest" }),
+    safeGetPublicProducts({ page: 1, pageSize: PAGE_SIZE, sort: "recommended" }),
     safeGetPublicProducts({ page: 1, pageSize: COLOR_FACET_SAMPLE_SIZE, sort: "newest" }),
     safeGetPublicCharacters(),
   ])

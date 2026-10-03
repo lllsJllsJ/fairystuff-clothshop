@@ -5,13 +5,20 @@ import Image from "next/image"
 import { useQuery } from "@tanstack/react-query"
 import { useTranslations } from "next-intl"
 import { toast } from "sonner"
-import { Check, ChevronDown, ChevronUp, Loader2, Plus, Save, Search, Shirt, X } from "lucide-react"
+import { Check, Loader2, Plus, Save, Search, Shirt, X } from "lucide-react"
 
-import type { PopularProductEntry, ProductListResult } from "@/db/queries/products"
+import { cn } from "@/lib/utils"
+import type { ProductSummaryEntry, ProductListResult } from "@/db/queries/products"
 import { MAX_POPULAR_PRODUCTS } from "@/lib/product-taxonomy"
 import { savePopularProducts } from "@/app/[locale]/admin/settings/workflow-actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  SORTABLE_DRAGGING_CLASS,
+  SortableHandle,
+  SortableList,
+  useSortableRow,
+} from "@/components/ui/sortable"
 import { ProductStatusBadge } from "@/components/products/product-admin-card"
 
 const SEARCH_PAGE_SIZE = 8
@@ -37,19 +44,71 @@ function Thumbnail({ url }: { url: string | null }) {
   )
 }
 
+function PopularRow({
+  pick,
+  position,
+  onRemove,
+}: {
+  pick: ProductSummaryEntry
+  position: number
+  onRemove: () => void
+}) {
+  const t = useTranslations("settings")
+  const { rowProps, handleProps, isDragging } = useSortableRow(pick.id)
+
+  return (
+    <li
+      {...rowProps}
+      className={cn(
+        "flex items-center gap-2 border-b border-border bg-card p-2 last:border-b-0 sm:gap-3",
+        isDragging && SORTABLE_DRAGGING_CLASS
+      )}
+    >
+      <SortableHandle handleProps={handleProps} label={t("dragHandle", { name: pick.productName })} />
+      <span className="w-5 shrink-0 text-center text-small font-bold tabular-nums text-muted-foreground">
+        {position}
+      </span>
+      <Thumbnail url={pick.coverImageUrl} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-body font-medium">{pick.productName}</p>
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-small text-muted-foreground">
+          <span className="tabular-nums">{pick.productCode}</span>
+          {pick.status !== "active" && (
+            <>
+              <ProductStatusBadge status={pick.status} />
+              <span>{t("popularHiddenNote")}</span>
+            </>
+          )}
+        </p>
+      </div>
+      <Button
+        type="button"
+        size="icon"
+        variant="ghost"
+        className="shrink-0 text-destructive"
+        onClick={onRemove}
+        aria-label={t("removePopular", { name: pick.productName })}
+      >
+        <X />
+      </Button>
+    </li>
+  )
+}
+
 /**
  * The hand-picked "Popular" list: the home page's first product section,
  * the tile badge, and the `/shop` "Most popular" sort all read it. Same
  * edit-locally-then-Save shape as HeroSettings — the list order on screen
- * is the storefront order, and nothing is written until Save.
+ * is the storefront order (drag a row by its grip to change it), and
+ * nothing is written until Save.
  *
  * The add-search reuses `GET /api/admin/products` (owner-gated), like the
  * order form's product picker; only active products are offered, since a
  * draft or archived pick would never show.
  */
-export function PopularSettings({ initial }: { initial: PopularProductEntry[] }) {
+export function PopularSettings({ initial }: { initial: ProductSummaryEntry[] }) {
   const t = useTranslations("settings")
-  const [picks, setPicks] = useState<PopularProductEntry[]>(initial)
+  const [picks, setPicks] = useState<ProductSummaryEntry[]>(initial)
   const [saving, setSaving] = useState(false)
   const [query, setQuery] = useState("")
   const [searchOpen, setSearchOpen] = useState(false)
@@ -93,13 +152,10 @@ export function PopularSettings({ initial }: { initial: PopularProductEntry[] })
     )
   }
 
-  function move(index: number, delta: -1 | 1) {
+  function reorder(nextIds: string[]) {
     setPicks((current) => {
-      const target = index + delta
-      if (target < 0 || target >= current.length) return current
-      const next = [...current]
-      ;[next[index], next[target]] = [next[target], next[index]]
-      return next
+      const byId = new Map(current.map((pick) => [pick.id, pick]))
+      return nextIds.flatMap((id) => byId.get(id) ?? [])
     })
   }
 
@@ -132,60 +188,18 @@ export function PopularSettings({ initial }: { initial: PopularProductEntry[] })
           {t("popularEmpty")}
         </p>
       ) : (
-        <ol className="mt-4 divide-y divide-border border border-border">
-          {picks.map((pick, index) => (
-            <li key={pick.id} className="flex items-center gap-3 p-2">
-              <span className="w-5 shrink-0 text-center text-small font-bold tabular-nums text-muted-foreground">
-                {index + 1}
-              </span>
-              <Thumbnail url={pick.coverImageUrl} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-body font-medium">{pick.productName}</p>
-                <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-small text-muted-foreground">
-                  <span className="tabular-nums">{pick.productCode}</span>
-                  {pick.status !== "active" && (
-                    <>
-                      <ProductStatusBadge status={pick.status} />
-                      <span>{t("popularHiddenNote")}</span>
-                    </>
-                  )}
-                </p>
-              </div>
-              <div className="flex shrink-0 gap-1">
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="outline"
-                  onClick={() => move(index, -1)}
-                  disabled={index === 0}
-                  aria-label={t("movePopularEarlier", { name: pick.productName })}
-                >
-                  <ChevronUp />
-                </Button>
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="outline"
-                  onClick={() => move(index, 1)}
-                  disabled={index === picks.length - 1}
-                  aria-label={t("movePopularLater", { name: pick.productName })}
-                >
-                  <ChevronDown />
-                </Button>
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="ghost"
-                  className="text-destructive"
-                  onClick={() => remove(pick.id)}
-                  aria-label={t("removePopular", { name: pick.productName })}
-                >
-                  <X />
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ol>
+        <SortableList id="popular-products" ids={picks.map((pick) => pick.id)} onReorder={reorder}>
+          <ol className="mt-4 border border-border">
+            {picks.map((pick, index) => (
+              <PopularRow
+                key={pick.id}
+                pick={pick}
+                position={index + 1}
+                onRemove={() => remove(pick.id)}
+              />
+            ))}
+          </ol>
+        </SortableList>
       )}
 
       <div className="mt-4">

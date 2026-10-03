@@ -4,6 +4,7 @@ import test from "node:test"
 import { MAX_POPULAR_PRODUCTS } from "./product-taxonomy"
 import {
   popularProductIdsSchema,
+  productOrderIdsSchema,
   productFormSchema,
   productImageSchema,
 } from "./validations/product"
@@ -64,4 +65,14 @@ test("popular list rejects duplicates, non-uuids, and more than the cap", () => 
     popularProductIdsSchema.safeParse([...atCap, uuid(MAX_POPULAR_PRODUCTS)]).success,
     false
   )
+})
+
+test("storefront order accepts an empty list (reset) and keeps the given order", () => {
+  assert.deepEqual(productOrderIdsSchema.parse([]), [])
+  assert.deepEqual(productOrderIdsSchema.parse([uuid(3), uuid(1), uuid(2)]), [uuid(3), uuid(1), uuid(2)])
+})
+
+test("storefront order rejects duplicates and non-uuids", () => {
+  assert.equal(productOrderIdsSchema.safeParse([uuid(1), uuid(2), uuid(1)]).success, false)
+  assert.equal(productOrderIdsSchema.safeParse(["TS-001"]).success, false)
 })

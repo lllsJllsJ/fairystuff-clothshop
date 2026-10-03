@@ -4,6 +4,7 @@ import { Pencil, Plus, Trash2 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { SORTABLE_DRAGGING_CLASS, SortableHandle, useSortableRow } from "@/components/ui/sortable"
 import {
   Dialog,
   DialogContent,
@@ -59,9 +60,9 @@ export function SettingsSection({
 
 /**
  * One list entry. `leading` is for an area-specific control that has to sit
- * before the label (the item-status "make default" star, the product-type
- * reorder arrows); everything after it is fixed so the pencil and bin land
- * in the same place in every section.
+ * before the label (the item-status "make default" star, a reorder grip);
+ * everything after it is fixed so the pencil and bin land in the same place
+ * in every section. `rowProps` is for `SortableSettingsRow` only.
  */
 export function SettingsRow({
   title,
@@ -73,6 +74,8 @@ export function SettingsRow({
   editLabel = "Edit",
   deleteLabel = "Delete",
   disabled = false,
+  className,
+  rowProps,
 }: {
   title: string
   subtitle?: string
@@ -83,10 +86,15 @@ export function SettingsRow({
   editLabel?: string
   deleteLabel?: string
   disabled?: boolean
+  className?: string
+  rowProps?: Pick<React.ComponentProps<"li">, "ref" | "style">
 }) {
   const shown = (badges ?? []).filter((b): b is string => !!b)
   return (
-    <li className={cn("flex flex-wrap items-center gap-2 py-2", disabled && "opacity-70")}>
+    <li
+      {...rowProps}
+      className={cn("flex flex-wrap items-center gap-2 py-2", disabled && "opacity-70", className)}
+    >
       {leading}
       <div className="min-w-0 flex-1">
         <p className="truncate text-body font-medium text-foreground">{title}</p>
@@ -126,6 +134,32 @@ export function SettingsRow({
         </Button>
       )}
     </li>
+  )
+}
+
+/**
+ * A `SettingsRow` that can be dragged to reorder — render it inside a
+ * `SortableList` (components/ui/sortable.tsx). The grip takes the `leading`
+ * slot, so the pencil and bin stay where every other section has them.
+ */
+export function SortableSettingsRow({
+  id,
+  dragLabel,
+  disabled = false,
+  ...row
+}: Omit<React.ComponentProps<typeof SettingsRow>, "leading" | "rowProps" | "className"> & {
+  id: string
+  dragLabel: string
+}) {
+  const { rowProps, handleProps, isDragging } = useSortableRow(id, disabled)
+  return (
+    <SettingsRow
+      {...row}
+      disabled={disabled}
+      rowProps={rowProps}
+      className={isDragging ? SORTABLE_DRAGGING_CLASS : undefined}
+      leading={<SortableHandle handleProps={handleProps} label={dragLabel} disabled={disabled} />}
+    />
   )
 }
 

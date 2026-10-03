@@ -242,6 +242,14 @@ export const products = pgTable(
      * Public, but only as the boolean `isPopular` (queries/storefront.ts).
      */
     popularRank: integer("popular_rank"),
+    /**
+     * Owner-arranged storefront position (admin/products/arrange). null =
+     * not placed yet, which sorts FIRST (newest-first among themselves), so a
+     * new product leads the catalogue until the owner moves it. Written ONLY
+     * by saveProductOrder (admin/products/actions.ts). Never selected on a
+     * public path — it only orders (queries/storefront.ts).
+     */
+    displayOrder: integer("display_order"),
     createdBy: uuid("created_by").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -261,6 +269,7 @@ export const products = pgTable(
     index("products_audience_idx").on(table.audience),
     index("products_kind_idx").on(table.kind),
     index("products_created_at_idx").on(table.createdAt.desc()),
+    index("products_display_order_idx").on(table.displayOrder),
     index("products_popular_rank_idx")
       .on(table.popularRank)
       .where(sql`${table.popularRank} is not null`),

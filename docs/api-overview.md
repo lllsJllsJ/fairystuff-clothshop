@@ -55,7 +55,7 @@ nothing is trusted to be well-formed.
 | `color` | string | Exact match on an AVAILABLE variant's `color`. |
 | `size` | string | Exact match on an AVAILABLE variant's `size` (a switched-off size never matches). |
 | `minPrice`, `maxPrice` | number | Clamped to `[0, 10_000_000]`. |
-| `sort` | `newest` \| `price_asc` \| `price_desc` \| `popular` | Defaults to `newest`. Anything else falls back to `newest`. `popular` lists the owner's hand-picked Popular products first, in the order they set, then everything else newest-first. |
+| `sort` | `recommended` \| `newest` \| `price_asc` \| `price_desc` \| `popular` | Defaults to `recommended`; anything else falls back to it. `recommended` is the order the owner arranged in Admin → Products → Arrange — products not placed yet come first, newest-first, so with nothing arranged it equals `newest`. `popular` lists the owner's hand-picked Popular products first, in the order they set, then everything else in the `recommended` order. |
 | `page` | integer | Clamped to `[1, 10_000]`. |
 | `pageSize` | integer | Clamped to `[1, 48]`, default `24`. |
 
@@ -459,7 +459,9 @@ export const PUBLIC_PRODUCT_COLUMNS = {
 `isPopular` is the one computed entry: whether the owner hand-picked the
 product as Popular (Settings → Storefront). Only the boolean is public — the
 underlying `products.popular_rank` position orders the `popular` sort and the
-home page's Popular section but is never returned.
+home page's Popular section but is never returned. The same goes for
+`products.display_order` (the owner-arranged position behind the default
+`recommended` sort): it appears only in `ORDER BY`, never in a select list.
 
 Layered on top for list/detail views: a computed `coverImageUrl`, a
 deduplicated `colors` array, `isOrderable` (false when every size is
@@ -639,6 +641,16 @@ nulls every existing rank and renumbers the given ids `0..n-1`. Results are
 "update_failed" }`; `not_found` (an id whose product no longer exists) rolls
 the whole save back. No product create/update/import action names the column,
 so editing or re-importing a product never clears a pick.
+
+`saveProductOrder(orderedIds)` (`admin/products/actions.ts`, owner-checked)
+saves the storefront order arranged in Admin → Products → Arrange: the array
+is the whole list, index 0 first, unique product UUIDs (max 2000), and an
+empty array resets the catalogue to newest-first. It is the only writer of
+`products.display_order` — one transaction nulls every position and renumbers
+the given ids `0..n-1`. A product missing from the list (archived, or created
+while the owner was arranging) is left null, which sorts first; an id that no
+longer exists is ignored. Results are `{ ok: true } | { ok: false, error:
+"unauthorized" | "forbidden" | "invalid" | "update_failed" }`.
 
 The colour palette (`product_colors`) has `createProductColor`,
 `updateProductColor`, `deleteProductColor`, and `reorderProductColors`

@@ -94,7 +94,7 @@ export function ShopBrowser({
     maxPrice: searchParams.get("maxPrice") ?? "",
   }))
   const [sort, setSort] = useState<PublicSort>(
-    () => (searchParams.get("sort") as PublicSort) || "newest"
+    () => (searchParams.get("sort") as PublicSort) || "recommended"
   )
   const [page, setPage] = useState(() => Number(searchParams.get("page") ?? "1") || 1)
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -122,7 +122,7 @@ export function ShopBrowser({
     setParam(params, "size", f.size)
     setParam(params, "minPrice", f.minPrice)
     setParam(params, "maxPrice", f.maxPrice)
-    setParam(params, "sort", s === "newest" ? "" : s)
+    setParam(params, "sort", s === "recommended" ? "" : s)
     setParam(params, "page", p > 1 ? String(p) : "")
 
     const qs = params.toString()
@@ -179,7 +179,7 @@ export function ShopBrowser({
   const isDefaultQuery =
     debouncedSearch === "" &&
     page === 1 &&
-    sort === "newest" &&
+    sort === "recommended" &&
     filters.audience === "" &&
     filters.kind === "" &&
     filters.character === "" &&
@@ -214,6 +214,7 @@ export function ShopBrowser({
 
   const sortOptions = useMemo(
     () => [
+      { value: "recommended", label: t("shop.sortRecommended") },
       { value: "newest", label: t("shop.sortNewest") },
       { value: "popular", label: t("shop.sortPopular") },
       { value: "price_asc", label: t("shop.sortPriceAsc") },

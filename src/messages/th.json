@@ -150,7 +150,19 @@
     "exportEmpty": "ไม่มีสินค้าตามตัวกรองนี้",
     "exported": "ส่งออก {count} รายการแล้ว",
     "audienceBoth": "ผู้ใหญ่และเด็ก",
-    "imagesSizeHint": "ขนาดที่แนะนำ: 1600 × 2000 px แนวตั้ง (4:5) อย่างน้อย 1200 × 1500 px ตารางไซซ์: กว้างอย่างน้อย 1200 px รูปที่เล็กกว่านี้จะดูไม่คมชัดในหน้าร้าน"
+    "imagesSizeHint": "ขนาดที่แนะนำ: 1600 × 2000 px แนวตั้ง (4:5) อย่างน้อย 1200 × 1500 px ตารางไซซ์: กว้างอย่างน้อย 1200 px รูปที่เล็กกว่านี้จะดูไม่คมชัดในหน้าร้าน",
+    "arrange": "จัดลำดับ",
+    "arrangeTitle": "จัดลำดับสินค้าหน้าร้าน",
+    "arrangeHint": "ลากสินค้าเพื่อจัดลำดับที่ลูกค้าจะเห็นในหน้าร้านและหน้าแรก สินค้าใหม่จะอยู่บนสุดจนกว่าจะย้าย",
+    "arrangeDragHandle": "ลากเพื่อย้าย {name}",
+    "arrangeToTop": "ย้าย {name} ไปบนสุด",
+    "arrangeToBottom": "ย้าย {name} ไปล่างสุด",
+    "arrangeSave": "บันทึกลำดับ",
+    "arrangeReset": "รีเซ็ตเป็นใหม่ล่าสุดก่อน",
+    "arrangeResetConfirm": "รีเซ็ตหน้าร้านเป็นเรียงตามสินค้าใหม่ล่าสุด? ลำดับที่จัดไว้จะหายไป",
+    "arrangeSaved": "บันทึกลำดับหน้าร้านแล้ว",
+    "arrangeUnsaved": "ยังไม่ได้บันทึก",
+    "arrangeEmpty": "ยังไม่มีสินค้าให้จัดลำดับ"
   },
   "cart": {
     "title": "ตะกร้าของคุณ",
@@ -510,8 +522,6 @@
     "subtitle": "จัดการประเภทสินค้าที่ใช้ในร้าน",
     "namePlaceholder": "ชื่อประเภท (ไทย)",
     "nameEnPlaceholder": "ชื่อประเภท (อังกฤษ)",
-    "moveUp": "เลื่อนขึ้น",
-    "moveDown": "เลื่อนลง",
     "deleteProductTypeConfirm": "ต้องการลบประเภทสินค้านี้ใช่หรือไม่?",
     "deleteProductTypeInUse": "ไม่สามารถลบได้ มีสินค้า {count} รายการที่ใช้ประเภทนี้อยู่ กรุณาเปลี่ยนประเภทของสินค้าเหล่านั้นก่อน",
     "productTypeCreated": "เพิ่มประเภทสินค้าเรียบร้อยแล้ว",
@@ -558,8 +568,6 @@
     "popularLeft": "เหลืออีก {remaining}",
     "popularHiddenNote": "ไม่แสดง — สินค้านี้ไม่ได้เปิดขาย",
     "removePopular": "นำ {name} ออก",
-    "movePopularEarlier": "เลื่อน {name} ขึ้น",
-    "movePopularLater": "เลื่อน {name} ลง",
     "removeHeroImage": "ลบภาพที่ {n}",
     "moveHeroImageEarlier": "เลื่อนภาพที่ {n} ไปก่อน",
     "moveHeroImageLater": "เลื่อนภาพที่ {n} ไปหลัง",
@@ -600,14 +608,15 @@
     "colorNamePlaceholder": "เช่น กรมท่า",
     "noColors": "ยังไม่มีสี",
     "duplicateColor": "มีสีนี้อยู่แล้ว (หรือมีสินค้าที่ใช้ทั้งสองชื่อ)",
-    "deleteColorConfirm": "ลบ \"{name}\" ออกจากรายการ? สินค้าที่ใช้สีนี้ยังคงเก็บสีไว้"
+    "deleteColorConfirm": "ลบ \"{name}\" ออกจากรายการ? สินค้าที่ใช้สีนี้ยังคงเก็บสีไว้",
+    "dragHandle": "ลากเพื่อจัดลำดับ {name}"
   },
   "home": {
     "heroTitle": "เสื้อผ้าที่บอกตัวตนของคุณ",
     "heroSubtitle": "ดีไซน์ใส่ใจทุกรายละเอียด ตัดเย็บด้วยผ้าคุณภาพดี เลือกชมคอลเลกชันล่าสุดของเราได้เลยวันนี้",
     "heroCta": "เลือกชมสินค้า",
     "heroSecondaryCta": "เรื่องราวแบรนด์",
-    "newInSubtitle": "อัปเดตสินค้าใหม่ล่าสุดจากร้าน",
+    "featuredSubtitle": "คัดมาให้จากทางร้าน",
     "popularSubtitle": "ชิ้นที่ลูกค้าถามหามากที่สุด",
     "collectionsSubtitle": "เลือกชมตามประเภทสินค้าที่ชอบ",
     "storyTitle": "เรื่องราวของเรา",
@@ -631,7 +640,7 @@
     "rights": "© {year} {brand} สงวนลิขสิทธิ์"
   },
   "shop": {
-    "newIn": "สินค้าเข้าใหม่",
+    "featured": "สินค้าแนะนำ",
     "collections": "คอลเลกชัน",
     "allProducts": "สินค้าทั้งหมด",
     "character": "คาแรกเตอร์",
@@ -641,6 +650,7 @@
     "minPrice": "ราคาต่ำสุด",
     "maxPrice": "ราคาสูงสุด",
     "sortNewest": "ใหม่ล่าสุด",
+    "sortRecommended": "แนะนำ",
     "sortPriceAsc": "ราคาต่ำ-สูง",
     "sortPriceDesc": "ราคาสูง-ต่ำ",
     "contactToOrder": "สั่งซื้อผ่าน LINE, Instagram หรือ Facebook",

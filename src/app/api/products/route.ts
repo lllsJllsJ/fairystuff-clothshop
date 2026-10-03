@@ -13,7 +13,13 @@ const DEFAULT_PAGE_SIZE = 24
 const MAX_PAGE = 10_000
 const MAX_SEARCH_LENGTH = 100
 const MAX_PRICE = 10_000_000
-const SORT_VALUES: readonly PublicSort[] = ["newest", "price_asc", "price_desc", "popular"]
+const SORT_VALUES: readonly PublicSort[] = [
+  "recommended",
+  "newest",
+  "price_asc",
+  "price_desc",
+  "popular",
+]
 
 /**
  * Public JSON for `ShopBrowser` client-side filtering. Reads ONLY
@@ -72,7 +78,7 @@ function parseKind(value: string | null): PublicKindFilter | undefined {
 }
 
 function parseSort(value: string | null): PublicSort {
-  return SORT_VALUES.includes(value as PublicSort) ? (value as PublicSort) : "newest"
+  return SORT_VALUES.includes(value as PublicSort) ? (value as PublicSort) : "recommended"
 }
 
 function clampInt(value: string | null, min: number, max: number, fallback: number): number {

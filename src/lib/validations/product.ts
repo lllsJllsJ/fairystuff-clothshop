@@ -227,3 +227,17 @@ export const popularProductIdsSchema = z
   .array(z.uuid())
   .max(MAX_POPULAR_PRODUCTS, "max")
   .refine((ids) => new Set(ids).size === ids.length, "duplicate")
+
+// ---------------------------------------------------------------------------
+// Storefront order — the full arranged list saved from admin/products/arrange.
+// Index 0 shows first. An empty list is valid: it resets the catalogue to
+// newest-first. The cap is a sanity bound on one request, not a product limit
+// the owner should ever meet.
+// ---------------------------------------------------------------------------
+
+export const MAX_ARRANGED_PRODUCTS = 2000
+
+export const productOrderIdsSchema = z
+  .array(z.uuid())
+  .max(MAX_ARRANGED_PRODUCTS, "max")
+  .refine((ids) => new Set(ids).size === ids.length, "duplicate")

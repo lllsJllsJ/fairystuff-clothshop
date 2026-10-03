@@ -12,7 +12,7 @@ export function ProductGrid({
   priorityCount = 0,
 }: {
   products: PublicProductSummary[]
-  /** Product codes to flag with the "new" badge (e.g. the home "New in" strip). */
+  /** Product codes to flag with the "new" badge (the home Featured grid flags recent arrivals). */
   newCodes?: Set<string>
   /** Show the "Popular" badge on hand-picked products (default on). */
   showPopular?: boolean

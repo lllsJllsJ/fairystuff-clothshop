@@ -4,7 +4,6 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { useTranslations } from "next-intl"
 import { toast } from "sonner"
-import { ArrowDown, ArrowUp } from "lucide-react"
 
 import type { ProductType } from "@/db/queries/product-types"
 import {
@@ -13,11 +12,11 @@ import {
   renameProductType,
   reorderProductTypes,
 } from "@/app/[locale]/admin/settings/actions"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { SortableList } from "@/components/ui/sortable"
 import {
   SettingsSection,
-  SettingsRow,
+  SortableSettingsRow,
   SettingsFormDialog,
   DialogField,
 } from "@/components/settings/settings-section"
@@ -26,7 +25,7 @@ import {
  * Flat single-level manager — carstockpro's `brand-manager.tsx` handles
  * three nested levels (brand -> model -> sub-model); this shop's
  * `productType` is one level, so there's no second panel, just one list
- * with add / rename / reorder / delete.
+ * with add / rename / reorder (drag) / delete.
  */
 export function ProductTypeManager({ types }: { types: ProductType[] }) {
   const t = useTranslations()
@@ -35,10 +34,27 @@ export function ProductTypeManager({ types }: { types: ProductType[] }) {
   const [adding, setAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
 
-  function run(fn: () => Promise<{ ok: boolean; error?: string; count?: number }>, onOk?: () => void) {
+  // A drop reorders the list at once and saves in the background; the
+  // server's order replaces this as soon as the refreshed `types` arrives.
+  const [draggedOrder, setDraggedOrder] = useState<string[] | null>(null)
+  const [syncedTypes, setSyncedTypes] = useState(types)
+  if (types !== syncedTypes) {
+    setSyncedTypes(types)
+    setDraggedOrder(null)
+  }
+  const ordered = draggedOrder
+    ? draggedOrder.flatMap((id) => types.find((tp) => tp.id === id) ?? [])
+    : types
+
+  function run(
+    fn: () => Promise<{ ok: boolean; error?: string; count?: number }>,
+    onOk?: () => void,
+    onFail?: () => void
+  ) {
     startTransition(async () => {
       const res = await fn()
       if (!res.ok) {
+        onFail?.()
         if (res.error === "in_use" && typeof res.count === "number") {
           toast.error(t("settings.deleteProductTypeInUse", { count: res.count }))
         } else if (res.error === "duplicate_type") {
@@ -68,13 +84,13 @@ export function ProductTypeManager({ types }: { types: ProductType[] }) {
     run(() => deleteProductType(type.id), () => toast.success(t("settings.productTypeDeleted")))
   }
 
-  function handleMove(index: number, direction: -1 | 1) {
-    const targetIndex = index + direction
-    if (targetIndex < 0 || targetIndex >= types.length) return
-    const orderedIds = types.map((tp) => tp.id)
-    const [moved] = orderedIds.splice(index, 1)
-    orderedIds.splice(targetIndex, 0, moved)
-    run(() => reorderProductTypes(orderedIds), () => toast.success(t("settings.productTypesReordered")))
+  function handleReorder(orderedIds: string[]) {
+    setDraggedOrder(orderedIds)
+    run(
+      () => reorderProductTypes(orderedIds),
+      () => toast.success(t("settings.productTypesReordered")),
+      () => setDraggedOrder(null)
+    )
   }
 
   const editingType = types.find((tp) => tp.id === editingId) ?? null
@@ -92,47 +108,26 @@ export function ProductTypeManager({ types }: { types: ProductType[] }) {
             {t("settings.noProductTypes")}
           </li>
         ) : (
-          types.map((type, index) => (
-            <SettingsRow
-              key={type.id}
-              title={type.name}
-              subtitle={[type.nameEn, type.codePrefix].filter(Boolean).join(" · ") || undefined}
-              disabled={pending}
-              /* Reorder arrows are this area's own control, so they ride in
-                 `leading` and the pencil/bin still land where every other
-                 section puts them. */
-              leading={
-                <div className="flex shrink-0 items-center">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleMove(index, -1)}
-                    disabled={pending || index === 0}
-                    aria-label={t("settings.moveUp")}
-                    className="text-muted-foreground hover:text-foreground disabled:opacity-30"
-                  >
-                    <ArrowUp />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleMove(index, 1)}
-                    disabled={pending || index === types.length - 1}
-                    aria-label={t("settings.moveDown")}
-                    className="text-muted-foreground hover:text-foreground disabled:opacity-30"
-                  >
-                    <ArrowDown />
-                  </Button>
-                </div>
-              }
-              onEdit={() => startEdit(type)}
-              onDelete={() => handleDelete(type)}
-              editLabel={t("common.edit")}
-              deleteLabel={t("common.delete")}
-            />
-          ))
+          <SortableList
+            id="product-types"
+            ids={ordered.map((type) => type.id)}
+            onReorder={handleReorder}
+          >
+            {ordered.map((type) => (
+              <SortableSettingsRow
+                key={type.id}
+                id={type.id}
+                dragLabel={t("settings.dragHandle", { name: type.name })}
+                title={type.name}
+                subtitle={[type.nameEn, type.codePrefix].filter(Boolean).join(" · ") || undefined}
+                disabled={pending}
+                onEdit={() => startEdit(type)}
+                onDelete={() => handleDelete(type)}
+                editLabel={t("common.edit")}
+                deleteLabel={t("common.delete")}
+              />
+            ))}
+          </SortableList>
         )}
       </SettingsSection>
 

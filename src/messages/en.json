@@ -150,7 +150,19 @@
     "exportEmpty": "No products match these filters",
     "exported": "Exported {count} products",
     "audienceBoth": "Adults & Kids",
-    "imagesSizeHint": "Recommended size: 1600 × 2000 px portrait (4:5), at least 1200 × 1500 px. Size charts: at least 1200 px wide. Smaller images look blurry in the shop."
+    "imagesSizeHint": "Recommended size: 1600 × 2000 px portrait (4:5), at least 1200 × 1500 px. Size charts: at least 1200 px wide. Smaller images look blurry in the shop.",
+    "arrange": "Arrange",
+    "arrangeTitle": "Arrange storefront order",
+    "arrangeHint": "Drag products into the order customers should see them in the shop and on the home page. New products appear at the top until you move them.",
+    "arrangeDragHandle": "Drag to move {name}",
+    "arrangeToTop": "Move {name} to the top",
+    "arrangeToBottom": "Move {name} to the bottom",
+    "arrangeSave": "Save order",
+    "arrangeReset": "Reset to newest first",
+    "arrangeResetConfirm": "Reset the storefront to newest first? Your arranged order will be lost.",
+    "arrangeSaved": "Storefront order saved",
+    "arrangeUnsaved": "Unsaved changes",
+    "arrangeEmpty": "No products to arrange yet."
   },
   "cart": {
     "title": "Your cart",
@@ -510,8 +522,6 @@
     "subtitle": "Manage the product types used in the shop.",
     "namePlaceholder": "Type name (Thai)",
     "nameEnPlaceholder": "Type name (English)",
-    "moveUp": "Move up",
-    "moveDown": "Move down",
     "deleteProductTypeConfirm": "Delete this product type?",
     "deleteProductTypeInUse": "Can't delete — {count} product(s) still use this type. Reassign them first.",
     "productTypeCreated": "Product type added.",
@@ -558,8 +568,6 @@
     "popularLeft": "{remaining} left",
     "popularHiddenNote": "Not shown — this product is not active",
     "removePopular": "Remove {name}",
-    "movePopularEarlier": "Move {name} earlier",
-    "movePopularLater": "Move {name} later",
     "removeHeroImage": "Remove photo {n}",
     "moveHeroImageEarlier": "Move photo {n} earlier",
     "moveHeroImageLater": "Move photo {n} later",
@@ -600,14 +608,15 @@
     "colorNamePlaceholder": "e.g. Navy",
     "noColors": "No colours yet",
     "duplicateColor": "That colour already exists (or a product already has both names).",
-    "deleteColorConfirm": "Remove \"{name}\" from the list? Products that use it keep the colour."
+    "deleteColorConfirm": "Remove \"{name}\" from the list? Products that use it keep the colour.",
+    "dragHandle": "Drag to reorder {name}"
   },
   "home": {
     "heroTitle": "Clothing that speaks for you",
     "heroSubtitle": "Thoughtfully designed, made from quality fabric. Browse our latest collection today.",
     "heroCta": "Shop now",
     "heroSecondaryCta": "Our story",
-    "newInSubtitle": "The latest arrivals from the shop",
+    "featuredSubtitle": "Hand-picked from the shop",
     "popularSubtitle": "The pieces everyone is asking for",
     "collectionsSubtitle": "Browse by the type you're after",
     "storyTitle": "Our story",
@@ -631,7 +640,7 @@
     "rights": "© {year} {brand}. All rights reserved."
   },
   "shop": {
-    "newIn": "New in",
+    "featured": "Featured",
     "collections": "Collections",
     "allProducts": "All products",
     "character": "Character",
@@ -641,6 +650,7 @@
     "minPrice": "Min price",
     "maxPrice": "Max price",
     "sortNewest": "Newest",
+    "sortRecommended": "Recommended",
     "sortPriceAsc": "Price: low to high",
     "sortPriceDesc": "Price: high to low",
     "contactToOrder": "Order via LINE, Instagram, or Facebook",

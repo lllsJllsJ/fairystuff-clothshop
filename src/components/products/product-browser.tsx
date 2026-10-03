@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl"
 import {
   ChevronLeft,
   ChevronRight,
+  ArrowUpDown,
   Columns3,
   FileSpreadsheet,
   LayoutGrid,
@@ -264,6 +265,15 @@ export function ProductBrowser({ types }: { types: ProductType[] }) {
           <ProductExportButton
             filters={{ search: debouncedSearch, status, type, audience, kind }}
           />
+          <Button
+            variant="outline"
+            render={<Link href="/admin/products/arrange" />}
+            nativeButton={false}
+            aria-label={t("product.arrange")}
+          >
+            <ArrowUpDown />
+            <span className="hidden sm:inline">{t("product.arrange")}</span>
+          </Button>
           <Button
             variant="outline"
             render={<Link href="/admin/products/import" />}

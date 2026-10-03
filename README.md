@@ -124,6 +124,12 @@ separate API service and no serverless cold start.
   their order in Admin → Settings → Storefront; they appear in a Popular
   section directly under the home-page hero, carry a "Popular" badge on
   product tiles, and lead the `/shop` "Most popular" sort.
+- Owner-arranged **storefront order**: Admin → Products → Arrange is a
+  drag-and-drop list (touch and keyboard, plus to-top / to-bottom) that sets
+  the default "Recommended" order of `/shop` and the home page's Featured
+  grid. New products appear at the top until moved; Reset returns to
+  newest-first. The Popular list, product types, and colour palette are
+  reordered by the same drag-and-drop grip (`components/ui/sortable.tsx`).
 - SEO: per-locale `sitemap.xml` with hreflang alternates, `robots.txt`,
   per-product metadata + JSON-LD, ISR-cached static rendering.
 - Owner-only admin: dashboard (SKU/order totals, gross and net profit,
@@ -398,7 +404,7 @@ src/
 │   │   ├── admin/                         # owner-only, dynamic
 │   │   │   ├── layout.tsx                 # requireOwner() gate
 │   │   │   ├── page.tsx                   # dashboard
-│   │   │   ├── products/                  # browse/new/edit/import
+│   │   │   ├── products/                  # browse/new/edit/import/arrange
 │   │   │   ├── orders/                    # list/new/detail-edit
 │   │   │   ├── reports/                   # monthly/annual/profit/inventory
 │   │   │   ├── users/                     # account list, roles, verify, reset, delete
@@ -450,7 +456,8 @@ drizzle/
 ├── 0002–0004_*.sql                        # drizzle-generated (brand settings; audience/kind/availability/shipments; drop quantity + shipping_confirmed_at)
 ├── 0005_preorder_extras.sql               # hand-written --custom: master-cost + preorder-shipping triggers, regenerated total_cost/profit, 1688/Taobao statuses
 ├── 0006–0008_*.sql                        # shipments per line item: add order_item_id, backfill (--custom), then NOT NULL
-└── 0013_*.sql                             # drizzle-generated: products.popular_rank (hand-picked Popular list) + partial index
+├── 0013_*.sql                             # drizzle-generated: products.popular_rank (hand-picked Popular list) + partial index
+└── 0014_*.sql                             # drizzle-generated: products.display_order (owner-arranged storefront order) + index
 scripts/
 ├── catalog-{prepare,verify,import}.ts      # reviewed catalogue CLI
 ├── seed.ts                                # product-type reference data

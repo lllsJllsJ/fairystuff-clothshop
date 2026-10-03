@@ -42,48 +42,49 @@
 33. [Variant Rows Save](#variant-rows-save)
 34. [Excel Import — Parse → Preview → Commit](#excel-import--parse--preview--commit)
 35. [Product Export](#product-export)
-36. [Orders List](#orders-list)
-37. [Preorder Fulfillment — Mark as Paid, Item Status, Preorder Shipments](#preorder-fulfillment--mark-as-paid-item-status-preorder-shipments)
-38. [Create Order](#create-order)
-39. [Edit Order](#edit-order)
-40. [Quick Order Status Change](#quick-order-status-change)
-41. [Line-Item Fulfillment + Partial Refund](#line-item-fulfillment--partial-refund)
-42. [Full Order Refund](#full-order-refund)
-43. [Print Order Receipt](#print-order-receipt)
-44. [Delete Order](#delete-order)
-45. [Reports — View + Excel Export + Print](#reports--view--excel-export--print)
-46. [Settings — Sub-menu Navigation](#settings--sub-menu-navigation)
-47. [Settings — Create Product Type](#settings--create-product-type)
-48. [Settings — Rename Product Type (Cascade)](#settings--rename-product-type-cascade)
-49. [Settings — Delete Product Type (Blocked When In Use)](#settings--delete-product-type-blocked-when-in-use)
-50. [Settings — Reorder Product Types](#settings--reorder-product-types)
-51. [Settings — Clear Shop Data](#settings--clear-shop-data)
-52. [Settings — Shop Contacts](#settings--shop-contacts)
-53. [Settings — Brand](#settings--brand)
-54. [Settings — Home Hero Photos (Carousel)](#settings--home-hero-photos-carousel)
-55. [Settings — Popular Products](#settings--popular-products)
-56. [Settings — Character Taxonomy](#settings--character-taxonomy)
-57. [Settings — Colour Palette](#settings--colour-palette)
-58. [Settings — Order Status Labels](#settings--order-status-labels)
-59. [Settings — Line-Item Status Lifecycle](#settings--line-item-status-lifecycle)
-60. [Users — List + Filter](#users--list--filter)
-61. [Users — Change Role](#users--change-role)
-62. [Users — Delete Account](#users--delete-account)
-63. [Users — Mark Email Verified](#users--mark-email-verified)
-64. [Users — Send Password Reset](#users--send-password-reset)
+36. [Arrange Storefront Order](#arrange-storefront-order)
+37. [Orders List](#orders-list)
+38. [Preorder Fulfillment — Mark as Paid, Item Status, Preorder Shipments](#preorder-fulfillment--mark-as-paid-item-status-preorder-shipments)
+39. [Create Order](#create-order)
+40. [Edit Order](#edit-order)
+41. [Quick Order Status Change](#quick-order-status-change)
+42. [Line-Item Fulfillment + Partial Refund](#line-item-fulfillment--partial-refund)
+43. [Full Order Refund](#full-order-refund)
+44. [Print Order Receipt](#print-order-receipt)
+45. [Delete Order](#delete-order)
+46. [Reports — View + Excel Export + Print](#reports--view--excel-export--print)
+47. [Settings — Sub-menu Navigation](#settings--sub-menu-navigation)
+48. [Settings — Create Product Type](#settings--create-product-type)
+49. [Settings — Rename Product Type (Cascade)](#settings--rename-product-type-cascade)
+50. [Settings — Delete Product Type (Blocked When In Use)](#settings--delete-product-type-blocked-when-in-use)
+51. [Settings — Reorder Product Types](#settings--reorder-product-types)
+52. [Settings — Clear Shop Data](#settings--clear-shop-data)
+53. [Settings — Shop Contacts](#settings--shop-contacts)
+54. [Settings — Brand](#settings--brand)
+55. [Settings — Home Hero Photos (Carousel)](#settings--home-hero-photos-carousel)
+56. [Settings — Popular Products](#settings--popular-products)
+57. [Settings — Character Taxonomy](#settings--character-taxonomy)
+58. [Settings — Colour Palette](#settings--colour-palette)
+59. [Settings — Order Status Labels](#settings--order-status-labels)
+60. [Settings — Line-Item Status Lifecycle](#settings--line-item-status-lifecycle)
+61. [Users — List + Filter](#users--list--filter)
+62. [Users — Change Role](#users--change-role)
+63. [Users — Delete Account](#users--delete-account)
+64. [Users — Mark Email Verified](#users--mark-email-verified)
+65. [Users — Send Password Reset](#users--send-password-reset)
 
 **Catalogue CLI**
-65. [Catalogue Prepare — Workbook Extraction](#catalogue-prepare--workbook-extraction)
-66. [Catalogue Prepare — Supplier Enrichment + Workbook Fallback](#catalogue-prepare--supplier-enrichment--workbook-fallback)
-67. [Catalogue Verify + Import Dry Run](#catalogue-verify--import-dry-run)
-68. [Catalogue Apply — Storage Staging](#catalogue-apply--storage-staging)
-69. [Catalogue Apply — Transactional Replacement](#catalogue-apply--transactional-replacement)
-70. [Catalogue Apply — Rollback + Object Cleanup](#catalogue-apply--rollback--object-cleanup)
+66. [Catalogue Prepare — Workbook Extraction](#catalogue-prepare--workbook-extraction)
+67. [Catalogue Prepare — Supplier Enrichment + Workbook Fallback](#catalogue-prepare--supplier-enrichment--workbook-fallback)
+68. [Catalogue Verify + Import Dry Run](#catalogue-verify--import-dry-run)
+69. [Catalogue Apply — Storage Staging](#catalogue-apply--storage-staging)
+70. [Catalogue Apply — Transactional Replacement](#catalogue-apply--transactional-replacement)
+71. [Catalogue Apply — Rollback + Object Cleanup](#catalogue-apply--rollback--object-cleanup)
 
 **Cross-cutting**
-71. [Storefront Revalidation After a Product Mutation](#storefront-revalidation-after-a-product-mutation)
-72. [Unauthorized / Forbidden Denial Paths](#unauthorized--forbidden-denial-paths)
-73. [Transaction Rollback on Mid-Write Failure](#transaction-rollback-on-mid-write-failure)
+72. [Storefront Revalidation After a Product Mutation](#storefront-revalidation-after-a-product-mutation)
+73. [Unauthorized / Forbidden Denial Paths](#unauthorized--forbidden-denial-paths)
+74. [Transaction Rollback on Mid-Write Failure](#transaction-rollback-on-mid-write-failure)
 
 ---
 
@@ -263,7 +264,7 @@ locales at build time (`generateStaticParams`), revalidates every 300s.
                           ▼                        ▼
               re-render: getPublicProducts     serve cached HTML
               (popularOnly, hand-picked order, max 8)
-              + getPublicProducts (newest 6)
+              + getPublicProducts (recommended order, first 6)
               + getPublicCharacters + shop contacts
               via db/queries/storefront.ts
               (PUBLIC_PRODUCT_COLUMNS only)
@@ -272,18 +273,23 @@ locales at build time (`generateStaticParams`), revalidates every 300s.
                 cache updated, served
 ```
 
-Section order: Hero → **Popular** → audience entry → New in → collections →
-story → contact. The Popular section shows the owner's hand-picked list
+Section order: Hero → **Popular** → audience entry → **Featured** →
+collections → story → contact. The Featured grid is the first six products in
+the owner-arranged `recommended` order (see
+[Arrange Storefront Order](#arrange-storefront-order)) — the same order `/shop`
+lists by default, so with nothing arranged it is simply the six newest. A tile
+there wears the "New" badge only when its product was created in the last 14
+days (computed at render from the public `createdAt`, refreshed by ISR). The Popular section shows the owner's hand-picked list
 (see [Settings — Popular Products](#settings--popular-products)) in the saved
 order, with an "All products" link to `/shop?sort=popular`. It is omitted
 entirely when nothing is picked — and during a database-less prerender, where
 the read falls back to empty — so it never renders as an empty grid. Tiles
 inside it carry no "Popular" badge (the heading says it); the same products
 do carry it in every other grid. Whichever product grid comes first gets the
-eager-loaded images (Popular when present, otherwise New in).
+eager-loaded images (Popular when present, otherwise Featured).
 
 The character facet feeds two link-only sections — `QuickFilterRail` (chips
-above the "New in" grid) and `CollectionStrip` (promo cards). Both are
+above the Featured grid) and `CollectionStrip` (promo cards). Both are
 Server Components rendering plain `<Link>`s to `/shop?character=<slug>`;
 neither ships filter state to the client, which is what keeps `/` in the
 SSG column of `next build` rather than falling to dynamic (`ƒ`).
@@ -332,7 +338,8 @@ for SEO, and an `initialData` seed so the client doesn't refetch on load.
 │ Browser│ ──────────────────▶ │ Server render (ISR) │
 └────────┘                     │ getPublicProducts    │
                                 │ getPublicCharacters   │
-                                │ (page 1, no filters)  │
+                                │ (page 1, no filters,  │
+                                │  sort = recommended)  │
                                 └──────────┬────────────┘
                                            │ HTML + initialResult
                                            ▼
@@ -377,8 +384,11 @@ change (debounced 350ms for the search box). Public, no auth. See
                                   { rows, count, page, pageSize }
 ```
 
-`sort=popular` orders by `popular_rank ASC NULLS LAST, created_at DESC` — the
-hand-picked products first, then the rest newest-first. Each row carries
+The default `sort=recommended` orders by `display_order ASC NULLS FIRST,
+created_at DESC, id ASC` — the owner-arranged order, with not-yet-placed
+products first (the `id` tie-break keeps paging stable, since bulk-imported
+products share a `created_at`). `sort=popular` orders by `popular_rank ASC
+NULLS LAST` and then that same order — the hand-picked products first. Each row carries
 `isPopular` (the tile badge); the rank itself is never returned, and
 `popularOnly` (the home page's filter) is not reachable from a query param.
 
@@ -498,11 +508,11 @@ state (search-first pattern).
                               -> GET /api/products fires
 ```
 
-The sort dropdown offers Newest, Most popular (`sort=popular`), and price
-low/high; the home page's Popular section deep-links to `/shop?sort=popular`.
+The sort dropdown offers Recommended (the default — omitted from the URL),
+Newest, Most popular (`sort=popular`), and price low/high; the home page's Popular section deep-links to `/shop?sort=popular`.
 
 Failure: none — a malformed/missing param simply falls back to its default
-(e.g. `sort` falls back to `newest`) rather than erroring; see
+(e.g. `sort` falls back to `recommended`) rather than erroring; see
 `GET /api/products`'s own clamping for the server-side half of this.
 
 ## Sitemap
@@ -1029,6 +1039,54 @@ history").
 Failure: `export_failed` toast; zero matches -> "No products match these
 filters". Owner-only because it carries cost price, source, and link.
 
+## Arrange Storefront Order
+
+`/admin/products/arrange` (the "Arrange" button on the Products page) →
+`ProductArranger`. The owner drags products into the order customers see by
+default on `/shop` and in the home page's Featured grid. Stored as
+`products.display_order` (null = not placed yet, sorts first).
+
+```
+┌────────┐ GET /admin/products/arrange ┌──────────────────────────────┐
+│ Owner  │ ───────────────────────────▶│ requireOwner (admin layout)   │
+└────────┘                             │ getProductsForArrange():      │
+    │                                  │ non-archived, in the current  │
+    │                                  │ storefront order, no paging   │
+    │                                  └──────────────┬───────────────┘
+    │                                                 ▼
+    │                                   ProductArranger (client, dnd-kit)
+    │ drag handle (mouse / touch) · Space + arrows (keyboard)
+    │ to-top / to-bottom buttons          -> local state only
+    │
+    │ Save order                Reset to newest first (confirm)
+    ▼                                   ▼
+saveProductOrder(orderedIds[])   saveProductOrder([])
+    │ getCurrentUser + isOwner() re-check
+    │ zod: every id a UUID, no duplicates, <= 2000 ──fail──▶ "invalid"
+    ▼
+db.transaction
+    UPDATE products SET display_order = NULL WHERE display_order IS NOT NULL
+    UPDATE products SET display_order = position - 1
+      FROM unnest(ids) WITH ORDINALITY            (skipped for an empty list)
+    │ COMMIT
+    ▼
+revalidateStorefront() -> "/" and "/shop" re-rendered in both locales
+    │
+    ▼
+router.refresh() -> the list reloads in the saved order
+```
+
+Failure: nothing is persisted until Save; a rejected or failed save shows a
+toast and keeps the on-screen order, and the transaction rolls back as a
+whole. A product missing from the submitted list — archived, or created in
+another tab while the owner was arranging — is left with a null position and
+so appears at the top, exactly like a new product; an id whose product was
+deleted meanwhile is ignored. Product create/edit/inline-edit and the Excel
+import never write `display_order`, so new and imported products lead the
+catalogue until moved and an edit never moves a product. Clear Shop Data and
+the catalogue CLI's transactional replacement delete every product and with
+them the arranged order.
+
 ## Orders List
 
 `GET /admin/orders`, `OrderList` client component + `GET /api/admin/orders`.
@@ -1422,11 +1480,14 @@ can tell the owner what's in the way.
 
 ## Settings — Reorder Product Types
 
-`reorderProductTypes` Server Action, triggered by the up/down arrows in
-`ProductTypeManager`.
+`reorderProductTypes` Server Action, triggered by dropping a row in
+`ProductTypeManager` — each row is dragged by its grip (mouse or touch; with
+the grip focused, Space picks the row up, the arrow keys move it, Space drops
+it). All reorderable admin lists share `components/ui/sortable.tsx` (dnd-kit).
+The list reorders on screen at once and the save runs in the background.
 
 ```
-┌────────┐ click up/down arrow  ┌──────────────────────────┐
+┌────────┐ drop a dragged row   ┌──────────────────────────┐
 │ Owner  │ ─────────────────────▶│ reorderProductTypes(ids[]) │
 └────────┘                       └──────────┬────────────────────┘
                                             │ auth -> isOwner -> zod (uuid array)
@@ -1441,7 +1502,8 @@ can tell the owner what's in the way.
 ```
 
 Failure: any single update failure rolls back the whole reorder — the list
-is never left in a half-reordered state. `N` sequential updates inside one
+is never left in a half-reordered state — and the on-screen order snaps back
+to the saved one with an error toast. `N` sequential updates inside one
 transaction is accepted here because the reference list is small (a
 boutique shop's product-type count, not a large catalogue).
 
@@ -2527,7 +2589,7 @@ the tile badge (`isPopular`), and the `/shop` "Most popular" sort.
 │ Owner  │ ──────────────────▶│ GET /api/admin/products        │
 └────────┘  (debounced 300ms) │ ?search=&status=active (owner) │
     │                         └───────────────────────────────┘
-    │ + add / ↑↓ move / x remove  -> local state only
+    │ + add / drag by grip / x remove  -> local state only
     │
     │ Save
     ▼
@@ -2573,7 +2635,7 @@ canonical spelling (purple → Purple) in the product editor, the Excel import,
 the Settings dialog, and `learnProductColors`.
 
 ```
-┌────────┐ + / pencil / bin / ↑↓ ┌──────────────────────────────┐
+┌────────┐ + / edit / bin / drag ┌──────────────────────────────┐
 │ Owner  │ ─────────────────────▶│ workflow-actions.ts          │
 └────────┘                       │ isOwner() re-check, zod      │
                                  └──────────────┬───────────────┘

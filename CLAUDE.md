@@ -261,6 +261,17 @@ reference.
   `audience`/`kind`. Max `MAX_POPULAR_PRODUCTS` (`src/lib/product-taxonomy.ts`).
   The pick lives on the product row, so anything that deletes products
   (delete, Clear shop data, the catalogue CLI's full replacement) drops it.
+- **The storefront's default order is owner-arranged, and
+  `products.displayOrder` has exactly one writer.** `saveProductOrder`
+  (`admin/products/actions.ts`, from `/admin/products/arrange`) clears and
+  renumbers it in one transaction. null = not placed yet and sorts FIRST
+  (`display_order ASC NULLS FIRST, created_at DESC, id ASC` — `ARRANGED_ORDER`
+  in `queries/storefront.ts`, mirrored by `getProductsForArrange`; keep the
+  two identical), so a new or imported product leads the catalogue until
+  moved — don't "fix" that by defaulting the column. No product
+  create/update/inline-edit/import may name it. It only ever appears in
+  `ORDER BY`: never add it to `PUBLIC_PRODUCT_COLUMNS`. `recommended` is the
+  default `PublicSort`; the home grid is "Featured" (that order), not "New in".
 - **Cover photo = `sortOrder` 0.** No separate "is cover" flag — whichever
   `productImages` row has `sortOrder = 0` is the cover ("Main photo" in the
   editor), full stop. Setting a main photo means reordering, not flagging.

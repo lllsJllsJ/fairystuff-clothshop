@@ -126,9 +126,13 @@ export type PublicProductDetail = BasePublicProduct & {
   images: PublicProductImage[]
 }
 
-/** `popular` = the owner's hand-picked list first, in the order they set,
- * then everything else newest-first. */
-export type PublicSort = "newest" | "price_asc" | "price_desc" | "popular"
+/**
+ * `recommended` (the default) = the order the owner arranged in
+ * admin/products/arrange; products not placed yet come first, newest-first.
+ * `popular` = the owner's hand-picked Popular list first, in the order they
+ * set, then everything else in the recommended order.
+ */
+export type PublicSort = "recommended" | "newest" | "price_asc" | "price_desc" | "popular"
 
 /** `sets` = set OR full set — the storefront's single "Sets" toggle. */
 export type PublicKindFilter = ProductKind | "sets"
@@ -256,6 +260,19 @@ function activeProductFilters(params: PublicProductListParams) {
   return where!
 }
 
+/**
+ * The owner-arranged storefront order. `displayOrder` is null until a
+ * product has been placed, and nulls sort FIRST so a new product leads the
+ * catalogue; with nothing arranged this is plain newest-first. The `id`
+ * tie-break keeps paging stable — bulk-imported products share a createdAt.
+ * `displayOrder` only orders; it is never selected (see the header comment).
+ */
+const ARRANGED_ORDER = [
+  sql`${products.displayOrder} asc nulls first`,
+  desc(products.createdAt),
+  asc(products.id),
+]
+
 function orderByForPublicSort(sort: PublicSort) {
   switch (sort) {
     case "price_asc":
@@ -263,10 +280,12 @@ function orderByForPublicSort(sort: PublicSort) {
     case "price_desc":
       return [desc(products.sellPrice)]
     case "popular":
-      return [sql`${products.popularRank} asc nulls last`, desc(products.createdAt)]
+      return [sql`${products.popularRank} asc nulls last`, ...ARRANGED_ORDER]
     case "newest":
+      return [desc(products.createdAt), asc(products.id)]
+    case "recommended":
     default:
-      return [desc(products.createdAt)]
+      return ARRANGED_ORDER
   }
 }
 
@@ -277,7 +296,7 @@ function orderByForPublicSort(sort: PublicSort) {
 export async function getPublicProducts(
   params: PublicProductListParams = {}
 ): Promise<PublicProductListResult> {
-  const { page = 1, pageSize = DEFAULT_PAGE_SIZE, sort = "newest" } = params
+  const { page = 1, pageSize = DEFAULT_PAGE_SIZE, sort = "recommended" } = params
   const where = activeProductFilters(params)
   const orderBy = orderByForPublicSort(sort)
 

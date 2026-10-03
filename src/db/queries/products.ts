@@ -1,7 +1,7 @@
 import "server-only"
 
 import type { Column } from "drizzle-orm"
-import { and, asc, count, desc, eq, ilike, inArray, isNotNull, or } from "drizzle-orm"
+import { and, asc, count, desc, eq, ilike, inArray, isNotNull, ne, or, sql } from "drizzle-orm"
 
 import { db } from "@/db"
 import {
@@ -230,7 +230,9 @@ export async function getProductImportIndex(): Promise<ProductImportIndexEntry[]
     .from(products)
 }
 
-export type PopularProductEntry = {
+/** Just enough of a product to list and reorder it — handed to client
+ * components, so it deliberately carries no cost field. */
+export type ProductSummaryEntry = {
   id: string
   productCode: string
   productName: string
@@ -238,26 +240,17 @@ export type PopularProductEntry = {
   coverImageUrl: string | null
 }
 
-/**
- * The owner's hand-picked Popular list, in display order, for Settings ->
- * Storefront. Unlike the storefront read this includes draft/archived picks
- * (shown with their status so the owner can see why one is missing from the
- * shop). A narrow projection on purpose — it is handed to a client
- * component, and nothing there needs a cost field.
- */
-export async function getPopularProducts(): Promise<PopularProductEntry[]> {
-  const rows = await db
-    .select({
-      id: products.id,
-      productCode: products.productCode,
-      productName: products.productName,
-      status: products.status,
-    })
-    .from(products)
-    .where(isNotNull(products.popularRank))
-    .orderBy(asc(products.popularRank))
-  if (rows.length === 0) return []
+type ProductSummaryRow = Omit<ProductSummaryEntry, "coverImageUrl">
 
+const PRODUCT_SUMMARY_COLUMNS = {
+  id: products.id,
+  productCode: products.productCode,
+  productName: products.productName,
+  status: products.status,
+} as const
+
+async function attachCovers(rows: ProductSummaryRow[]): Promise<ProductSummaryEntry[]> {
+  if (rows.length === 0) return []
   const covers = await db
     .select({ productId: productImages.productId, url: productImages.url })
     .from(productImages)
@@ -268,6 +261,40 @@ export async function getPopularProducts(): Promise<PopularProductEntry[]> {
       )
     )
   const coverByProduct = new Map(covers.map((cover) => [cover.productId, cover.url]))
-
   return rows.map((row) => ({ ...row, coverImageUrl: coverByProduct.get(row.id) ?? null }))
+}
+
+/**
+ * The owner's hand-picked Popular list, in display order, for Settings ->
+ * Storefront. Unlike the storefront read this includes draft/archived picks
+ * (shown with their status so the owner can see why one is missing from the
+ * shop).
+ */
+export async function getPopularProducts(): Promise<ProductSummaryEntry[]> {
+  const rows = await db
+    .select(PRODUCT_SUMMARY_COLUMNS)
+    .from(products)
+    .where(isNotNull(products.popularRank))
+    .orderBy(asc(products.popularRank))
+  return attachCovers(rows)
+}
+
+/**
+ * Every non-archived product in the order the storefront currently lists
+ * them, for admin/products/arrange. The ORDER BY must stay identical to
+ * `ARRANGED_ORDER` in queries/storefront.ts — the screen is only honest if
+ * it opens showing what customers see. Drafts are included so the owner can
+ * place a product before publishing it.
+ */
+export async function getProductsForArrange(): Promise<ProductSummaryEntry[]> {
+  const rows = await db
+    .select(PRODUCT_SUMMARY_COLUMNS)
+    .from(products)
+    .where(ne(products.status, "archived"))
+    .orderBy(
+      sql`${products.displayOrder} asc nulls first`,
+      desc(products.createdAt),
+      asc(products.id)
+    )
+  return attachCovers(rows)
 }
