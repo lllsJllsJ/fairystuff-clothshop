@@ -1,0 +1,2 @@
+ALTER TABLE "products" DROP CONSTRAINT "products_discount_check";--> statement-breakpoint
+ALTER TABLE "products" ADD CONSTRAINT "products_discount_check" CHECK ((("products"."discount_type" is null) = ("products"."discount_value" is null) and ("products"."discount_type" is distinct from 'percent' or "products"."discount_value" between 1 and 90) and ("products"."discount_type" is distinct from 'price' or "products"."discount_value" > 0)));

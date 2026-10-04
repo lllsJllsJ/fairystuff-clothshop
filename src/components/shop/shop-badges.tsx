@@ -1,12 +1,14 @@
 import { useTranslations } from "next-intl"
 import { Flame } from "lucide-react"
 
+import { percentOff } from "@/lib/pricing"
 import { cn } from "@/lib/utils"
 import type { ProductAudience, ProductKind } from "@/lib/product-taxonomy"
 
 /**
  * Storefront flags, all on DESIGN.md §4's "Alert Badge" shape (4px radius,
  * bold 12px label). Colour carries meaning, not decoration:
+ *   - Sale -20%    Sale Red, filled (a discount is running — the loudest flag)
  *   - New in       Warning Yellow (time-sensitive promotion)
  *   - Popular      Brand Fuchsia outline on the card surface (the owner's
  *                  pick) — outlined so it can't be mistaken for the filled
@@ -24,6 +26,26 @@ export function UnavailableBadge({ className }: { className?: string }) {
   return (
     <span className={cn(BADGE, "bg-foreground text-background", className)} style={BADGE_RADIUS}>
       {t("shop.unavailable")}
+    </span>
+  )
+}
+
+/** "-20%" flag — nothing when the product isn't discounted. */
+export function SaleBadge({
+  price,
+  regularPrice,
+  className,
+}: {
+  price: number | string
+  regularPrice: number | string
+  className?: string
+}) {
+  const t = useTranslations()
+  const off = percentOff(price, regularPrice)
+  if (off == null) return null
+  return (
+    <span className={cn(BADGE, "bg-sale text-sale-foreground", className)} style={BADGE_RADIUS}>
+      {t("shop.saleBadge", { percent: off })}
     </span>
   )
 }

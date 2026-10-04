@@ -115,6 +115,12 @@ function toItemRows(items: OrderFormValues["items"], orderId: string) {
     productCost: toMoney(Number(item.productCost)),
     masterCost: toMoney(Number(item.masterCost ?? item.productCost)),
     sellPrice: toMoney(Number(item.sellPrice)),
+    // Kept only while it is above the charged price — if the owner typed a
+    // higher sellPrice by hand, there is no discount left to record.
+    regularPrice:
+      item.regularPrice != null && Number(item.regularPrice) > Number(item.sellPrice)
+        ? toMoney(Number(item.regularPrice))
+        : null,
     // Lead-time snapshot — set by the product picker (order-line-row.tsx),
     // carried through untouched; both null is normal for a non-preorder item.
     preorderMinDays: item.preorderMinDays ?? null,

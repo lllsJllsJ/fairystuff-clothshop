@@ -107,7 +107,7 @@ reference.
   `footer`, `shop`, `cart`, `checkout`, `track`, `errors`) and ships **only** those to
   `NextIntlClientProvider` on public pages — the admin vocabulary
   (`product`, `order`, `dashboard`, `reports`, `import`, `settings`,
-  `variant`) would otherwise bloat every customer-facing page's RSC payload
+  `variant`, `discount`) would otherwise bloat every customer-facing page's RSC payload
   for no reason (not a leak — they're field labels, never values — but dead
   weight that grows with every admin feature). `admin/layout.tsx`
   re-provides the full bundle for the admin subtree. Add a namespace to
@@ -165,6 +165,27 @@ reference.
   `originalPrice` snapshotted when the line was added — set only by the
   product picker / checkout, never shown as an input. Cost, profit, and
   reports use the actual; the master is the baseline for the variance.
+- **The price a customer pays is the EFFECTIVE price, and it is computed in
+  exactly one place.** `src/db/queries/pricing.ts#priceColumns` /
+  `effectivePriceSql` derive it in SQL: the product's own discount
+  (`products.discount_*`) if switched on and `now()` is inside its window —
+  it WINS — else the shop-wide % sale (`shop_settings.sale_*`), else
+  `sell_price`; percents round to whole baht, a fixed sale price ≥ regular
+  means no discount. Storefront list/detail, price sort/filter, the Sale
+  filter, checkout, the admin list and the order picker all use it; never
+  read `products.sellPrice` as "the price" on those paths. On public rows
+  `sellPrice` IS the effective price and `regularPrice` the pre-discount one
+  — `regularPrice` is a selling price, NOT `originalPrice` (the private
+  cost). The raw `discountType/Value/Enabled/StartsAt` are never selected
+  publicly (health-check 1c). `src/lib/pricing.ts#effectivePrice` is the TS
+  mirror (preview + tests) — change both together; `npm run smoke` pins the
+  SQL. Order lines snapshot `sellPrice` (charged) and `regularPrice` (only
+  when discounted); checkout rejects a stale cart price as `cart_changed`
+  with the current prices so the cart re-prices. No import/inline edit
+  names the discount columns. Discount check constraints are written
+  null-safe (a CHECK that evaluates to NULL passes). Discount date fields
+  parse a Date OR text, because zodResolver hands parsed values to the
+  server action, which parses again.
 - **Order status `accepted` means PAID.** The enum value was kept (a pg
   enum rename through drizzle-kit is risky); every label says "Paid" /
   "ชำระเงินแล้ว". Don't reintroduce "Accepted" copy.

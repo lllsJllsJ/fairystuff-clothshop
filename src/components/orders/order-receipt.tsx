@@ -81,6 +81,9 @@ export async function OrderReceipt({
                 {item.quantity}
               </td>
               <td className="border-b border-border py-1.5 text-right tabular-nums">
+                {item.regularPrice != null && Number(item.regularPrice) > Number(item.sellPrice) && (
+                  <s className="mr-1 text-muted-foreground">{formatBaht(Number(item.regularPrice))}</s>
+                )}
                 {formatBaht(Number(item.sellPrice))}
               </td>
               <td className="border-b border-border py-1.5 text-right tabular-nums">

@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 import { Link } from "@/i18n/navigation"
 import { formatBaht } from "@/lib/format"
 import type { ProductStatusValue, ProductWithRelations } from "@/db/queries/products"
+import { AdminSaleTag } from "@/components/discount/admin-sale-tag"
 import type { ProductInlineUpdateValues } from "@/lib/validations/product"
 import { deleteProduct, updateProductInline } from "@/app/[locale]/admin/products/actions"
 import { Button } from "@/components/ui/button"
@@ -79,7 +80,7 @@ export function ProductRow({
   visible,
   rowNumber,
 }: {
-  product: ProductWithRelations
+  product: ProductWithRelations & { effectivePrice?: string }
   typeOptions: string[]
   onSaved: () => void
   visible: Set<ProductColumnKey>
@@ -320,6 +321,9 @@ export function ProductRow({
             align: "right",
             ariaLabel: t("product.sellPrice"),
           })}
+          <div className="flex justify-end px-1">
+            <AdminSaleTag regularPrice={product.sellPrice} effectivePrice={product.effectivePrice} />
+          </div>
         </TableCell>
       )}
 

@@ -7,6 +7,7 @@ import { db } from "@/db"
 import { orderItems, orderItemStatuses, orders, products, productVariants } from "@/db/schema"
 import { isUniqueViolation } from "@/lib/db-errors"
 import { getShopSettings } from "@/db/queries/settings"
+import { getActiveShopSale, priceColumns } from "@/db/queries/pricing"
 import { generatePreorderCode } from "@/lib/preorder-code"
 import { checkoutSchema, type CheckoutInput } from "@/lib/validations/checkout"
 import { routing } from "@/i18n/routing"
@@ -20,9 +21,14 @@ import { routing } from "@/i18n/routing"
  * the client's cart snapshot for anything but which items and quantities
  * were requested.
  */
+/** Current public prices per product, sent back with `cart_changed` when a
+ * price moved (a sale started/ended) so the cart can re-price itself. */
+export type CartRepricing = Record<string, { sellPrice: string; regularPrice: string }>
+
 export type CheckoutResult =
   | { ok: true; id: string; orderNo: number; preorderCode: string }
-  | { ok: false; error: "invalid" | "cart_changed" | "contact_missing" | "failed" }
+  | { ok: false; error: "cart_changed"; prices?: CartRepricing }
+  | { ok: false; error: "invalid" | "contact_missing" | "failed" }
 
 /** A 23505 aborts the whole Postgres transaction — see preorder-code.ts's
  * header. The retry re-runs the ENTIRE transaction with a fresh code, never
@@ -49,8 +55,25 @@ export async function submitCheckout(values: CheckoutInput): Promise<CheckoutRes
   if (!settings.lineId && !settings.instagramHandle && !settings.facebookUrl) return { ok: false, error: "contact_missing" }
 
   const productIds = [...new Set(v.items.map((item) => item.productId))]
+  const sale = await getActiveShopSale()
+  // `price` = the EFFECTIVE price (discounts applied) — the only price a
+  // customer is ever charged. See src/db/queries/pricing.ts.
+  const { sellPrice: effectivePrice, regularPrice } = priceColumns(sale)
   const [productRows, variantRows, defaultStatuses] = await Promise.all([
-    db.select().from(products).where(and(inArray(products.id, productIds), eq(products.status, "active"))),
+    db
+      .select({
+        id: products.id,
+        productCode: products.productCode,
+        productName: products.productName,
+        productType: products.productType,
+        originalPrice: products.originalPrice,
+        preorderMinDays: products.preorderMinDays,
+        preorderMaxDays: products.preorderMaxDays,
+        price: effectivePrice,
+        regularPrice,
+      })
+      .from(products)
+      .where(and(inArray(products.id, productIds), eq(products.status, "active"))),
     db.select().from(productVariants).where(inArray(productVariants.productId, productIds)),
     db.select({ code: orderItemStatuses.code }).from(orderItemStatuses).where(eq(orderItemStatuses.isDefault, true)).limit(1),
   ])
@@ -64,9 +87,25 @@ export async function submitCheckout(values: CheckoutInput): Promise<CheckoutRes
     product: (typeof productRows)[number]
     variant: (typeof variantRows)[number] | null
   }> = []
+  const repriced = v.items.filter((item) => {
+    const product = productMap.get(item.productId)
+    return product && Number(product.price) !== Number(item.expectedSellPrice)
+  })
+  if (repriced.length > 0) {
+    return {
+      ok: false,
+      error: "cart_changed",
+      prices: Object.fromEntries(
+        repriced.map((item) => {
+          const product = productMap.get(item.productId)!
+          return [product.id, { sellPrice: product.price, regularPrice: product.regularPrice }]
+        })
+      ),
+    }
+  }
   for (const item of v.items) {
     const product = productMap.get(item.productId)
-    if (!product || Number(product.sellPrice) !== Number(item.expectedSellPrice)) return { ok: false, error: "cart_changed" }
+    if (!product) return { ok: false, error: "cart_changed" }
     const variant = item.productVariantId ? (variantMap.get(item.productVariantId) ?? null) : null
     if (item.productVariantId && (!variant || variant.productId !== product.id)) return { ok: false, error: "cart_changed" }
     // A size the owner switched off after it went into the cart.
@@ -106,7 +145,10 @@ export async function submitCheckout(values: CheckoutInput): Promise<CheckoutRes
           // masterCost is the untouched baseline for that comparison.
           productCost: product.originalPrice,
           masterCost: product.originalPrice,
-          sellPrice: product.sellPrice,
+          // The price actually charged (discount applied), plus the regular
+          // price when it differed — both snapshots, never re-derived.
+          sellPrice: product.price,
+          regularPrice: Number(product.price) < Number(product.regularPrice) ? product.regularPrice : null,
           // Lead-time snapshot (see schema.ts's comment on orderItems) — a
           // later edit to the product's preorder window must never rewrite
           // this order's estimate.

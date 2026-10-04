@@ -7,6 +7,7 @@ import { Shirt } from "lucide-react"
 import { Link } from "@/i18n/navigation"
 import { formatBaht } from "@/lib/format"
 import type { ProductWithRelations } from "@/db/queries/products"
+import { AdminSaleTag } from "@/components/discount/admin-sale-tag"
 import { Badge } from "@/components/ui/badge"
 import {
   AudienceBadge,
@@ -16,7 +17,11 @@ import {
 
 /** Admin card — utilitarian is correct here (plan §12): code, name, cover,
  * cost, price, margin, and availability summary, no editorial styling. */
-export function ProductAdminCard({ product }: { product: ProductWithRelations }) {
+export function ProductAdminCard({
+  product,
+}: {
+  product: ProductWithRelations & { effectivePrice?: string }
+}) {
   const t = useTranslations()
   const cover = product.images[0]
   const margin = Number(product.sellPrice) - Number(product.originalPrice)
@@ -76,6 +81,7 @@ export function ProductAdminCard({ product }: { product: ProductWithRelations })
             <span className="text-body font-bold text-primary">
               {formatBaht(Number(product.sellPrice))}
             </span>
+            <AdminSaleTag regularPrice={product.sellPrice} effectivePrice={product.effectivePrice} className="w-fit" />
             <span className="text-small text-muted-foreground">
               {t("product.margin")}: {formatBaht(margin)}
             </span>

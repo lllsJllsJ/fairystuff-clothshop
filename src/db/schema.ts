@@ -74,6 +74,10 @@ export const productKind = pgEnum("product_kind", ["single", "set", "fullset"])
 
 /** One leg of a preorder's inbound journey: seller -> China warehouse,
  * China -> Thailand (forwarder), then Thailand -> the shop. */
+/** Per-product discount kind: `percent` = X % off sellPrice, `price` = a
+ * fixed sale price. See src/db/queries/pricing.ts for how it is applied. */
+export const productDiscountType = pgEnum("product_discount_type", ["percent", "price"])
+
 export const preorderLeg = pgEnum("preorder_leg", ["cn_cn", "cn_th", "th_th"])
 
 export const customerOrderStage = pgEnum("customer_order_stage", [
@@ -250,6 +254,21 @@ export const products = pgTable(
      * public path — it only orders (queries/storefront.ts).
      */
     displayOrder: integer("display_order"),
+    /**
+     * Per-product discount. Applies only while `discountEnabled` is on and
+     * now() is inside the optional [startsAt, endsAt) window; while it
+     * applies it WINS over the shop-wide sale (shop_settings.sale*). The
+     * effective price is computed ONLY by priceColumns()
+     * (src/db/queries/pricing.ts) — these raw columns are never selected on
+     * a public path. A `price` value >= sellPrice simply means "no discount"
+     * (deliberately not a check constraint, so an import lowering sellPrice
+     * can't fail on it). No import/inline edit names these columns.
+     */
+    discountEnabled: boolean("discount_enabled").notNull().default(false),
+    discountType: productDiscountType("discount_type"),
+    discountValue: numeric("discount_value", { precision: 12, scale: 2 }),
+    discountStartsAt: timestamp("discount_starts_at", { withTimezone: true }),
+    discountEndsAt: timestamp("discount_ends_at", { withTimezone: true }),
     createdBy: uuid("created_by").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -276,6 +295,16 @@ export const products = pgTable(
     check(
       "products_preorder_days_check",
       sql`((${table.preorderMinDays} is null and ${table.preorderMaxDays} is null) or (${table.preorderMinDays} between 1 and 3650 and ${table.preorderMaxDays} between ${table.preorderMinDays} and 3650))`
+    ),
+    check(
+      "products_discount_check",
+      // Null-safe on purpose: a CHECK that evaluates to NULL passes, so
+      // every branch is written to yield a definite true/false.
+      sql`((${table.discountType} is null) = (${table.discountValue} is null) and (${table.discountType} is distinct from 'percent' or ${table.discountValue} between 1 and 90) and (${table.discountType} is distinct from 'price' or ${table.discountValue} > 0))`
+    ),
+    check(
+      "products_discount_window_check",
+      sql`(${table.discountStartsAt} is null or ${table.discountEndsAt} is null or ${table.discountEndsAt} > ${table.discountStartsAt})`
     ),
     // The pg_trgm GIN indexes on productName and productCode need the
     // gin_trgm_ops operator class, which drizzle-kit does not model
@@ -408,7 +437,9 @@ export const customerStatusLabels = pgTable("customer_status_labels", {
   labelEn: text("label_en").notNull(),
 })
 
-export const shopSettings = pgTable("shop_settings", {
+export const shopSettings = pgTable(
+  "shop_settings",
+  {
   id: text("id").primaryKey().default("default"),
   lineId: text("line_id"),
   instagramHandle: text("instagram_handle"),
@@ -440,10 +471,39 @@ export const shopSettings = pgTable("shop_settings", {
     .array()
     .notNull()
     .default(sql`'{}'::text[]`),
+  /**
+   * Shop-wide % sale (Admin -> Settings -> Discount). Applies to every
+   * product while enabled and inside the optional [startsAt, endsAt)
+   * window, unless the product's own discount is running (product wins).
+   */
+  saleEnabled: boolean("sale_enabled").notNull().default(false),
+  salePercent: numeric("sale_percent", { precision: 5, scale: 2 }),
+  saleStartsAt: timestamp("sale_starts_at", { withTimezone: true }),
+  saleEndsAt: timestamp("sale_ends_at", { withTimezone: true }),
+  /** Owner's own sale label (e.g. "11.11 MEGA SALE"), TH/EN like the brand
+   * description. Shown before the discount in the home banner + ticker;
+   * null/blank = the default "SALE" (home.saleBannerDefaultLabel). */
+  saleLabelTh: text("sale_label_th"),
+  saleLabelEn: text("sale_label_en"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-})
+  },
+  (table) => [
+    check(
+      "shop_settings_sale_percent_check",
+      sql`(${table.salePercent} is null or ${table.salePercent} between 1 and 90)`
+    ),
+    check(
+      "shop_settings_sale_label_length_check",
+      sql`(char_length(coalesce(${table.saleLabelTh}, '')) <= 40 and char_length(coalesce(${table.saleLabelEn}, '')) <= 40)`
+    ),
+    check(
+      "shop_settings_sale_window_check",
+      sql`(${table.saleStartsAt} is null or ${table.saleEndsAt} is null or ${table.saleEndsAt} > ${table.saleStartsAt})`
+    ),
+  ]
+)
 
 // ---------------------------------------------------------------------------
 // orders — itemsTotal / itemsCost are trigger-maintained (recalc_order(),
@@ -581,6 +641,10 @@ export const orderItems = pgTable(
     sellPrice: numeric("sell_price", { precision: 12, scale: 2 })
       .notNull()
       .default("0"),
+    /** SNAPSHOT of the regular (pre-discount) selling price — set only when
+     * the line was sold at a discount, null otherwise. `sellPrice` above is
+     * always the price actually charged. Not a cost: public on /track. */
+    regularPrice: numeric("regular_price", { precision: 12, scale: 2 }),
     /**
      * Lead-time SNAPSHOT — copied from `products.preorderMinDays`/
      * `preorderMaxDays` at order-insert time, same principle as

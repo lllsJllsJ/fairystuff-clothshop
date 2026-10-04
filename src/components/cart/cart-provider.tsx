@@ -12,7 +12,10 @@ export type CartItem = {
   productName: string
   color: string | null
   size: string | null
+  /** EFFECTIVE price when added (what checkout expects to charge). */
   sellPrice: string
+  /** Pre-discount price, for the strikethrough; absent on older carts. */
+  regularPrice?: string | null
   imageUrl: string | null
   quantity: number
 }
@@ -25,6 +28,8 @@ type CartContextValue = {
   addItem: (item: Omit<CartItem, "key" | "quantity">, quantity?: number) => void
   updateQuantity: (key: string, quantity: number) => void
   removeItem: (key: string) => void
+  /** Overwrite prices per productId (after checkout reports a change). */
+  reprice: (prices: Record<string, { sellPrice: string; regularPrice: string }>) => void
   clear: () => void
 }
 
@@ -72,7 +77,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         const existing = current.find((row) => row.key === key)
         if (!existing) return [...current, { ...item, key, quantity: clampQuantity(quantity) }]
         return current.map((row) => row.key === key
-          ? { ...row, quantity: clampQuantity(row.quantity + quantity) }
+          // Re-adding refreshes the price fields too, so a sale that started
+          // or ended since the first add doesn't leave a stale price behind.
+          ? { ...row, ...item, quantity: clampQuantity(row.quantity + quantity) }
           : row)
       })
     },
@@ -80,6 +87,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       setItems((current) => current.map((item) => item.key === key
         ? { ...item, quantity: clampQuantity(quantity) }
         : item))
+    },
+    reprice(prices) {
+      setItems((current) => current.map((item) => {
+        const next = prices[item.productId]
+        return next ? { ...item, sellPrice: next.sellPrice, regularPrice: next.regularPrice } : item
+      }))
     },
     removeItem(key) {
       setItems((current) => current.filter((item) => item.key !== key))

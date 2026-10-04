@@ -8,10 +8,15 @@ import { useCart } from "@/components/cart/cart-provider"
 import { Button } from "@/components/ui/button"
 import { Link } from "@/i18n/navigation"
 import { formatBaht } from "@/lib/format"
+import { Price } from "@/components/shop/price"
 
 export function CartPage() {
   const t = useTranslations("cart")
   const cart = useCart()
+  const savings = cart.items.reduce(
+    (sum, item) => sum + Math.max(0, Number(item.regularPrice ?? item.sellPrice) - Number(item.sellPrice)) * item.quantity,
+    0
+  )
 
   if (!cart.hydrated) return <div className="mx-auto max-w-4xl px-4 py-12 text-muted-foreground">{t("loading")}</div>
   if (cart.items.length === 0) return <div className="mx-auto max-w-2xl px-4 py-21 text-center">
@@ -31,7 +36,7 @@ export function CartPage() {
           <div className="min-w-0 flex-1">
             <Link href={`/shop/${item.productCode}`} className="font-bold hover:text-link">{item.productName}</Link>
             <p className="text-small text-muted-foreground">{[item.color, item.size].filter(Boolean).join(" · ") || item.productCode}</p>
-            <p className="mt-1 font-medium text-primary">{formatBaht(Number(item.sellPrice))}</p>
+            <p className="mt-1"><Price value={item.sellPrice} regularPrice={item.regularPrice} /></p>
             <div className="mt-3 flex items-center gap-2">
               <Button size="icon-sm" variant="outline" onClick={() => cart.updateQuantity(item.key, item.quantity - 1)} aria-label={t("decrease")}><Minus /></Button>
               <span className="w-8 text-center tabular-nums">{item.quantity}</span>
@@ -44,6 +49,7 @@ export function CartPage() {
       <aside className="h-fit border border-border bg-card p-5">
         <h2 className="text-subtitle font-bold">{t("summary")}</h2>
         <div className="mt-4 flex justify-between text-body"><span>{t("subtotal")}</span><span className="font-bold">{formatBaht(cart.subtotal)}</span></div>
+        {savings > 0 && <div className="mt-2 flex justify-between text-body font-bold text-sale"><span>{t("youSave")}</span><span>{formatBaht(savings)}</span></div>}
         <p className="mt-3 text-small text-muted-foreground">{t("shippingLater")}</p>
         <Button className="mt-5 w-full" size="lg" render={<Link href="/checkout" />} nativeButton={false}>{t("checkout")}</Button>
       </aside>

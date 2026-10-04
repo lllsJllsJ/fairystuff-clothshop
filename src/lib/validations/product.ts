@@ -2,6 +2,8 @@ import { z } from "zod"
 
 import { MAX_POPULAR_PRODUCTS, PRODUCT_AUDIENCES, PRODUCT_KINDS } from "@/lib/product-taxonomy"
 import { MAX_SIZE_LENGTH } from "@/lib/sizes"
+import { MAX_DISCOUNT_PERCENT, MIN_DISCOUNT_PERCENT } from "@/lib/pricing"
+import { bangkokDateTime, windowOk } from "@/lib/validations/sale"
 
 /**
  * Validation shapes for products, variants, images, and Excel imports.
@@ -79,6 +81,16 @@ const productFormObject = z.object({
   preorderMaxDays: optionalDays,
   characterIds: z.array(z.uuid()).max(30).default([]),
   status: z.enum(["draft", "active", "archived"]).default("active"),
+  // Per-product discount (see src/lib/pricing.ts). A blank value means "no
+  // discount configured"; dates are Bangkok `datetime-local` text.
+  discountEnabled: z.boolean().default(false),
+  discountType: z.enum(["percent", "price"]).default("percent"),
+  discountValue: z.preprocess(
+    (v) => (v === "" || v === null || v === undefined ? undefined : Number(v)),
+    z.number({ message: "invalid" }).min(0, "min").max(10_000_000, "max").optional()
+  ),
+  discountStartsAt: z.preprocess((v) => v ?? null, bangkokDateTime),
+  discountEndsAt: z.preprocess((v) => v ?? null, bangkokDateTime),
   variants: z
     .array(productVariantSchema)
     .max(120)
@@ -114,9 +126,48 @@ function validateTypeForKind(
   }
 }
 
+function validateDiscount(
+  value: {
+    discountEnabled?: boolean
+    discountType?: "percent" | "price"
+    discountValue?: number
+    discountStartsAt: Date | null
+    discountEndsAt: Date | null
+  },
+  context: z.RefinementCtx
+) {
+  const amount = value.discountValue
+  if (amount === undefined) {
+    if (value.discountEnabled) context.addIssue({ code: "custom", path: ["discountValue"], message: "required" })
+  } else if ((value.discountType ?? "percent") === "percent") {
+    if (amount < MIN_DISCOUNT_PERCENT || amount > MAX_DISCOUNT_PERCENT) {
+      context.addIssue({ code: "custom", path: ["discountValue"], message: "percent_range" })
+    }
+  } else if (amount <= 0) {
+    context.addIssue({ code: "custom", path: ["discountValue"], message: "min" })
+  }
+  if (!windowOk({ startsAt: value.discountStartsAt, endsAt: value.discountEndsAt })) {
+    context.addIssue({ code: "custom", path: ["discountEndsAt"], message: "window_order" })
+  }
+}
+
 export const productFormSchema = productFormObject
   .superRefine(validatePreorderRange)
   .superRefine(validateTypeForKind)
+  .superRefine(validateDiscount)
+
+/** The products.discount* column values for a parsed form — type and value
+ * are both null when no discount amount is configured (DB check). */
+export function discountColumns(v: ProductFormParsed) {
+  const hasValue = v.discountValue !== undefined
+  return {
+    discountEnabled: hasValue && v.discountEnabled,
+    discountType: hasValue ? v.discountType : null,
+    discountValue: hasValue ? v.discountValue!.toFixed(2) : null,
+    discountStartsAt: v.discountStartsAt,
+    discountEndsAt: v.discountEndsAt,
+  }
+}
 
 export type ProductFormValues = z.input<typeof productFormSchema>
 export type ProductFormParsed = z.output<typeof productFormSchema>

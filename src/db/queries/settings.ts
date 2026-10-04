@@ -45,6 +45,12 @@ export async function getShopSettings(): Promise<ShopSettings> {
     logoUrl: null,
     logoStorageKey: null,
     heroImageKeys: [],
+    saleEnabled: false,
+    salePercent: null,
+    saleStartsAt: null,
+    saleEndsAt: null,
+    saleLabelTh: null,
+    saleLabelEn: null,
     updatedAt: new Date(0),
   }
   try {
@@ -62,6 +68,15 @@ export async function getShopSettings(): Promise<ShopSettings> {
     console.warn("[settings] shop settings unavailable during build")
     return fallback
   }
+}
+
+/** The owner's sale label for a locale, or null for the default "SALE". */
+export function resolvedSaleLabel(
+  settings: Pick<ShopSettings, "saleLabelTh" | "saleLabelEn">,
+  locale: string
+): string | null {
+  const label = (locale === "en" ? settings.saleLabelEn : settings.saleLabelTh)?.trim()
+  return label || null
 }
 
 export function contactLinks(settings: Pick<ShopSettings, "lineId" | "instagramHandle" | "facebookUrl">) {
@@ -108,10 +123,10 @@ export function resolvedBrandDescription(
  *
  * A SEPARATE exported function rather than a new field on `contactLinks`'s
  * return object on purpose — that object's shape is also consumed by
- * `src/components/shop/contact-cta.tsx` and `src/components/shop/
- * site-footer.tsx`, which only ever use `lineUrl` as a plain `href` (no
- * message to prefill there) and render `settings.lineId` as the visible
- * label. Widening `contactLinks` would touch both call sites for no reason.
+ * `src/components/shop/contact-cta.tsx` (the footer's contact band), which
+ * only ever uses `lineUrl` as a plain `href` (no message to prefill there)
+ * and renders `settings.lineId` as the visible label. Widening
+ * `contactLinks` would touch that call site for no reason.
  *
  * KNOWN LIMITATION: this URL scheme is unsupported in LINE for PC — on
  * desktop it resolves to a profile/QR page and the prefill is silently

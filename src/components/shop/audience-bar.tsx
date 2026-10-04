@@ -1,7 +1,7 @@
 "use client"
 
 import { useTranslations } from "next-intl"
-import { Layers } from "lucide-react"
+import { Layers, Tag } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -9,7 +9,7 @@ export type AudienceFilter = "" | "adult" | "kids"
 
 /**
  * The storefront's primary split: All / Adults / Kids as big tabs, plus a
- * "Sets & full sets" toggle. Lives above the grid rather than in the
+ * "Sets & full sets" toggle and a "Sale" toggle (discounted items only). Lives above the grid rather than in the
  * sidebar because who a product is for is the first question a parent
  * shopping for a child asks — it shouldn't hide behind a Filters button on
  * a phone.
@@ -19,11 +19,15 @@ export function AudienceBar({
   onAudienceChange,
   setsOnly,
   onSetsOnlyChange,
+  saleOnly,
+  onSaleOnlyChange,
 }: {
   audience: AudienceFilter
   onAudienceChange: (value: AudienceFilter) => void
   setsOnly: boolean
   onSetsOnlyChange: (value: boolean) => void
+  saleOnly: boolean
+  onSaleOnlyChange: (value: boolean) => void
 }) {
   const t = useTranslations("shop")
   const tabs: { value: AudienceFilter; label: string }[] = [
@@ -74,6 +78,21 @@ export function AudienceBar({
       >
         <Layers className="size-4" aria-hidden />
         {t("setsOnly")}
+      </button>
+
+      <button
+        type="button"
+        aria-pressed={saleOnly}
+        onClick={() => onSaleOnlyChange(!saleOnly)}
+        className={cn(
+          "inline-flex min-h-10 items-center gap-1.5 rounded-full border px-4 text-body transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sale",
+          saleOnly
+            ? "border-sale bg-sale font-bold text-sale-foreground"
+            : "border-[var(--border-lighter)] bg-card text-sale hover:border-sale"
+        )}
+      >
+        <Tag className="size-4" aria-hidden />
+        {t("saleOnly")}
       </button>
     </div>
   )

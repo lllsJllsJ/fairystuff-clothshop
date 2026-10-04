@@ -1,86 +1,89 @@
 import { getTranslations } from "next-intl/server"
-import { MessageCircle, Camera, ExternalLink } from "lucide-react"
+import { ArrowUpRight, MessageCircle } from "lucide-react"
 
-import {
-  CONTACT_COPY_EN,
-  CONTACT_COPY_TH,
-} from "@/lib/brand"
-import { contactLinks, getShopSettings } from "@/db/queries/settings"
-import { Button } from "@/components/ui/button"
+import { CONTACT_COPY_EN, CONTACT_COPY_TH } from "@/lib/brand"
+import { contactLinks, type ShopSettings } from "@/db/queries/settings"
+import { ChannelBadge, type ContactChannel } from "@/components/shop/social-icons"
+
+type ChannelCard = { channel: ContactChannel; href: string; name: string; detail: string }
 
 /**
- * Contact surface backed by owner-managed shop settings. Checkout uses the
- * same contacts when asking customers to send their generated order number.
+ * The storefront's ONE contact surface: a pink band at the top of the
+ * footer (so it closes every storefront page) with one card per configured
+ * channel showing its real handle. Deliberately the only place the channel
+ * logos appear — the footer below it carries no second set. Renders nothing
+ * when the owner hasn't configured any channel (Settings -> Storefront).
  */
-export async function ContactCta({
-  locale,
-  className,
-  variant = "section",
-}: {
-  locale: string
-  className?: string
-  variant?: "section" | "inline"
-}) {
-  const [t, settings] = await Promise.all([getTranslations(), getShopSettings()])
+export async function ContactBand({ settings, locale }: { settings: ShopSettings; locale: string }) {
+  const t = await getTranslations("shop")
   const links = contactLinks(settings)
   const copy = locale === "th" ? CONTACT_COPY_TH : CONTACT_COPY_EN
-  if (!links.lineUrl && !links.instagramUrl && !links.facebookUrl) return null
 
-  if (variant === "inline") {
-    return (
-      <div className={className}>
-        <p className="mb-3 text-body text-foreground">{copy}</p>
-        <div className="flex flex-wrap gap-3">
-          <ContactButtons {...links} />
-        </div>
-      </div>
-    )
-  }
+  const channels: ChannelCard[] = [
+    links.lineUrl
+      ? { channel: "line" as const, href: links.lineUrl, name: "LINE", detail: settings.lineId?.trim() ?? "" }
+      : null,
+    links.instagramUrl
+      ? {
+          channel: "instagram" as const,
+          href: links.instagramUrl,
+          name: "Instagram",
+          detail: `@${settings.instagramHandle?.trim().replace(/^@/, "") ?? ""}`,
+        }
+      : null,
+    links.facebookUrl
+      ? { channel: "facebook" as const, href: links.facebookUrl, name: "Facebook", detail: t("contactFacebookDetail") }
+      : null,
+  ].filter((channel) => channel !== null)
+
+  if (channels.length === 0) return null
+
+  // Literal class names so Tailwind can see them.
+  const columns = channels.length === 3 ? "sm:grid-cols-3" : channels.length === 2 ? "sm:grid-cols-2" : ""
 
   return (
-    <section className={className} aria-labelledby="contact-cta-heading">
-      <div className="mx-auto flex max-w-[1440px] flex-col items-center gap-4 px-4 py-17 text-center sm:px-6 lg:px-8">
-        <h2 id="contact-cta-heading" className="text-h2 font-bold text-foreground">
-          {t("shop.contactToOrder")}
-        </h2>
-        <p className="max-w-md text-body text-muted-foreground">{copy}</p>
-        <div className="flex flex-wrap justify-center gap-3 pt-2">
-          <ContactButtons {...links} />
+    <section
+      aria-labelledby="contact-band-heading"
+      className="relative isolate overflow-hidden bg-primary text-primary-foreground"
+    >
+      <span aria-hidden className="absolute -top-24 -left-24 -z-10 size-72 rounded-full bg-white/10" />
+      <span aria-hidden className="absolute -right-16 -bottom-32 -z-10 size-80 rounded-full bg-white/10" />
+
+      <div className="mx-auto grid max-w-[1440px] gap-8 px-4 py-14 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] lg:items-center lg:gap-12 lg:px-8">
+        <div className="flex flex-col items-start gap-3">
+          <span className="inline-flex items-center gap-2 bg-white/15 px-3 py-1 text-small font-bold">
+            <MessageCircle className="size-4" aria-hidden />
+            {t("contactEyebrow")}
+          </span>
+          <h2 id="contact-band-heading" className="text-h3 font-bold lg:text-h2">
+            {t("contactToOrder")}
+          </h2>
+          <p className="max-w-md text-body text-white">{copy}</p>
         </div>
+
+        <ul className={`grid gap-3 ${columns}`}>
+          {channels.map((channel) => (
+            <li key={channel.channel}>
+              <a
+                href={channel.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group relative flex h-full items-center gap-4 bg-card p-4 text-card-foreground shadow-[var(--shadow-raised-sm)] transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow-raised-lg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:flex-col sm:items-start sm:gap-3 sm:p-5"
+                style={{ borderRadius: "var(--radius-promo)" }}
+              >
+                <ChannelBadge channel={channel.channel} className="size-11" />
+                <span className="flex min-w-0 flex-1 flex-col sm:w-full">
+                  <span className="text-subtitle font-bold">{channel.name}</span>
+                  <span className="truncate text-small text-muted-foreground">{channel.detail}</span>
+                </span>
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground sm:absolute sm:top-4 sm:right-4">
+                  <ArrowUpRight className="size-4" aria-hidden />
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
-  )
-}
-
-function ContactButtons({ lineUrl, instagramUrl, facebookUrl }: { lineUrl: string | null; instagramUrl: string | null; facebookUrl: string | null }) {
-  return (
-    <>
-      {lineUrl && <Button
-        size="lg"
-        nativeButton={false}
-        render={<a href={lineUrl} target="_blank" rel="noopener noreferrer" />}
-      >
-        <MessageCircle />
-        LINE
-      </Button>}
-      {instagramUrl && <Button
-        size="lg"
-        variant="outline"
-        nativeButton={false}
-        render={<a href={instagramUrl} target="_blank" rel="noopener noreferrer" />}
-      >
-        <Camera />
-        Instagram
-      </Button>}
-      {facebookUrl && <Button
-        size="lg"
-        variant="outline"
-        nativeButton={false}
-        render={<a href={facebookUrl} target="_blank" rel="noopener noreferrer" />}
-      >
-        <ExternalLink />
-        Facebook
-      </Button>}
-    </>
   )
 }

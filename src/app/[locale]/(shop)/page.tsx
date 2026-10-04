@@ -8,12 +8,14 @@ import {
   type PublicProductListResult,
   type PublicCharacterFacet,
 } from "@/db/queries/storefront"
-import { getShopSettings, resolvedBrandDescription, resolvedBrandName } from "@/db/queries/settings"
+import { getShopSettings, resolvedBrandDescription, resolvedBrandName, resolvedSaleLabel } from "@/db/queries/settings"
 import { Hero } from "@/components/shop/hero"
+import { SaleBanner } from "@/components/shop/sale-banner"
+import { StorySection } from "@/components/shop/story-section"
+import { activeShopSale } from "@/lib/pricing"
 import { ProductGrid } from "@/components/shop/product-grid"
 import { CollectionStrip } from "@/components/shop/collection-strip"
 import { QuickFilterRail } from "@/components/shop/quick-filter-rail"
-import { ContactCta } from "@/components/shop/contact-cta"
 import { AudienceEntry } from "@/components/shop/audience-entry"
 import { Link } from "@/i18n/navigation"
 import { heroImageUrl, isHeroImageKey } from "@/lib/brand-image-keys"
@@ -109,13 +111,16 @@ export default async function HomePage({
   // Hand-picked in Settings -> Storefront. Nothing picked (or the database
   // unreachable during a build) means no section at all, not an empty grid.
   const hasPopular = popular.rows.length > 0
+  const shopSale = activeShopSale(settings)
+  const heroImages = settings.heroImageKeys.filter(isHeroImageKey).map(heroImageUrl)
 
   return (
     <>
+      {shopSale && <SaleBanner sale={shopSale} locale={locale} label={resolvedSaleLabel(settings, locale)} />}
       <Hero
         brandName={resolvedBrandName(settings)}
         tagline={resolvedBrandDescription(settings, locale)}
-        images={settings.heroImageKeys.filter(isHeroImageKey).map(heroImageUrl)}
+        images={heroImages}
       />
 
       {hasPopular && (
@@ -179,24 +184,12 @@ export default async function HomePage({
 
       <CollectionStrip characters={characters} />
 
-      <section aria-labelledby="story-heading" className="bg-muted">
-        <div className="mx-auto max-w-[1440px] px-4 py-17 text-center sm:px-6 lg:px-8">
-          <h2 id="story-heading" className="text-h2 font-bold text-foreground">
-            {t("home.storyTitle")}
-          </h2>
-          <p className="mx-auto mt-3 max-w-xl text-body text-muted-foreground">
-            {t("home.storySubtitle")}
-          </p>
-          <Link
-            href="/about"
-            className="mt-4 inline-block text-link hover:text-link-hover hover:underline"
-          >
-            {t("home.storyCta")}
-          </Link>
-        </div>
-      </section>
-
-      <ContactCta locale={locale} />
+      <StorySection
+        locale={locale}
+        brandName={resolvedBrandName(settings)}
+        tagline={resolvedBrandDescription(settings, locale)}
+        imageUrl={heroImages[1] ?? heroImages[0] ?? null}
+      />
     </>
   )
 }

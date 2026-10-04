@@ -28,6 +28,10 @@
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
+  --color-sale: var(--sale);
+  --color-sale-foreground: var(--sale-foreground);
+  --color-sale-soft: var(--sale-soft);
+  --color-sale-deep: var(--sale-deep);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
   --color-link: var(--link);
@@ -139,6 +143,24 @@
   /* Feedback */
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
+  /* Discount pricing — a hot red that reads as "deal" and stays distinct
+     from the pink brand primary (sale price, -% badges, sale banner). */
+  --sale: #d7262e;
+  --sale-foreground: #ffffff;
+  --sale-soft: #fdecec;
+  --sale-deep: #a8161d; /* sale banner ticker strip */
+
+  /* Contact channels — their own brand colours, so each is recognisable
+     at a glance (contact section + footer). */
+  --brand-line: #06c755;
+  --brand-facebook: #1877f2;
+  --brand-instagram: radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285aeb 90%);
+
+  /* Footer — steps down from Brand Fuchsia (the contact band) through two
+     deeper pinks, so the page ends in brand colour, never a grey surface.
+     White text on each (≥ 4:1). */
+  --footer-bg: #d93f6b;
+  --footer-bar: #bf3460;
   --warning: #fdc500;
   --warning-foreground: #333333;
 
@@ -239,5 +261,24 @@
   .print-container {
     padding: 0;
     margin: 0;
+  }
+}
+
+/* Home sale banner ticker: two identical halves, scrolled by -50% for a
+   seamless loop. Transform-only (compositor), and static when the visitor
+   asks for reduced motion. */
+@keyframes sale-marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.sale-marquee {
+  animation: sale-marquee 40s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sale-marquee {
+    animation: none;
   }
 }

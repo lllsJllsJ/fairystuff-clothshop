@@ -21,70 +21,74 @@
 14. [Filter + Sort — URL Sync](#filter--sort--url-sync)
 15. [Local Cart](#local-cart)
 16. [Checkout + Order Creation](#checkout--order-creation)
-17. [Preorder Code Generation](#preorder-code-generation)
-18. [Preorder-Code Contact Handoff](#preorder-code-contact-handoff)
-19. [Public Preorder Tracking](#public-preorder-tracking)
-20. [Preorder Code Lookup](#preorder-code-lookup)
-21. [Sitemap](#sitemap)
-22. [Robots](#robots)
-23. [404 — Draft/Archived/Unknown Product Code](#404--draftarchivedunknown-product-code)
-24. [`GET /api/images/[...key]` — Private Bucket Read](#get-apiimageskey--private-bucket-read)
+17. [Checkout — Re-pricing After a Sale Starts or Ends](#checkout--re-pricing-after-a-sale-starts-or-ends)
+18. [Preorder Code Generation](#preorder-code-generation)
+19. [Preorder-Code Contact Handoff](#preorder-code-contact-handoff)
+20. [Public Preorder Tracking](#public-preorder-tracking)
+21. [Preorder Code Lookup](#preorder-code-lookup)
+22. [Sitemap](#sitemap)
+23. [Robots](#robots)
+24. [404 — Draft/Archived/Unknown Product Code](#404--draftarchivedunknown-product-code)
+25. [`GET /api/images/[...key]` — Private Bucket Read](#get-apiimageskey--private-bucket-read)
 
 **Admin**
-25. [Admin Dashboard](#admin-dashboard)
-26. [Product Browse](#product-browse)
-27. [Image Upload — Resize → Presign → Bucket PUT](#image-upload--resize--presign--bucket-put)
-28. [Create Product](#create-product)
-29. [Product Code Generation](#product-code-generation)
-30. [Edit Product + Cover Reorder](#edit-product--cover-reorder)
-31. [Inline Table Edit](#inline-table-edit)
-32. [Delete Product](#delete-product)
-33. [Variant Rows Save](#variant-rows-save)
-34. [Excel Import — Parse → Preview → Commit](#excel-import--parse--preview--commit)
-35. [Product Export](#product-export)
-36. [Arrange Storefront Order](#arrange-storefront-order)
-37. [Orders List](#orders-list)
-38. [Preorder Fulfillment — Mark as Paid, Item Status, Preorder Shipments](#preorder-fulfillment--mark-as-paid-item-status-preorder-shipments)
-39. [Create Order](#create-order)
-40. [Edit Order](#edit-order)
-41. [Quick Order Status Change](#quick-order-status-change)
-42. [Line-Item Fulfillment + Partial Refund](#line-item-fulfillment--partial-refund)
-43. [Full Order Refund](#full-order-refund)
-44. [Print Order Receipt](#print-order-receipt)
-45. [Delete Order](#delete-order)
-46. [Reports — View + Excel Export + Print](#reports--view--excel-export--print)
-47. [Settings — Sub-menu Navigation](#settings--sub-menu-navigation)
-48. [Settings — Create Product Type](#settings--create-product-type)
-49. [Settings — Rename Product Type (Cascade)](#settings--rename-product-type-cascade)
-50. [Settings — Delete Product Type (Blocked When In Use)](#settings--delete-product-type-blocked-when-in-use)
-51. [Settings — Reorder Product Types](#settings--reorder-product-types)
-52. [Settings — Clear Shop Data](#settings--clear-shop-data)
-53. [Settings — Shop Contacts](#settings--shop-contacts)
-54. [Settings — Brand](#settings--brand)
-55. [Settings — Home Hero Photos (Carousel)](#settings--home-hero-photos-carousel)
-56. [Settings — Popular Products](#settings--popular-products)
-57. [Settings — Character Taxonomy](#settings--character-taxonomy)
-58. [Settings — Colour Palette](#settings--colour-palette)
-59. [Settings — Order Status Labels](#settings--order-status-labels)
-60. [Settings — Line-Item Status Lifecycle](#settings--line-item-status-lifecycle)
-61. [Users — List + Filter](#users--list--filter)
-62. [Users — Change Role](#users--change-role)
-63. [Users — Delete Account](#users--delete-account)
-64. [Users — Mark Email Verified](#users--mark-email-verified)
-65. [Users — Send Password Reset](#users--send-password-reset)
+26. [Admin Dashboard](#admin-dashboard)
+27. [Product Browse](#product-browse)
+28. [Image Upload — Resize → Presign → Bucket PUT](#image-upload--resize--presign--bucket-put)
+29. [Create Product](#create-product)
+30. [Product Code Generation](#product-code-generation)
+31. [Edit Product + Cover Reorder](#edit-product--cover-reorder)
+32. [Inline Table Edit](#inline-table-edit)
+33. [Delete Product](#delete-product)
+34. [Variant Rows Save](#variant-rows-save)
+35. [Excel Import — Parse → Preview → Commit](#excel-import--parse--preview--commit)
+36. [Product Export](#product-export)
+37. [Arrange Storefront Order](#arrange-storefront-order)
+38. [Orders List](#orders-list)
+39. [Preorder Fulfillment — Mark as Paid, Item Status, Preorder Shipments](#preorder-fulfillment--mark-as-paid-item-status-preorder-shipments)
+40. [Create Order](#create-order)
+41. [Edit Order](#edit-order)
+42. [Quick Order Status Change](#quick-order-status-change)
+43. [Line-Item Fulfillment + Partial Refund](#line-item-fulfillment--partial-refund)
+44. [Full Order Refund](#full-order-refund)
+45. [Print Order Receipt](#print-order-receipt)
+46. [Delete Order](#delete-order)
+47. [Reports — View + Excel Export + Print](#reports--view--excel-export--print)
+48. [Settings — Sub-menu Navigation](#settings--sub-menu-navigation)
+49. [Settings — Create Product Type](#settings--create-product-type)
+50. [Settings — Rename Product Type (Cascade)](#settings--rename-product-type-cascade)
+51. [Settings — Delete Product Type (Blocked When In Use)](#settings--delete-product-type-blocked-when-in-use)
+52. [Settings — Reorder Product Types](#settings--reorder-product-types)
+53. [Settings — Clear Shop Data](#settings--clear-shop-data)
+54. [Settings — Shop Contacts](#settings--shop-contacts)
+55. [Settings — Brand](#settings--brand)
+56. [Settings — Home Hero Photos (Carousel)](#settings--home-hero-photos-carousel)
+57. [Settings — Popular Products](#settings--popular-products)
+58. [Settings — Shop-wide Discount](#settings--shop-wide-discount)
+59. [Product Discount (Product Editor)](#product-discount-product-editor)
+60. [Settings — Character Taxonomy](#settings--character-taxonomy)
+61. [Settings — Colour Palette](#settings--colour-palette)
+62. [Settings — Order Status Labels](#settings--order-status-labels)
+63. [Settings — Line-Item Status Lifecycle](#settings--line-item-status-lifecycle)
+64. [Users — List + Filter](#users--list--filter)
+65. [Users — Change Role](#users--change-role)
+66. [Users — Delete Account](#users--delete-account)
+67. [Users — Mark Email Verified](#users--mark-email-verified)
+68. [Users — Send Password Reset](#users--send-password-reset)
 
 **Catalogue CLI**
-66. [Catalogue Prepare — Workbook Extraction](#catalogue-prepare--workbook-extraction)
-67. [Catalogue Prepare — Supplier Enrichment + Workbook Fallback](#catalogue-prepare--supplier-enrichment--workbook-fallback)
-68. [Catalogue Verify + Import Dry Run](#catalogue-verify--import-dry-run)
-69. [Catalogue Apply — Storage Staging](#catalogue-apply--storage-staging)
-70. [Catalogue Apply — Transactional Replacement](#catalogue-apply--transactional-replacement)
-71. [Catalogue Apply — Rollback + Object Cleanup](#catalogue-apply--rollback--object-cleanup)
+69. [Catalogue Prepare — Workbook Extraction](#catalogue-prepare--workbook-extraction)
+70. [Catalogue Prepare — Supplier Enrichment + Workbook Fallback](#catalogue-prepare--supplier-enrichment--workbook-fallback)
+71. [Catalogue Verify + Import Dry Run](#catalogue-verify--import-dry-run)
+72. [Catalogue Apply — Storage Staging](#catalogue-apply--storage-staging)
+73. [Catalogue Apply — Transactional Replacement](#catalogue-apply--transactional-replacement)
+74. [Catalogue Apply — Rollback + Object Cleanup](#catalogue-apply--rollback--object-cleanup)
 
 **Cross-cutting**
-72. [Storefront Revalidation After a Product Mutation](#storefront-revalidation-after-a-product-mutation)
-73. [Unauthorized / Forbidden Denial Paths](#unauthorized--forbidden-denial-paths)
-74. [Transaction Rollback on Mid-Write Failure](#transaction-rollback-on-mid-write-failure)
+75. [Discount Pricing — Effective Price Resolution](#discount-pricing--effective-price-resolution)
+76. [Storefront Revalidation After a Product Mutation](#storefront-revalidation-after-a-product-mutation)
+77. [Unauthorized / Forbidden Denial Paths](#unauthorized--forbidden-denial-paths)
+78. [Transaction Rollback on Mid-Write Failure](#transaction-rollback-on-mid-write-failure)
 
 ---
 
@@ -273,8 +277,15 @@ locales at build time (`generateStaticParams`), revalidates every 300s.
                 cache updated, served
 ```
 
-Section order: Hero → **Popular** → audience entry → **Featured** →
-collections → story → contact. The Featured grid is the first six products in
+Section order: (SALE banner, while a shop-wide sale runs) → Hero →
+**Popular** → audience entry → **Featured** → collections → story
+(`StorySection`: a hero photo — the 2nd if there are several, else the 1st,
+else a colour-block mark — beside the brand tagline + "Read our story", then
+three "why shop here" points), then the `SiteFooter` every storefront page
+shares — all brand pink, no grey surface: the contact band (`ContactBand`,
+one card per configured channel showing its handle — the ONLY place the
+channel logos appear), a deeper-pink strip with the brand and Shop / Help
+links, and the copyright bar. The Featured grid is the first six products in
 the owner-arranged `recommended` order (see
 [Arrange Storefront Order](#arrange-storefront-order)) — the same order `/shop`
 lists by default, so with nothing arranged it is simply the six newest. A tile
@@ -1973,6 +1984,40 @@ logged but cannot undo a committed database replacement. Product edit,
 delete, and Settings clear use the same three-sibling cleanup helper, so
 narrow renditions are no longer orphaned.
 
+## Discount Pricing — Effective Price Resolution
+
+Every read that shows or charges a price — storefront list/detail, the Sale
+filter, price sort and min/max filter, checkout, the admin product list and
+order picker — derives it from `src/db/queries/pricing.ts`.
+
+```
+getActiveShopSale()  (shop_settings, window checked in TS)
+        │ { percent, endsAt } | null  -> inlined as a SQL parameter
+        ▼
+priceColumns(sale) / effectivePriceSql(sale):
+  product discount on AND now() in [starts, ends)?
+     yes ─▶ percent: round(sell_price × (100 − v) / 100)
+            price:   least(v, sell_price)              (product WINS)
+     no  ─▶ shop sale running? ─▶ round(sell_price × (100 − pct) / 100)
+                         no   ─▶ sell_price
+        │
+        ▼
+public row: sellPrice (effective) · regularPrice · discountEndsAt
+        │
+        ├─▶ tiles/detail: red price, struck regular, "-N%", "You save",
+        │                 countdown; JSON-LD price + priceValidUntil
+        ├─▶ cart line stores both -> checkout compares effective price
+        └─▶ order line snapshots sellPrice (charged) + regularPrice
+                └─▶ reports: revenue/profit from sellPrice;
+                    "Discounts given" = Σ (regular − sell) × qty
+```
+
+Failure: the shop sale lookup goes through `getShopSettings()`, which falls
+back to "no sale" during a database-less build, so prerendering never bakes a
+discount in. Raw discount config never leaves the server (standing leak test
+1c in `docs/health-check.md`). `src/lib/pricing.ts#effectivePrice` is the TS
+mirror, pinned by `src/lib/pricing.test.ts` and `npm run smoke`.
+
 ## Storefront Revalidation After a Product Mutation
 
 Cross-cutting — not its own entry point, but a required side effect of
@@ -2191,8 +2236,12 @@ Guest -> fill first/last name, phone, address, note + local cart -> checkoutSche
               LINE/Instagram/Facebook configured?
                               | no -> contact_missing
                               v
-     reload active products + variants; compare ids and current prices
-                         | changed -> cart_changed
+     reload active products + variants with their EFFECTIVE price
+     (priceColumns — shop sale / product discount applied); compare to the
+     cart's expectedSellPrice
+                         | price moved -> cart_changed + current prices
+                         | (see Checkout — Re-pricing below)
+                         | other change -> cart_changed
                          v
      idempotency check: SELECT orders WHERE checkout_key = key
                          | found (retry of a completed checkout) -> return it
@@ -2201,7 +2250,9 @@ Guest -> fill first/last name, phone, address, note + local cart -> checkoutSche
                          |
                          v
  transaction: INSERT order(status=new, preorderCode, checkoutKey)
-              INSERT snapshot line items(status=default configured status)
+              INSERT snapshot line items(status=default configured status,
+                     sellPrice = effective price charged,
+                     regularPrice = pre-discount price when discounted)
                          |
               23505 on preorderCode unique index? --yes--> retry with a NEW
                          |                                  code, whole tx
@@ -2221,6 +2272,33 @@ from the customer total until the owner confirms it. `admin/orders/
 actions.ts#createOrder` mints a `preorderCode` through the identical
 generate-and-retry loop, so an order the owner types in by hand from a phone
 call is trackable at the same URL.
+
+## Checkout — Re-pricing After a Sale Starts or Ends
+
+A cart stores the price shown when the item was added. If a discount starts,
+ends, or is edited before the customer checks out, the server's effective
+price no longer matches, and the customer must see the new total before
+anything is charged.
+
+```
+Guest ── Place preorder ──▶ submitCheckout
+                                │ effective price != expectedSellPrice
+                                ▼
+            { ok:false, error:"cart_changed",
+              prices: { <productId>: { sellPrice, regularPrice } } }
+                                │  (public prices only — no cost fields)
+                                ▼
+CheckoutForm: cart.reprice(prices) -> summary shows the new strikethrough /
+              total + "Some prices changed…" -> customer presses again
+                                │
+                                ▼
+                    normal Checkout + Order Creation
+```
+
+Failure: nothing is written on the first attempt. A product that went
+inactive (or a switched-off size) still returns plain `cart_changed` with no
+prices, as before. Cached storefront pages can show a scheduled start/end up
+to one ISR window (300s) late; this path is what keeps that harmless.
 
 ## Preorder Code Generation
 
@@ -2362,8 +2440,8 @@ render: success banner (if ?new=1) + header (order label + code + date) +
 
 Contact handoff is **LINE only** on this page — `ContactAdminButton` — even
 though the shop may also have Instagram/Facebook configured (those still
-appear on `contact-cta.tsx`/`site-footer.tsx` elsewhere; this route was
-narrowed deliberately so the tracking page has one unambiguous path back to
+appear in the site footer's contact band, `contact-cta.tsx`, below every
+storefront page; this page's own call to action was narrowed deliberately so the tracking page has one unambiguous path back to
 a human, not three).
 
 Lead-time (`preorderMinDays`/`preorderMaxDays`) is a SNAPSHOT, copied from
@@ -2622,6 +2700,73 @@ catalogue CLI's transactional replacement, both of which delete every product.
 Product create/edit/inline-edit and the Excel import never write
 `popular_rank`. Tiles in other products' "related products" grids
 pick up a changed badge within the 300s ISR window.
+
+## Settings — Shop-wide Discount
+
+`/admin/settings/discount` → `SaleSettings`. One % off every product, with an
+on/off switch and an optional start/end (`datetime-local`, read as Bangkok
+time), plus an optional TH/EN **sale label** (≤ 40 chars, e.g. "11.11 MEGA
+SALE") that replaces the default "SALE" in the home banner and its ticker and
+leads the headline as a tag. Stored on `shop_settings.sale_*` /
+`sale_label_th` / `sale_label_en`.
+
+```
+┌────────┐ toggle / % (or 10·15·20·30·50 chips) / start / end
+│ Owner  │ ── live status pill: Running / Scheduled / Ended / Off
+└────────┘ ── preview "฿1,000 → ฿800"
+    │ Save
+    ▼
+saveShopSale({ enabled, percent, startsAt, endsAt, labelTh, labelEn })
+    │ isOwner() re-check ──fail──▶ "forbidden"
+    │ zod (shopSaleSchema): percent 1–90, required when enabled,
+    │   end after start, dates parse as +07:00, labels ≤ 40 chars
+    │   (blank -> null = default "SALE") ──fail──▶ error code
+    ▼
+UPSERT shop_settings(id='default') SET sale_* (+ DB check constraints)
+    │
+    ▼
+revalidateSettings() -> "/", "/shop", product pages, admin in both locales
+    │
+    ▼
+Storefront: every price re-derived (Discount Pricing), SALE banner on "/"
+            while running, Sale toggle on /shop matches everything
+```
+
+Failure: a rejected save shows the mapped error under the dates and a toast;
+nothing is written. A scheduled start/end needs no job — prices are derived
+from `now()` on each render, so it takes effect on the next ISR refresh
+(≤ 300s) and immediately at checkout.
+
+## Product Discount (Product Editor)
+
+The "Discount" section of the create/edit product form: on/off, **% off** or a
+**fixed sale price**, optional Bangkok-time window. While it runs it **wins**
+over the shop-wide sale. Written by `createProduct`/`updateProduct` via
+`discountColumns()`; inline edit, Excel import and the catalogue CLI never
+name these columns, so a re-import keeps the discount.
+
+```
+Owner edits Discount section ──▶ live preview "฿590 → ฿399 (-32%)"
+    │                              warns when sale price ≥ regular
+    │ Save (same submit as the rest of the product)
+    ▼
+productFormSchema (client)  ──invalid──▶ field errors
+    │  zodResolver hands PARSED values (Dates) to the action
+    ▼
+createProduct / updateProduct
+    │ isOwner() re-check; productFormSchema again (date fields accept a
+    │ Date or text, so the second parse is idempotent)
+    ▼
+UPDATE products SET discount_enabled/type/value/starts_at/ends_at
+    │  (type+value both null when no amount; null-safe check constraint)
+    ▼
+revalidateStorefront() -> product page, "/", "/shop" in both locales
+```
+
+Failure: a value outside 1–90% / ≤ 0, a missing value while switched on, or
+an end before the start fails validation and nothing is written. Admin
+product cards/rows show a "Sale ฿… · -N%" tag while a discount (product or
+shop-wide) is running.
 
 ## Settings — Colour Palette
 

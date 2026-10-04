@@ -29,7 +29,10 @@ export function ProductJsonLd({
       "@type": "Offer",
       url,
       priceCurrency: currency,
+      // The price a customer pays right now (discount applied), valid until
+      // the discount's end when it has one.
       price: Number(product.sellPrice).toFixed(2),
+      priceValidUntil: product.discountEndsAt ? product.discountEndsAt.slice(0, 10) : undefined,
       availability:
         product.variants.length === 0 || product.variants.some((v) => v.isAvailable)
           ? "https://schema.org/PreOrder"

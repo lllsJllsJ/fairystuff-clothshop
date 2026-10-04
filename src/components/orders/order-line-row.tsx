@@ -13,6 +13,7 @@ import { AlertTriangle, Loader2, Search, Trash2, X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { formatBaht } from "@/lib/format"
+import { percentOff } from "@/lib/pricing"
 import { costVariance, formatVariance } from "@/lib/cost-variance"
 import type { OrderFormValues } from "@/lib/validations/order"
 import type { ProductListResult, ProductWithRelations } from "@/db/queries/products"
@@ -111,6 +112,7 @@ export function OrderLineRow({
   const color = watch(`items.${index}.color`) || ""
   const size = watch(`items.${index}.size`) || ""
   const sellPrice = watch(`items.${index}.sellPrice`)
+  const regularPrice = watch(`items.${index}.regularPrice`)
   const quantity = watch(`items.${index}.quantity`)
   const lineTotal = Number(sellPrice || 0) * Number(quantity || 0)
   const actualCost = Number(watch(`items.${index}.productCost`) || 0)
@@ -140,7 +142,7 @@ export function OrderLineRow({
     placeholderData: (prev) => prev,
   })
 
-  function selectProduct(product: ProductWithRelations) {
+  function selectProduct(product: ProductWithRelations & { effectivePrice?: string }) {
     setValue(`items.${index}.productId`, product.id, { shouldValidate: true })
     setValue(`items.${index}.productCode`, product.productCode, { shouldValidate: true })
     setValue(`items.${index}.productName`, product.productName, { shouldValidate: true })
@@ -152,7 +154,15 @@ export function OrderLineRow({
     setValue(`items.${index}.masterCost`, Number(product.originalPrice), {
       shouldValidate: true,
     })
-    setValue(`items.${index}.sellPrice`, Number(product.sellPrice), { shouldValidate: true })
+    // Charge what the storefront charges right now (shop sale / product
+    // discount applied); remember the regular price for "was ฿…".
+    const charged = Number(product.effectivePrice ?? product.sellPrice)
+    setValue(`items.${index}.sellPrice`, charged, { shouldValidate: true })
+    setValue(
+      `items.${index}.regularPrice`,
+      charged < Number(product.sellPrice) ? Number(product.sellPrice) : null,
+      { shouldValidate: true }
+    )
     setValue(`items.${index}.preorderMinDays`, product.preorderMinDays, { shouldValidate: true })
     setValue(`items.${index}.preorderMaxDays`, product.preorderMaxDays, { shouldValidate: true })
 
@@ -363,6 +373,14 @@ export function OrderLineRow({
             min={0}
             {...register(`items.${index}.sellPrice`)}
           />
+          {regularPrice != null && Number(regularPrice) > Number(sellPrice || 0) && (
+            <p className="text-small font-bold text-sale">
+              {t("discount.wasPrice", {
+                price: formatBaht(Number(regularPrice)),
+                percent: percentOff(Number(sellPrice || 0), Number(regularPrice)) ?? 0,
+              })}
+            </p>
+          )}
         </Field>
       </div>
 

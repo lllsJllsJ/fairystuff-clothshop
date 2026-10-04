@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useRouter } from "@/i18n/navigation"
 import { formatBaht } from "@/lib/format"
+import { percentOff } from "@/lib/pricing"
 
 export function CheckoutForm({ contactReady }: { contactReady: boolean }) {
   const t = useTranslations("checkout")
@@ -40,6 +41,13 @@ export function CheckoutForm({ contactReady }: { contactReady: boolean }) {
     })
     setPending(false)
     if (!result.ok) {
+      if (result.error === "cart_changed" && result.prices) {
+        // A sale started or ended since these items went in the cart —
+        // show the current prices and let the customer confirm again.
+        cart.reprice(result.prices)
+        setError(t("pricesUpdated"))
+        return
+      }
       setError(t(
         result.error === "cart_changed" ? "cartChanged"
           : result.error === "contact_missing" ? "contactMissing"
@@ -72,7 +80,7 @@ export function CheckoutForm({ contactReady }: { contactReady: boolean }) {
     </section>
     <aside className="h-fit border border-border bg-card p-5">
       <h2 className="text-subtitle font-bold">{t("summary")}</h2>
-      <ul className="mt-4 space-y-2 text-small">{cart.items.map((item) => <li key={item.key} className="flex justify-between gap-3"><span>{item.productName} × {item.quantity}</span><span>{formatBaht(Number(item.sellPrice) * item.quantity)}</span></li>)}</ul>
+      <ul className="mt-4 space-y-2 text-small">{cart.items.map((item) => <li key={item.key} className="flex justify-between gap-3"><span>{item.productName} × {item.quantity}</span><span className="text-right">{percentOff(item.sellPrice, item.regularPrice) != null && <s className="mr-1.5 text-muted-foreground">{formatBaht(Number(item.regularPrice) * item.quantity)}</s>}<span className={percentOff(item.sellPrice, item.regularPrice) != null ? "font-bold text-sale" : undefined}>{formatBaht(Number(item.sellPrice) * item.quantity)}</span></span></li>)}</ul>
       <div className="mt-4 flex justify-between border-t border-border pt-4 font-bold"><span>{t("subtotal")}</span><span>{formatBaht(cart.subtotal)}</span></div>
       <p className="mt-3 text-small text-muted-foreground">{t("noPayment")}</p>
       {!contactReady && <p className="mt-3 text-small text-destructive">{t("contactMissing")}</p>}

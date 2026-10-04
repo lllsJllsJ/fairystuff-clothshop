@@ -110,6 +110,7 @@ export function ReportView({
         cost: data.profitByProduct.reduce((s, r) => s + r.totalCost, 0),
         profit: data.profitByProduct.reduce((s, r) => s + r.totalProfit, 0),
         advertising: null as number | null,
+        discount: data.profitByProduct.reduce((s, r) => s + r.totalDiscount, 0),
       }
     }
     return {
@@ -161,6 +162,7 @@ export function ReportView({
           [t("reports.totalRevenue")]: r.totalRevenue,
           [t("reports.totalCost")]: r.totalCost,
           [t("reports.totalProfit")]: r.totalProfit,
+          [t("reports.discountsGiven")]: r.totalDiscount,
         }))
       )
       return
@@ -345,6 +347,9 @@ export function ReportView({
                 />
               </>
             )}
+          {"discount" in summary && summary.discount !== undefined && (
+            <SummaryTile label={t("reports.discountsGiven")} value={formatBaht(summary.discount)} />
+          )}
           {summary.profit !== null && (
             <SummaryTile
               label={t("reports.totalProfit")}
@@ -396,6 +401,7 @@ export function ReportView({
                   <TableHead className="text-right">{t("variant.quantity")}</TableHead>
                   <TableHead className="text-right">{t("reports.totalRevenue")}</TableHead>
                   <TableHead className="text-right">{t("reports.totalCost")}</TableHead>
+                  <TableHead className="text-right">{t("reports.discountsGiven")}</TableHead>
                   <TableHead className="text-right">{t("reports.totalProfit")}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -407,6 +413,9 @@ export function ReportView({
                     <TableCell className="text-right tabular-nums">{formatNumber(r.totalQuantity)}</TableCell>
                     <TableCell className="text-right tabular-nums">{formatBaht(r.totalRevenue)}</TableCell>
                     <TableCell className="text-right tabular-nums">{formatBaht(r.totalCost)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {r.totalDiscount > 0 ? formatBaht(r.totalDiscount) : "—"}
+                    </TableCell>
                     <TableCell
                       className={
                         r.totalProfit >= 0

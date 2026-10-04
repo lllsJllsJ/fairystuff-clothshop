@@ -37,6 +37,7 @@ const DEFAULT_FILTERS: ShopFilterValues = {
   size: "",
   minPrice: "",
   maxPrice: "",
+  sale: "",
 }
 
 function useDebounced<T>(value: T, delay = 350): T {
@@ -92,6 +93,7 @@ export function ShopBrowser({
     size: searchParams.get("size") ?? "",
     minPrice: searchParams.get("minPrice") ?? "",
     maxPrice: searchParams.get("maxPrice") ?? "",
+    sale: searchParams.get("sale") === "1" ? "1" : "",
   }))
   const [sort, setSort] = useState<PublicSort>(
     () => (searchParams.get("sort") as PublicSort) || "recommended"
@@ -122,6 +124,7 @@ export function ShopBrowser({
     setParam(params, "size", f.size)
     setParam(params, "minPrice", f.minPrice)
     setParam(params, "maxPrice", f.maxPrice)
+    setParam(params, "sale", f.sale)
     setParam(params, "sort", s === "recommended" ? "" : s)
     setParam(params, "page", p > 1 ? String(p) : "")
 
@@ -186,7 +189,8 @@ export function ShopBrowser({
     filters.color === "" &&
     filters.size === "" &&
     filters.minPrice === "" &&
-    filters.maxPrice === ""
+    filters.maxPrice === "" &&
+    filters.sale === ""
 
   const query = useQuery<PublicProductListResult>({
     queryKey: ["public-products", debouncedSearch, filters, sort, page],
@@ -200,6 +204,7 @@ export function ShopBrowser({
       setParam(params, "size", filters.size)
       setParam(params, "minPrice", filters.minPrice)
       setParam(params, "maxPrice", filters.maxPrice)
+      setParam(params, "sale", filters.sale)
       params.set("sort", sort)
       params.set("page", String(page))
       params.set("pageSize", String(PAGE_SIZE))
@@ -230,7 +235,8 @@ export function ShopBrowser({
     filters.color !== "" ||
     filters.size !== "" ||
     filters.minPrice !== "" ||
-    filters.maxPrice !== ""
+    filters.maxPrice !== "" ||
+    filters.sale !== ""
 
   const total = query.data?.count ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -250,6 +256,8 @@ export function ShopBrowser({
         onAudienceChange={(value) => updateFilter("audience", value)}
         setsOnly={filters.kind === "sets"}
         onSetsOnlyChange={(on) => updateFilter("kind", on ? "sets" : "")}
+        saleOnly={filters.sale === "1"}
+        onSaleOnlyChange={(on) => updateFilter("sale", on ? "1" : "")}
       />
 
       <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center">

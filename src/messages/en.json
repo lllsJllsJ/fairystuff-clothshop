@@ -179,7 +179,8 @@
     "checkout": "Continue to checkout",
     "addToCart": "Add to cart",
     "added": "Added to cart",
-    "selectVariant": "Select a size before adding this product"
+    "selectVariant": "Select a size before adding this product",
+    "youSave": "You save"
   },
   "checkout": {
     "title": "Checkout",
@@ -200,7 +201,8 @@
     "cartChanged": "A product or price changed. Return to your cart and review it before trying again.",
     "contactMissing": "Checkout is temporarily unavailable until the shop configures LINE, Instagram, or Facebook.",
     "invalid": "Please check your information and try again.",
-    "failed": "The order could not be created. Please try again."
+    "failed": "The order could not be created. Please try again.",
+    "pricesUpdated": "Some prices changed (a sale started or ended). Your cart now shows the current prices — check the total and place your order again."
   },
   "user": {
     "title": "Users",
@@ -455,7 +457,8 @@
     "colStatus": "Status",
     "colAdvertising": "Ads",
     "availableVariants": "Available sizes",
-    "totalVariants": "Total sizes"
+    "totalVariants": "Total sizes",
+    "discountsGiven": "Discounts given"
   },
   "import": {
     "title": "Import products",
@@ -609,7 +612,8 @@
     "noColors": "No colours yet",
     "duplicateColor": "That colour already exists (or a product already has both names).",
     "deleteColorConfirm": "Remove \"{name}\" from the list? Products that use it keep the colour.",
-    "dragHandle": "Drag to reorder {name}"
+    "dragHandle": "Drag to reorder {name}",
+    "navDiscount": "Discount"
   },
   "home": {
     "heroTitle": "Clothing that speaks for you",
@@ -632,12 +636,27 @@
     "heroSlides": "Featured photos",
     "heroSlide": "Photo {n} of {total}",
     "heroPrev": "Previous photo",
-    "heroNext": "Next photo"
+    "heroNext": "Next photo",
+    "saleBannerLabel": "Sale",
+    "saleBannerTitle": "{label} {percent}% off everything",
+    "saleBannerUntil": "Until {date}",
+    "saleBannerCta": "Shop the sale",
+    "saleBannerOff": "Off",
+    "saleBannerEverything": "Everything",
+    "saleBannerEndsIn": "Ends in",
+    "saleBannerDefaultLabel": "SALE",
+    "valuePreorderTitle": "Easy preorder",
+    "valuePreorderBody": "Pick your colour and size — the shop confirms everything with you in chat before you pay.",
+    "valueSizesTitle": "Adults & kids",
+    "valueSizesBody": "Adult sizes XS–2XL, and kids' sizes by height from 80 cm.",
+    "valueTrackTitle": "Track your order",
+    "valueTrackBody": "Your preorder code opens a live tracking page — no account needed."
   },
   "footer": {
-    "quickLinks": "Quick links",
-    "contact": "Contact us",
-    "rights": "© {year} {brand}. All rights reserved."
+    "rights": "© {year} {brand}. All rights reserved.",
+    "shopHeading": "Shop",
+    "helpHeading": "Help",
+    "backToTop": "Back to top"
   },
   "shop": {
     "featured": "Featured",
@@ -688,7 +707,21 @@
     "audienceKids": "Kids",
     "setsOnly": "Sets & full sets",
     "bothBadge": "Adults & Kids",
-    "bothSizeHint": "Adult sizes and kids' heights"
+    "bothSizeHint": "Adult sizes and kids' heights",
+    "saleOnly": "Sale",
+    "saleBadge": "-{percent}%",
+    "salePrice": "Sale price",
+    "regularPrice": "Regular price",
+    "youSave": "You save {amount}",
+    "saleEnded": "This sale has ended",
+    "saleEndsIn": "Sale ends in {clock}",
+    "saleEndsInDays": "Sale ends in {days}d {clock}",
+    "countdownDays": "Days",
+    "countdownHours": "Hrs",
+    "countdownMinutes": "Min",
+    "countdownSeconds": "Sec",
+    "contactEyebrow": "Questions? Let's chat",
+    "contactFacebookDetail": "Message our page"
   },
   "errors": {
     "unauthorized": "Please sign in",
@@ -738,5 +771,47 @@
     "copyTracking": "Copy tracking number",
     "trackingCopied": "Tracking number copied",
     "trackParcel": "Track parcel"
+  },
+  "discount": {
+    "status_running": "Running",
+    "status_scheduled": "Scheduled",
+    "status_ended": "Ended",
+    "status_off": "Off",
+    "startsAt": "Starts",
+    "startsAtHint": "Blank = starts now (Bangkok time)",
+    "endsAt": "Ends",
+    "endsAtHint": "Blank = no end date",
+    "clearDate": "Clear date",
+    "shopSaleTitle": "Shop-wide sale",
+    "shopSaleHint": "Take a percentage off every product. Customers see the regular price struck through next to the sale price, plus a SALE banner on the home page.",
+    "shopSaleEnabled": "Shop-wide sale on",
+    "percentOff": "Percent off",
+    "previewExample": "Example: {regular} → {sale}",
+    "percentRangeHint": "Enter {min}–{max}%",
+    "precedenceNote": "A product with its own running discount uses that discount instead of the shop-wide sale.",
+    "save": "Save",
+    "saved": "Discount saved",
+    "saveFailed": "Couldn't save",
+    "error_percent_range": "Percent must be between 1 and 90",
+    "error_percent_required": "Enter a percent before turning the sale on",
+    "error_window_order": "The end must be after the start",
+    "error_invalid_date": "Invalid date",
+    "error_forbidden": "Not allowed",
+    "productTitle": "Discount",
+    "productHint": "This product only — replaces the shop-wide sale while it runs.",
+    "productEnabled": "Discount on",
+    "type": "Discount type",
+    "typePercent": "% off",
+    "typePrice": "Sale price",
+    "salePriceLabel": "Sale price (฿)",
+    "salePriceNotLower": "The sale price isn't below the regular price, so it won't discount anything.",
+    "saleTag": "Sale {price} · -{percent}%",
+    "wasPrice": "Regular {price} (-{percent}%)",
+    "labelTh": "Sale label (Thai)",
+    "labelEn": "Sale label (English)",
+    "labelHint": "Replaces the word SALE in the home banner and scrolling strip, e.g. 11.11 MEGA SALE — blank = SALE",
+    "labelPreviewTh": "{label} ลด {percent}% ทั้งร้าน",
+    "labelPreviewEn": "{label} {percent}% off everything",
+    "error_label_length": "The sale label can be at most 40 characters"
   }
 }

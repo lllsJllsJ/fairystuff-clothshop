@@ -1,7 +1,7 @@
 "use client"
 
 import { useTranslations } from "next-intl"
-import { Database, ListChecks, Store, Tags, type LucideIcon } from "lucide-react"
+import { Database, ListChecks, Percent, Store, Tags, type LucideIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Link, usePathname } from "@/i18n/navigation"
@@ -16,6 +16,7 @@ type SettingsNavItem = {
 /** One entry per `admin/settings/<section>/page.tsx`. */
 export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { href: "/admin/settings/storefront", labelKey: "navStorefront", icon: Store },
+  { href: "/admin/settings/discount", labelKey: "navDiscount", icon: Percent },
   { href: "/admin/settings/catalog", labelKey: "navCatalog", icon: Tags },
   { href: "/admin/settings/orders", labelKey: "navOrders", icon: ListChecks },
   { href: "/admin/settings/data", labelKey: "navData", icon: Database },

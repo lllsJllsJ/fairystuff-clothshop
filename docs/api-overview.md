@@ -54,8 +54,9 @@ nothing is trusted to be well-formed.
 | `kind` | `single` \| `set` \| `fullset` \| `sets` | `sets` = set OR full set (the storefront's single toggle). Anything else is ignored. |
 | `color` | string | Exact match on an AVAILABLE variant's `color`. |
 | `size` | string | Exact match on an AVAILABLE variant's `size` (a switched-off size never matches). |
-| `minPrice`, `maxPrice` | number | Clamped to `[0, 10_000_000]`. |
-| `sort` | `recommended` \| `newest` \| `price_asc` \| `price_desc` \| `popular` | Defaults to `recommended`; anything else falls back to it. `recommended` is the order the owner arranged in Admin → Products → Arrange — products not placed yet come first, newest-first, so with nothing arranged it equals `newest`. `popular` lists the owner's hand-picked Popular products first, in the order they set, then everything else in the `recommended` order. |
+| `minPrice`, `maxPrice` | number | Clamped to `[0, 10_000_000]`. Compared against the **effective** (discounted) price. |
+| `sale` | `1` | Only products currently discounted (effective price below the regular price). Anything else is ignored. While a shop-wide sale runs this matches every product. |
+| `sort` | `recommended` \| `newest` \| `price_asc` \| `price_desc` \| `popular` | Defaults to `recommended`; anything else falls back to it. `price_asc`/`price_desc` sort on the effective (discounted) price. `recommended` is the order the owner arranged in Admin → Products → Arrange — products not placed yet come first, newest-first, so with nothing arranged it equals `newest`. `popular` lists the owner's hand-picked Popular products first, in the order they set, then everything else in the `recommended` order. |
 | `page` | integer | Clamped to `[1, 10_000]`. |
 | `pageSize` | integer | Clamped to `[1, 48]`, default `24`. |
 
@@ -77,7 +78,9 @@ GET /api/products?search=dress&character=mickey&sort=price_asc&page=1
       "audience": "adult",
       "kind": "single",
       "description": "...",
-      "sellPrice": "1290.00",
+      "sellPrice": "1032",
+      "regularPrice": "1290.00",
+      "discountEndsAt": "2026-10-31T16:59:00.000Z",
       "createdAt": "2026-01-14T08:00:00.000Z",
       "isPopular": false,
       "coverImageUrl": "https://img.example.com/products/.../1600.webp",
@@ -93,6 +96,15 @@ GET /api/products?search=dress&character=mickey&sort=price_asc&page=1
   "pageSize": 24
 }
 ```
+
+**Price fields.** `sellPrice` is the **effective** price — what the customer
+pays right now, with any running discount applied (the same meaning
+`sellPrice` has on a cart line and an order line). `regularPrice` is the
+pre-discount price; when it is higher than `sellPrice` the product is on sale
+and the storefront strikes it through. `discountEndsAt` is the end of the
+applied discount (ISO, for the countdown) or `null`. All three come from
+`src/db/queries/pricing.ts#priceColumns` — see "Discount pricing" under the
+public data contract below.
 
 **Status codes**
 
@@ -143,6 +155,12 @@ Every field a public caller would never see — `originalPrice`,
       "preorderMaxDays": 30,
       "margin": "640.00",
       "status": "active",
+      "discountEnabled": true,
+      "discountType": "percent",
+      "discountValue": "20.00",
+      "discountStartsAt": null,
+      "discountEndsAt": "2026-10-31T16:59:00.000Z",
+      "effectivePrice": "1032",
       "createdBy": "u_...",
       "createdAt": "...",
       "updatedAt": "...",
@@ -156,6 +174,11 @@ Every field a public caller would never see — `originalPrice`,
   "pageSize": 20
 }
 ```
+
+`sellPrice` here is the **regular** catalogue price (the raw column);
+`effectivePrice` is what a customer pays right now (shop sale / product
+discount applied). The manual-order product picker charges `effectivePrice`
+and records `sellPrice` as the line's `regularPrice` when they differ.
 
 **Status codes**
 
@@ -450,11 +473,33 @@ export const PUBLIC_PRODUCT_COLUMNS = {
   audience: products.audience,
   kind: products.kind,
   description: products.description,
-  sellPrice: products.sellPrice,
   createdAt: products.createdAt,
   isPopular: sql<boolean>`${products.popularRank} is not null`,
 } as const
+
+// every public select actually uses this:
+export function publicProductColumns(sale: ShopSale | null) {
+  return { ...PUBLIC_PRODUCT_COLUMNS, ...priceColumns(sale) } // sellPrice, regularPrice, discountEndsAt
+}
 ```
+
+### Discount pricing
+
+A product's price on every public path (and in checkout and the admin order
+picker) is the **effective price**, derived in SQL by
+`src/db/queries/pricing.ts`:
+
+1. the product's own discount (`products.discount_*`), if it is switched on
+   and now is inside its optional `[starts, ends)` window — **it wins**;
+2. otherwise the shop-wide % sale (`shop_settings.sale_*`), same rule;
+3. otherwise `products.sell_price`.
+
+Percent discounts round to whole baht; a fixed sale price at or above the
+regular price means "no discount". The raw discount configuration
+(`discountEnabled`, `discountType`, `discountValue`, `discountStartsAt`) is
+**never** selected on a public path — only the derived `sellPrice`,
+`regularPrice`, and `discountEndsAt`. `src/lib/pricing.ts#effectivePrice` is
+the TS mirror (admin preview, unit tests) and must stay identical.
 
 `isPopular` is the one computed entry: whether the owner hand-picked the
 product as Popular (Settings → Storefront). Only the boolean is public — the

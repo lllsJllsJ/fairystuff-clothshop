@@ -31,6 +31,8 @@ import { SimpleSelect } from "@/components/ui/simple-select"
 import { CreatableCombobox } from "@/components/ui/creatable-combobox"
 import { VariantRowsEditor } from "@/components/products/variant-rows-editor"
 import { SegmentedControl } from "@/components/ui/segmented-control"
+import { ProductDiscountFields, type ProductDiscountValues } from "@/components/discount/product-discount-fields"
+import { toBangkokInput } from "@/lib/pricing"
 import {
   ProductImageGallery,
   type PreviewImage,
@@ -94,6 +96,11 @@ export function ProductForm({
       preorderMaxDays: product?.preorderMaxDays ?? "",
       characterIds: product?.characters.map((character) => character.id) ?? [],
       status: product?.status ?? "active",
+      discountEnabled: product?.discountEnabled ?? false,
+      discountType: product?.discountType ?? "percent",
+      discountValue: product?.discountValue != null ? String(Number(product.discountValue)) : "",
+      discountStartsAt: toBangkokInput(product?.discountStartsAt),
+      discountEndsAt: toBangkokInput(product?.discountEndsAt),
       variants:
         product?.variants.map((v) => ({
           id: v.id,
@@ -157,6 +164,15 @@ export function ProductForm({
   const sellPrice = watch("sellPrice")
   const originalPrice = watch("originalPrice")
   const marginPreview = Number(sellPrice || 0) - Number(originalPrice || 0)
+  const discountValues: ProductDiscountValues = {
+    discountEnabled: watch("discountEnabled") ?? false,
+    discountType: watch("discountType") ?? "percent",
+    discountValue: String(watch("discountValue") ?? ""),
+    discountStartsAt: String(watch("discountStartsAt") ?? ""),
+    discountEndsAt: String(watch("discountEndsAt") ?? ""),
+  }
+  const discountValueError = errors.discountValue?.message
+  const discountWindowError = errors.discountEndsAt?.message
 
   function handleRemoveImage(img: PreviewImage) {
     if (img.id) setRemovedImageIds((prev) => [...prev, img.id!])
@@ -391,6 +407,23 @@ export function ProductForm({
           <span className="text-h4 font-bold">{formatBaht(marginPreview)}</span>
         </div>
       </section>
+
+      <ProductDiscountFields
+        values={discountValues}
+        sellPrice={Number(sellPrice || 0)}
+        onChange={(key, value) =>
+          // Field names and value types match ProductDiscountValues 1:1.
+          setValue(key, value as never, { shouldValidate: true, shouldDirty: true })
+        }
+        valueError={
+          discountValueError === "percent_range"
+            ? t("discount.error_percent_range")
+            : discountValueError
+              ? t("errors.invalid")
+              : null
+        }
+        windowError={discountWindowError ? t("discount.error_window_order") : null}
+      />
 
       {/* Variants */}
       <div>

@@ -7,11 +7,9 @@ import {
   desc,
   eq,
   exists,
-  gte,
   ilike,
   inArray,
   isNotNull,
-  lte,
   or,
   sql,
 } from "drizzle-orm"
@@ -24,6 +22,8 @@ import {
   products,
   productVariants,
 } from "@/db/schema"
+import { getActiveShopSale, effectivePriceSql, onSaleSql, priceColumns } from "@/db/queries/pricing"
+import type { ShopSale } from "@/lib/pricing"
 import {
   audiencesMatching,
   type AudienceFilterValue,
@@ -56,6 +56,12 @@ import {
  * (Settings -> Storefront). Only that boolean is selected; the underlying
  * `popularRank` position is used for ordering and never returned.
  *
+ * Prices come from publicProductColumns(sale) below, never from this object:
+ * `sellPrice` there is the EFFECTIVE (discounted) price, `regularPrice` the
+ * pre-discount products.sellPrice, `discountEndsAt` the applied discount's
+ * end — all derived by src/db/queries/pricing.ts. The raw discount columns
+ * (discountEnabled/Type/Value/StartsAt) are never selected here.
+ *
  * Why this matters more here than it would in a typical app: a Server
  * Component that fetches a full product row and hands it to a client
  * component serialises EVERY field into the RSC payload, including fields
@@ -72,10 +78,15 @@ export const PUBLIC_PRODUCT_COLUMNS = {
   audience: products.audience,
   kind: products.kind,
   description: products.description,
-  sellPrice: products.sellPrice,
   createdAt: products.createdAt,
   isPopular: sql<boolean>`${products.popularRank} is not null`,
 } as const
+
+/** PUBLIC_PRODUCT_COLUMNS + the derived, public-safe price fields. Every
+ * public select uses this. */
+export function publicProductColumns(sale: ShopSale | null) {
+  return { ...PUBLIC_PRODUCT_COLUMNS, ...priceColumns(sale) }
+}
 
 type BasePublicProduct = {
   id: string
@@ -84,7 +95,12 @@ type BasePublicProduct = {
   audience: ProductAudience
   kind: ProductKind
   description: string | null
+  /** EFFECTIVE price — what the customer pays right now. */
   sellPrice: string
+  /** Pre-discount price; equal to sellPrice when nothing is discounted. */
+  regularPrice: string
+  /** ISO end of the applied discount (countdown), or null. */
+  discountEndsAt: string | null
   createdAt: Date
   /** Hand-picked by the owner as Popular — drives the tile badge. */
   isPopular: boolean
@@ -147,6 +163,8 @@ export type PublicProductListParams = {
   size?: string
   minPrice?: number
   maxPrice?: number
+  /** Only products currently discounted (`?sale=1`). */
+  onSale?: boolean
   /** Only the hand-picked Popular products (the home page's section).
    * Deliberately NOT a `GET /api/products` query param. */
   popularOnly?: boolean
@@ -170,7 +188,7 @@ const DEFAULT_PAGE_SIZE = 24
  * this file by construction, not by a filter someone could forget to add
  * at a call site.
  */
-function activeProductFilters(params: PublicProductListParams) {
+function activeProductFilters(params: PublicProductListParams, sale: ShopSale | null) {
   const conditions = [eq(products.status, "active")]
 
   const term = params.search?.trim()
@@ -213,11 +231,15 @@ function activeProductFilters(params: PublicProductListParams) {
     conditions.push(isNotNull(products.popularRank))
   }
 
+  // Price filters and sorts use the EFFECTIVE (discounted) price.
   if (params.minPrice != null) {
-    conditions.push(gte(products.sellPrice, String(params.minPrice)))
+    conditions.push(sql`${effectivePriceSql(sale)} >= ${params.minPrice}`)
   }
   if (params.maxPrice != null) {
-    conditions.push(lte(products.sellPrice, String(params.maxPrice)))
+    conditions.push(sql`${effectivePriceSql(sale)} <= ${params.maxPrice}`)
+  }
+  if (params.onSale) {
+    conditions.push(onSaleSql(sale))
   }
 
   if (params.color) {
@@ -273,12 +295,12 @@ const ARRANGED_ORDER = [
   asc(products.id),
 ]
 
-function orderByForPublicSort(sort: PublicSort) {
+function orderByForPublicSort(sort: PublicSort, sale: ShopSale | null) {
   switch (sort) {
     case "price_asc":
-      return [asc(products.sellPrice)]
+      return [asc(effectivePriceSql(sale)), asc(products.id)]
     case "price_desc":
-      return [desc(products.sellPrice)]
+      return [desc(effectivePriceSql(sale)), asc(products.id)]
     case "popular":
       return [sql`${products.popularRank} asc nulls last`, ...ARRANGED_ORDER]
     case "newest":
@@ -297,12 +319,13 @@ export async function getPublicProducts(
   params: PublicProductListParams = {}
 ): Promise<PublicProductListResult> {
   const { page = 1, pageSize = DEFAULT_PAGE_SIZE, sort = "recommended" } = params
-  const where = activeProductFilters(params)
-  const orderBy = orderByForPublicSort(sort)
+  const sale = await getActiveShopSale()
+  const where = activeProductFilters(params, sale)
+  const orderBy = orderByForPublicSort(sort, sale)
 
   const [rows, countRows] = await Promise.all([
     db
-      .select(PUBLIC_PRODUCT_COLUMNS)
+      .select(publicProductColumns(sale))
       .from(products)
       .where(where)
       .orderBy(...orderBy)
@@ -415,8 +438,9 @@ function distinctColors(colors: string[]): string[] {
 export async function getPublicProductByCode(
   productCode: string
 ): Promise<PublicProductDetail | null> {
+  const sale = await getActiveShopSale()
   const [row] = await db
-    .select(PUBLIC_PRODUCT_COLUMNS)
+    .select(publicProductColumns(sale))
     .from(products)
     .where(
       and(

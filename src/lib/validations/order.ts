@@ -52,7 +52,11 @@ export const orderItemSchema = z.object({
   /** Master (catalogue) cost snapshot, set by the product picker only —
    * the form never shows an input for it. */
   masterCost: money,
+  /** Price actually charged on this line (discount applied). */
   sellPrice: money,
+  /** Regular (pre-discount) price snapshot — set by the product picker when
+   * a discount was running; stored only when it is above `sellPrice`. */
+  regularPrice: z.number().min(0).nullable().optional(),
   // Lead-time SNAPSHOT (see schema.ts's comment on `orderItems`) — populated
   // by the product picker in `order-line-row.tsx#selectProduct` from the
   // chosen product's `preorderMinDays`/`preorderMaxDays`, then carried

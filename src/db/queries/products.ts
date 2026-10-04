@@ -1,7 +1,7 @@
 import "server-only"
 
 import type { Column } from "drizzle-orm"
-import { and, asc, count, desc, eq, ilike, inArray, isNotNull, ne, or, sql } from "drizzle-orm"
+import { and, asc, count, desc, eq, getTableColumns, ilike, inArray, isNotNull, ne, or, sql } from "drizzle-orm"
 
 import { db } from "@/db"
 import {
@@ -12,6 +12,7 @@ import {
   products,
   productVariants,
 } from "@/db/schema"
+import { getActiveShopSale, effectivePriceSql } from "@/db/queries/pricing"
 
 /**
  * Admin reads — full columns, INCLUDING `margin`, `originalPrice`,
@@ -64,8 +65,12 @@ export type ProductListParams = {
   pageSize?: number
 }
 
+/** A list row also carries the price a customer pays right now (shop sale
+ * and the product's own discount applied — src/db/queries/pricing.ts). */
+export type ProductListRow = ProductWithRelations & { effectivePrice: string }
+
 export type ProductListResult = {
-  rows: ProductWithRelations[]
+  rows: ProductListRow[]
   count: number
   page: number
   pageSize: number
@@ -120,9 +125,13 @@ export async function getProducts(
   const { column, ascending } = SORT_MAP[sort] ?? SORT_MAP.newest
   const orderBy = ascending ? asc(column) : desc(column)
 
+  const sale = await getActiveShopSale()
   const [rows, countRows] = await Promise.all([
     db
-      .select()
+      .select({
+        ...getTableColumns(products),
+        effectivePrice: sql<string>`${effectivePriceSql(sale)}::text`,
+      })
       .from(products)
       .where(where)
       .orderBy(orderBy)
@@ -141,7 +150,9 @@ export async function getProducts(
   }
 }
 
-async function attachRelations(rows: ProductRow[]): Promise<ProductWithRelations[]> {
+async function attachRelations<T extends ProductRow>(
+  rows: T[]
+): Promise<(T & Omit<ProductWithRelations, keyof ProductRow>)[]> {
   if (rows.length === 0) return []
   const ids = rows.map((r) => r.id)
 

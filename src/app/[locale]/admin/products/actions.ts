@@ -18,6 +18,7 @@ import { learnProductColors, learnProductType } from "@/lib/reference"
 import { isOwner } from "@/lib/roles"
 import {
   productFormSchema,
+  discountColumns,
   productImageSchema,
   productInlineUpdateSchema,
   productOrderIdsSchema,
@@ -154,6 +155,7 @@ export async function createProduct(
           sourceLink: toNullable(v.sourceLink),
           preorderMinDays: v.preorderMinDays ?? null,
           preorderMaxDays: v.preorderMaxDays ?? null,
+          ...discountColumns(v),
           status: v.status,
           createdBy: user.id,
         })
@@ -297,6 +299,7 @@ export async function updateProduct(
           sourceLink: toNullable(v.sourceLink),
           preorderMinDays: v.preorderMinDays ?? null,
           preorderMaxDays: v.preorderMaxDays ?? null,
+          ...discountColumns(v),
           status: v.status,
           updatedAt: new Date(),
         })

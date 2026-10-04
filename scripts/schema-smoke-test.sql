@@ -128,6 +128,37 @@ select case when oi.sell_price = 890.00 and oi.product_cost = 400.00 and oi.mast
 from order_items oi join orders o on o.id = oi.order_id
 where oi.product_code = 'SMOKE-1';
 
+-- 5c. DISCOUNTS — the charged price lives in sell_price, the pre-discount
+--     price in regular_price, and line_total/profit follow the CHARGED one.
+update order_items set sell_price = 712, regular_price = 890 where product_code = 'SMOKE-1';
+select case when oi.regular_price = 890.00 and oi.line_total = 3560.00 and o.items_total = 3560.00
+            then 'PASS' else 'FAIL' end
+  || '  discounted line: sell=' || oi.sell_price || ' regular=' || oi.regular_price
+  || ' items_total=' || o.items_total
+from order_items oi join orders o on o.id = oi.order_id
+where oi.product_code = 'SMOKE-1';
+
+-- 5d. discount check constraints: percent 1-90, type and value together,
+--     end after start (product and shop-wide sale alike).
+do $$
+declare rejected int := 0;
+begin
+  begin update products set discount_type = 'percent', discount_value = 0 where product_code = 'SMOKE-1';
+  exception when check_violation then rejected := rejected + 1; end;
+  begin update products set discount_type = 'percent', discount_value = 95 where product_code = 'SMOKE-1';
+  exception when check_violation then rejected := rejected + 1; end;
+  begin update products set discount_type = 'price', discount_value = null where product_code = 'SMOKE-1';
+  exception when check_violation then rejected := rejected + 1; end;
+  begin update products set discount_starts_at = now(), discount_ends_at = now() - interval '1 day' where product_code = 'SMOKE-1';
+  exception when check_violation then rejected := rejected + 1; end;
+  begin insert into shop_settings (id, sale_percent) values ('smoke', 95);
+  exception when check_violation then rejected := rejected + 1; end;
+  raise notice '%', case when rejected = 5 then 'PASS' else 'FAIL' end || '  discount checks rejected ' || rejected || '/5';
+end $$;
+update products set discount_enabled = true, discount_type = 'percent', discount_value = 20 where product_code = 'SMOKE-1';
+select case when discount_value = 20.00 then 'PASS' else 'FAIL' end || '  valid 20% discount accepted'
+from products where product_code = 'SMOKE-1';
+
 -- 6. order history survives deleting the product (snapshot, not FK — Risk 4)
 delete from products where product_code = 'SMOKE-1';
 select case when count(*) = 1 and bool_and(product_id is null) then 'PASS' else 'FAIL' end

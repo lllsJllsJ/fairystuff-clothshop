@@ -10,6 +10,7 @@ import {
   KindBadge,
   NewBadge,
   PopularBadge,
+  SaleBadge,
   UnavailableBadge,
 } from "@/components/shop/shop-badges"
 
@@ -64,6 +65,7 @@ export function ProductTile({
         )}
 
         <div className="absolute top-2 left-2 flex flex-col items-start gap-1">
+          <SaleBadge price={product.sellPrice} regularPrice={product.regularPrice} />
           {showPopular && product.isPopular && <PopularBadge />}
           {isNew && <NewBadge />}
           <KindBadge kind={product.kind} />
@@ -105,7 +107,7 @@ export function ProductTile({
         )}
 
         <div className="mt-auto pt-2">
-          <Price value={product.sellPrice} />
+          <Price value={product.sellPrice} regularPrice={product.regularPrice} showBadge={false} />
         </div>
       </div>
     </Link>

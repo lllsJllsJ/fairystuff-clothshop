@@ -7,6 +7,8 @@ import { toast } from "sonner"
 
 import type { PublicProductDetail } from "@/db/queries/storefront"
 import { Price } from "@/components/shop/price"
+import { SaleCountdown } from "@/components/shop/sale-countdown"
+import { formatBaht } from "@/lib/format"
 import { ProductGallery } from "@/components/shop/product-gallery"
 import { ColorSelector } from "@/components/shop/color-selector"
 import { SizeSelector, type SizeOption } from "@/components/shop/size-selector"
@@ -116,6 +118,7 @@ export function ProductDetail({
       color: variant?.color && variant.color !== "-" ? variant.color : null,
       size: variant?.size ?? null,
       sellPrice: product.sellPrice,
+      regularPrice: product.regularPrice,
       imageUrl: product.images[0]?.url ?? null,
     }, quantity)
     toast.success(t("cart.added"))
@@ -162,8 +165,14 @@ export function ProductDetail({
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <Price value={product.sellPrice} size="lg" />
+          <div className="flex flex-col items-start gap-2">
+            <Price value={product.sellPrice} regularPrice={product.regularPrice} size="lg" />
+            {Number(product.sellPrice) < Number(product.regularPrice) && (
+              <p className="text-body font-bold text-sale">
+                {t("shop.youSave", { amount: formatBaht(Number(product.regularPrice) - Number(product.sellPrice)) })}
+              </p>
+            )}
+            {product.discountEndsAt && <SaleCountdown endsAt={product.discountEndsAt} />}
           </div>
 
           {product.description && (

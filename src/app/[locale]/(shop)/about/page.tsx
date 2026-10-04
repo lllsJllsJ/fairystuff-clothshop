@@ -4,7 +4,6 @@ import { getTranslations, setRequestLocale } from "next-intl/server"
 import { routing } from "@/i18n/routing"
 import { ABOUT_STORY_EN, ABOUT_STORY_TH } from "@/lib/brand"
 import { getShopSettings, resolvedBrandDescription, resolvedBrandName } from "@/db/queries/settings"
-import { ContactCta } from "@/components/shop/contact-cta"
 import { prerenderLocaleParams } from "@/lib/static-params"
 
 export const revalidate = 300
@@ -53,8 +52,6 @@ export default async function AboutPage({
       <article className="mx-auto max-w-[720px] px-4 py-17 sm:px-6 lg:px-8">
         <p className="whitespace-pre-line text-body leading-relaxed text-foreground">{story}</p>
       </article>
-
-      <ContactCta locale={locale} />
     </>
   )
 }

@@ -69,6 +69,9 @@ const PUBLIC_ORDER_ITEM_COLUMNS = {
   color: orderItems.color,
   size: orderItems.size,
   sellPrice: orderItems.sellPrice,
+  // The customer's own pre-discount price (null = not discounted) — public
+  // by design; it is a selling price, not a cost.
+  regularPrice: orderItems.regularPrice,
   quantity: orderItems.quantity,
   preorderMinDays: orderItems.preorderMinDays,
   preorderMaxDays: orderItems.preorderMaxDays,
@@ -80,6 +83,7 @@ export type TrackedOrderItem = {
   color: string | null
   size: string | null
   sellPrice: string
+  regularPrice: string | null
   quantity: number
   preorderMinDays: number | null
   preorderMaxDays: number | null

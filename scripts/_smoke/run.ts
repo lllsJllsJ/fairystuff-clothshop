@@ -13,7 +13,7 @@
 import { eq } from "drizzle-orm"
 
 import { db } from "../../src/db"
-import { characters, orderItems, orders, preorderShipments, productCharacters, productImages, productTypes, productVariants, products, users } from "../../src/db/schema"
+import { characters, orderItems, orders, preorderShipments, productCharacters, productImages, productTypes, productVariants, products, shopSettings, users } from "../../src/db/schema"
 import { getPublicProducts, getPublicProductByCode, getPublicCharacters, getActiveProductCodes } from "../../src/db/queries/storefront"
 import { getProducts, getProductById, getProductImportIndex } from "../../src/db/queries/products"
 import { getOrders, getOrderById } from "../../src/db/queries/orders"
@@ -34,6 +34,11 @@ const PRIVATE = [
   "masterCost",
   "preorderMinDays",
   "preorderMaxDays",
+  // Raw discount config — only the derived price fields are public.
+  "discountEnabled",
+  "discountType",
+  "discountValue",
+  "discountStartsAt",
 ]
 
 /**
@@ -177,6 +182,26 @@ async function main() {
       (await getPublicProducts({ kind: "sets" })).rows.length === 0)
   check("draft product is not publicly reachable", (await getPublicProductByCode("DRAFT-9")) === null)
   check("lookup is case-insensitive", (await getPublicProductByCode("tee-001")) !== null)
+
+  // Discounts: the product's own running discount wins over the shop sale;
+  // an expired one falls back to it. Price filter/sort/Sale use the
+  // effective price. (src/db/queries/pricing.ts)
+  await db.insert(shopSettings).values({ id: "default", saleEnabled: true, salePercent: "20" })
+    .onConflictDoUpdate({ target: shopSettings.id, set: { saleEnabled: true, salePercent: "20" } })
+  const shopSalePrice = await getPublicProductByCode("TEE-001")
+  check("shop-wide 20% sale prices the product", shopSalePrice?.sellPrice === "712" && shopSalePrice?.regularPrice === "890.00",
+    `${shopSalePrice?.sellPrice} / ${shopSalePrice?.regularPrice}`)
+  await db.update(products).set({ discountEnabled: true, discountType: "price", discountValue: "799" }).where(eq(products.id, ids.productId))
+  const productWins = await getPublicProductByCode("TEE-001")
+  check("product discount wins over the shop sale (even when smaller)", Number(productWins?.sellPrice) === 799, String(productWins?.sellPrice))
+  check("discounted detail leaks nothing private", scanPrivate(productWins).length === 0, scanPrivate(productWins).join(", ") || "clean")
+  await db.update(products).set({ discountEndsAt: new Date(Date.now() - 1000) }).where(eq(products.id, ids.productId))
+  check("expired product discount falls back to the shop sale", (await getPublicProductByCode("TEE-001"))?.sellPrice === "712")
+  check("price filter uses the effective price",
+    (await getPublicProducts({ maxPrice: 750 })).rows.length === 1 && (await getPublicProducts({ minPrice: 800 })).rows.length === 0)
+  await db.update(shopSettings).set({ saleEnabled: false })
+  check("Sale filter is empty with nothing discounted", (await getPublicProducts({ onSale: true })).rows.length === 0)
+  await db.update(products).set({ discountEnabled: false, discountType: null, discountValue: null, discountEndsAt: null }).where(eq(products.id, ids.productId))
 
   const publicCharacters = await getPublicCharacters()
   check("getPublicCharacters only lists characters with live products",

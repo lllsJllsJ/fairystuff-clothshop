@@ -76,3 +76,36 @@ test("storefront order rejects duplicates and non-uuids", () => {
   assert.equal(productOrderIdsSchema.safeParse([uuid(1), uuid(2), uuid(1)]).success, false)
   assert.equal(productOrderIdsSchema.safeParse(["TS-001"]).success, false)
 })
+
+test("discount fields survive a second parse (client resolver, then server action)", () => {
+  const input = {
+    ...validProduct(),
+    productType: "เสื้อ",
+    discountEnabled: true,
+    discountType: "price" as const,
+    discountValue: "399",
+    discountStartsAt: "2026-10-04T10:01",
+    discountEndsAt: "",
+  }
+  const once = productFormSchema.parse(input)
+  const twice = productFormSchema.safeParse(once)
+  assert.equal(twice.success, true)
+  assert.equal(twice.data?.discountStartsAt?.toISOString(), "2026-10-04T03:01:00.000Z")
+  assert.equal(twice.data?.discountEndsAt, null)
+})
+
+test("discount validation: needs a value when on, percent 1-90, end after start", () => {
+  const base = { ...validProduct(), productType: "เสื้อ", discountEnabled: true }
+  assert.equal(productFormSchema.safeParse({ ...base, discountValue: "" }).success, false)
+  assert.equal(productFormSchema.safeParse({ ...base, discountType: "percent", discountValue: "95" }).success, false)
+  assert.equal(
+    productFormSchema.safeParse({
+      ...base,
+      discountValue: "10",
+      discountStartsAt: "2026-10-05T00:00",
+      discountEndsAt: "2026-10-04T00:00",
+    }).success,
+    false
+  )
+  assert.equal(productFormSchema.safeParse({ ...base, discountValue: "10" }).success, true)
+})

@@ -57,6 +57,12 @@ curl -s "$BASE/api/products?sort=popular" \
   | grep -Ei 'popularRank|popular_rank|displayOrder|display_order' \
   && echo "FAIL: ordering column leaked" || echo "PASS"
 
+# 1c. Discount CONFIG is never public — only the derived sellPrice /
+#     regularPrice / discountEndsAt (src/db/queries/pricing.ts)
+curl -s "$BASE/api/products?sale=1" \
+  | grep -Ei 'discountType|discountValue|discountEnabled|discountStartsAt' \
+  && echo "FAIL: discount config leaked" || echo "PASS"
+
 # 2. Nor any order-side cost figure (the product API never selects orders,
 #    so a hit here means a query was rewired to the wrong module)
 curl -s "$BASE/api/products" | grep -Ei 'masterCost|productCost|preorderShipping' \

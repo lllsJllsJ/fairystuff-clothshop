@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
       size: clampString(sp.get("size"), MAX_SEARCH_LENGTH),
       minPrice: clampPrice(sp.get("minPrice")),
       maxPrice: clampPrice(sp.get("maxPrice")),
+      onSale: sp.get("sale") === "1" || undefined,
       sort: parseSort(sp.get("sort")),
       page: clampInt(sp.get("page"), 1, MAX_PAGE, 1),
       pageSize: clampInt(sp.get("pageSize"), 1, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE),

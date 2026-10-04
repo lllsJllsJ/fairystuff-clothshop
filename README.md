@@ -130,6 +130,18 @@ separate API service and no serverless cold start.
   grid. New products appear at the top until moved; Reset returns to
   newest-first. The Popular list, product types, and colour palette are
   reordered by the same drag-and-drop grip (`components/ui/sortable.tsx`).
+- **Discounts**: a shop-wide **% sale** (Admin → Settings → Discount) and a
+  per-product discount in the product editor (**% off** or a **fixed sale
+  price**), each with an on/off switch and an optional start/end in Bangkok
+  time. A running product discount wins over the shop-wide sale. Customers
+  see the sale price in red with the regular price struck through and a
+  "-20%" badge (tiles, product page, cart, checkout), "You save ฿…", an
+  "ends in…" countdown, a compact SALE banner with a scrolling ticker on the
+  home page while the shop-wide sale runs (the word "SALE" can be replaced by
+  your own TH/EN label, e.g. "11.11 MEGA SALE"), and a **Sale** toggle on `/shop`. Checkout charges the price in
+  effect at that moment (a cart priced before a sale started/ended is
+  re-priced and confirmed again), each order line snapshots the charged and
+  regular price, and the profit-by-product report shows **Discounts given**.
 - SEO: per-locale `sitemap.xml` with hreflang alternates, `robots.txt`,
   per-product metadata + JSON-LD, ISR-cached static rendering.
 - Owner-only admin: dashboard (SKU/order totals, gross and net profit,
@@ -408,7 +420,7 @@ src/
 │   │   │   ├── orders/                    # list/new/detail-edit
 │   │   │   ├── reports/                   # monthly/annual/profit/inventory
 │   │   │   ├── users/                     # account list, roles, verify, reset, delete
-│   │   │   └── settings/                  # sub-menu: storefront / catalog / orders / data
+│   │   │   └── settings/                  # sub-menu: storefront / discount / catalog / orders / data
 │   │   └── layout.tsx                     # owns <html lang>, PUBLIC_NAMESPACES
 │   ├── layout.tsx                         # passthrough root layout
 │   ├── sitemap.ts / robots.ts / not-found.tsx
@@ -420,6 +432,7 @@ src/
 │   ├── index.ts                           # pooled node-postgres client; txDb() is a deprecated alias for db
 │   └── queries/
 │       ├── storefront.ts                  # PUBLIC_PRODUCT_COLUMNS + public reads
+│       ├── pricing.ts                     # effective price (shop sale / product discount) as SQL
 │       ├── products.ts / orders.ts        # admin (full-column) reads
 │       ├── characters.ts / settings.ts    # taxonomy + workflow configuration
 │       ├── product-colors.ts              # colour palette for the product editor
@@ -440,6 +453,7 @@ src/
 │   ├── sizes.ts                           # adult/kids size presets + sortSizes (free text allowed)
 │   ├── carriers.ts                        # customer carriers + tracking-link templates
 │   ├── cost-variance.ts                   # actual-vs-master cost comparison
+│   ├── pricing.ts                         # discount rules (TS mirror), % off, Bangkok datetime helpers
 │   ├── catalog/                           # FairyStuff parser, manifest, images, replacement
 │   ├── shop-data.ts                       # owner-only transactional clear
 │   ├── character-seed.ts                  # canonical character list + seed/reset (CLI + admin button)

@@ -76,6 +76,8 @@ export type ReportProfitByProductRow = {
   totalRevenue: number
   totalCost: number
   totalProfit: number
+  /** Σ (regularPrice − sellPrice) × qty over lines sold at a discount. */
+  totalDiscount: number
 }
 
 export type ReportsData = {
@@ -150,6 +152,7 @@ export async function getReportsData(params: ReportsParams = {}): Promise<Report
         totalQuantity: sum(orderItems.quantity),
         totalRevenue: sum(orderItems.lineTotal),
         totalCost: sum(orderItems.lineCost),
+        totalDiscount: sql<string>`coalesce(sum((${orderItems.regularPrice} - ${orderItems.sellPrice}) * ${orderItems.quantity}) filter (where ${orderItems.regularPrice} is not null), 0)`,
       })
       .from(orderItems)
       .innerJoin(orders, eq(orderItems.orderId, orders.id))
@@ -201,6 +204,7 @@ export async function getReportsData(params: ReportsParams = {}): Promise<Report
     totalRevenue: Number(r.totalRevenue ?? 0),
     totalCost: Number(r.totalCost ?? 0),
     totalProfit: Number(r.totalRevenue ?? 0) - Number(r.totalCost ?? 0),
+    totalDiscount: Number(r.totalDiscount ?? 0),
   }))
 
   return { orders: reportOrders, inventory, profitByProduct }

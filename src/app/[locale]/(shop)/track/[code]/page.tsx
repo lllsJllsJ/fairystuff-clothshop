@@ -154,7 +154,16 @@ export default async function TrackOrderPage({
                   {[item.color, item.size].filter(Boolean).join(" · ")} · × {item.quantity}
                 </p>
               </div>
-              <span>{formatBaht(Number(item.sellPrice) * item.quantity)}</span>
+              <span className="text-right">
+                {item.regularPrice != null && Number(item.regularPrice) > Number(item.sellPrice) && (
+                  <s className="mr-1.5 text-small text-muted-foreground">
+                    {formatBaht(Number(item.regularPrice) * item.quantity)}
+                  </s>
+                )}
+                <span className={item.regularPrice != null && Number(item.regularPrice) > Number(item.sellPrice) ? "font-bold text-sale" : undefined}>
+                  {formatBaht(Number(item.sellPrice) * item.quantity)}
+                </span>
+              </span>
             </div>
           ))}
         </div>

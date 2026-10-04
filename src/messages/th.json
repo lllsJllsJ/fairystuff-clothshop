@@ -179,7 +179,8 @@
     "checkout": "ดำเนินการสั่งซื้อ",
     "addToCart": "เพิ่มลงตะกร้า",
     "added": "เพิ่มลงตะกร้าแล้ว",
-    "selectVariant": "กรุณาเลือกไซซ์ก่อนเพิ่มสินค้า"
+    "selectVariant": "กรุณาเลือกไซซ์ก่อนเพิ่มสินค้า",
+    "youSave": "ประหยัดไป"
   },
   "checkout": {
     "title": "ดำเนินการสั่งซื้อ",
@@ -200,7 +201,8 @@
     "cartChanged": "สินค้าหรือราคามีการเปลี่ยนแปลง กรุณากลับไปตรวจสอบตะกร้าแล้วลองอีกครั้ง",
     "contactMissing": "ยังไม่สามารถสั่งซื้อได้จนกว่าร้านจะตั้งค่า LINE, Instagram หรือ Facebook",
     "invalid": "กรุณาตรวจสอบข้อมูลแล้วลองอีกครั้ง",
-    "failed": "สร้างคำสั่งซื้อไม่สำเร็จ กรุณาลองอีกครั้ง"
+    "failed": "สร้างคำสั่งซื้อไม่สำเร็จ กรุณาลองอีกครั้ง",
+    "pricesUpdated": "ราคาสินค้าบางรายการเปลี่ยนแปลง (โปรโมชันเริ่มหรือสิ้นสุด) เราอัปเดตตะกร้าให้แล้ว กรุณาตรวจสอบยอดรวมแล้วกดสั่งซื้ออีกครั้ง"
   },
   "user": {
     "title": "ผู้ใช้",
@@ -455,7 +457,8 @@
     "colStatus": "สถานะ",
     "colAdvertising": "ค่าโฆษณา",
     "availableVariants": "ไซซ์ที่เปิดขาย",
-    "totalVariants": "ไซซ์ทั้งหมด"
+    "totalVariants": "ไซซ์ทั้งหมด",
+    "discountsGiven": "ส่วนลดที่ให้ไป"
   },
   "import": {
     "title": "นำเข้าสินค้า",
@@ -609,7 +612,8 @@
     "noColors": "ยังไม่มีสี",
     "duplicateColor": "มีสีนี้อยู่แล้ว (หรือมีสินค้าที่ใช้ทั้งสองชื่อ)",
     "deleteColorConfirm": "ลบ \"{name}\" ออกจากรายการ? สินค้าที่ใช้สีนี้ยังคงเก็บสีไว้",
-    "dragHandle": "ลากเพื่อจัดลำดับ {name}"
+    "dragHandle": "ลากเพื่อจัดลำดับ {name}",
+    "navDiscount": "ส่วนลด"
   },
   "home": {
     "heroTitle": "เสื้อผ้าที่บอกตัวตนของคุณ",
@@ -632,12 +636,27 @@
     "heroSlides": "ภาพแนะนำ",
     "heroSlide": "ภาพที่ {n} จาก {total}",
     "heroPrev": "ภาพก่อนหน้า",
-    "heroNext": "ภาพถัดไป"
+    "heroNext": "ภาพถัดไป",
+    "saleBannerLabel": "โปรโมชันลดราคา",
+    "saleBannerTitle": "{label} ลด {percent}% ทั้งร้าน",
+    "saleBannerUntil": "ถึง {date}",
+    "saleBannerCta": "ช้อปสินค้าลดราคา",
+    "saleBannerOff": "ลด",
+    "saleBannerEverything": "ทุกชิ้นทั้งร้าน",
+    "saleBannerEndsIn": "สิ้นสุดใน",
+    "saleBannerDefaultLabel": "SALE",
+    "valuePreorderTitle": "พรีออเดอร์ง่าย ๆ",
+    "valuePreorderBody": "เลือกสีและไซซ์ที่ชอบ ร้านจะยืนยันรายละเอียดกับคุณทางแชทก่อนชำระเงิน",
+    "valueSizesTitle": "ผู้ใหญ่และเด็ก",
+    "valueSizesBody": "ไซซ์ผู้ใหญ่ XS–2XL และไซซ์เด็กตามส่วนสูง เริ่มต้น 80 ซม.",
+    "valueTrackTitle": "ติดตามคำสั่งซื้อได้ตลอด",
+    "valueTrackBody": "ใช้รหัสพรีออเดอร์ดูสถานะได้ทุกเมื่อ ไม่ต้องสมัครสมาชิก"
   },
   "footer": {
-    "quickLinks": "ลิงก์ด่วน",
-    "contact": "ติดต่อเรา",
-    "rights": "© {year} {brand} สงวนลิขสิทธิ์"
+    "rights": "© {year} {brand} สงวนลิขสิทธิ์",
+    "shopHeading": "ช้อป",
+    "helpHeading": "ช่วยเหลือ",
+    "backToTop": "กลับขึ้นด้านบน"
   },
   "shop": {
     "featured": "สินค้าแนะนำ",
@@ -688,7 +707,21 @@
     "audienceKids": "เด็ก",
     "setsOnly": "เซ็ตและฟูลเซ็ต",
     "bothBadge": "ผู้ใหญ่และเด็ก",
-    "bothSizeHint": "มีไซซ์ผู้ใหญ่และไซซ์เด็กตามส่วนสูง"
+    "bothSizeHint": "มีไซซ์ผู้ใหญ่และไซซ์เด็กตามส่วนสูง",
+    "saleOnly": "ลดราคา",
+    "saleBadge": "-{percent}%",
+    "salePrice": "ราคาลด",
+    "regularPrice": "ราคาปกติ",
+    "youSave": "ประหยัด {amount}",
+    "saleEnded": "โปรโมชันสิ้นสุดแล้ว",
+    "saleEndsIn": "เหลือเวลาอีก {clock}",
+    "saleEndsInDays": "เหลือเวลาอีก {days} วัน {clock}",
+    "countdownDays": "วัน",
+    "countdownHours": "ชม.",
+    "countdownMinutes": "นาที",
+    "countdownSeconds": "วินาที",
+    "contactEyebrow": "มีคำถาม? ทักมาคุยกันได้เลย",
+    "contactFacebookDetail": "ส่งข้อความหาเพจของเรา"
   },
   "errors": {
     "unauthorized": "กรุณาเข้าสู่ระบบ",
@@ -738,5 +771,47 @@
     "copyTracking": "คัดลอกเลขพัสดุ",
     "trackingCopied": "คัดลอกเลขพัสดุแล้ว",
     "trackParcel": "ติดตามพัสดุ"
+  },
+  "discount": {
+    "status_running": "กำลังลดราคา",
+    "status_scheduled": "ตั้งเวลาไว้",
+    "status_ended": "สิ้นสุดแล้ว",
+    "status_off": "ปิดอยู่",
+    "startsAt": "เริ่ม",
+    "startsAtHint": "เว้นว่าง = เริ่มทันที (เวลาไทย)",
+    "endsAt": "สิ้นสุด",
+    "endsAtHint": "เว้นว่าง = ไม่มีกำหนดสิ้นสุด",
+    "clearDate": "ล้างวันที่",
+    "shopSaleTitle": "ลดราคาทั้งร้าน",
+    "shopSaleHint": "ลดราคาทุกสินค้าเป็นเปอร์เซ็นต์ ลูกค้าจะเห็นราคาปกติถูกขีดฆ่าคู่กับราคาลด และแบนเนอร์ SALE บนหน้าแรก",
+    "shopSaleEnabled": "เปิดใช้ส่วนลดทั้งร้าน",
+    "percentOff": "ลด (%)",
+    "previewExample": "ตัวอย่าง: {regular} → {sale}",
+    "percentRangeHint": "ใส่ได้ {min}–{max}%",
+    "precedenceNote": "สินค้าที่ตั้งส่วนลดของตัวเองไว้ (และกำลังลดอยู่) จะใช้ส่วนลดของสินค้านั้นแทนส่วนลดทั้งร้าน",
+    "save": "บันทึก",
+    "saved": "บันทึกส่วนลดแล้ว",
+    "saveFailed": "บันทึกไม่สำเร็จ",
+    "error_percent_range": "ส่วนลดต้องอยู่ระหว่าง 1–90%",
+    "error_percent_required": "กรุณาใส่เปอร์เซ็นต์ส่วนลดก่อนเปิดใช้",
+    "error_window_order": "เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม",
+    "error_invalid_date": "วันที่ไม่ถูกต้อง",
+    "error_forbidden": "ไม่มีสิทธิ์",
+    "productTitle": "ส่วนลดสินค้านี้",
+    "productHint": "ลดเฉพาะสินค้านี้ — ใช้แทนส่วนลดทั้งร้านระหว่างช่วงเวลาที่กำหนด",
+    "productEnabled": "เปิดใช้ส่วนลด",
+    "type": "รูปแบบส่วนลด",
+    "typePercent": "ลดเป็น %",
+    "typePrice": "ราคาขายพิเศษ",
+    "salePriceLabel": "ราคาขายพิเศษ (฿)",
+    "salePriceNotLower": "ราคาพิเศษไม่ต่ำกว่าราคาขายปกติ — จะไม่มีผลเป็นส่วนลด",
+    "saleTag": "ลด {price} · -{percent}%",
+    "wasPrice": "ราคาปกติ {price} (ลด {percent}%)",
+    "labelTh": "ข้อความโปรโมชัน (ไทย)",
+    "labelEn": "ข้อความโปรโมชัน (อังกฤษ)",
+    "labelHint": "แสดงแทนคำว่า SALE บนแบนเนอร์หน้าแรกและแถบข้อความเลื่อน เช่น 11.11 MEGA SALE — เว้นว่าง = SALE",
+    "labelPreviewTh": "{label} ลด {percent}% ทั้งร้าน",
+    "labelPreviewEn": "{label} {percent}% off everything",
+    "error_label_length": "ข้อความโปรโมชันยาวได้ไม่เกิน 40 ตัวอักษร"
   }
 }

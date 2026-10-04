@@ -33,6 +33,8 @@ export type ShopFilterValues = {
   size: string
   minPrice: string
   maxPrice: string
+  /** "1" = only discounted products (`?sale=1`). */
+  sale: "" | "1"
 }
 
 export function ShopFilters({

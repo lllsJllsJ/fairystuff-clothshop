@@ -26,6 +26,7 @@ import { toEnglishColor } from "@/lib/colors"
 import { MAX_HERO_IMAGES, isBrandLogoKey, isHeroImageKey } from "@/lib/brand-image-keys"
 import { deleteBrandLogoRenditions, deleteHeroImageRenditions } from "@/lib/r2"
 import { popularProductIdsSchema } from "@/lib/validations/product"
+import { shopSaleSchema, type ShopSaleInput } from "@/lib/validations/sale"
 import { revalidateStorefront } from "@/app/[locale]/admin/products/revalidate"
 import { revalidateSettings } from "./revalidate"
 
@@ -414,4 +415,27 @@ export async function deleteItemStatus(code: string): Promise<Result> {
   const [used] = await db.select({ value: count() }).from(orderItems).where(eq(orderItems.statusCode, code))
   if ((used?.value ?? 0) > 0) return { ok: false, error: "in_use" }
   await db.delete(orderItemStatuses).where(eq(orderItemStatuses.code, code)); revalidateSettings(); return { ok: true }
+}
+
+/**
+ * Shop-wide % sale (Settings -> Discount). Every product's effective price
+ * derives from this row (src/db/queries/pricing.ts), so the whole storefront
+ * is revalidated. Dates arrive as Bangkok `datetime-local` text.
+ */
+export async function saveShopSale(input: ShopSaleInput): Promise<Result> {
+  if (!(await owner())) return { ok: false, error: "forbidden" }
+  const parsed = shopSaleSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "invalid" }
+  const sale = {
+    saleEnabled: parsed.data.enabled,
+    salePercent: parsed.data.percent == null ? null : String(parsed.data.percent),
+    saleStartsAt: parsed.data.startsAt,
+    saleEndsAt: parsed.data.endsAt,
+    saleLabelTh: parsed.data.labelTh || null,
+    saleLabelEn: parsed.data.labelEn || null,
+  }
+  await db.insert(shopSettings).values({ id: "default", ...sale })
+    .onConflictDoUpdate({ target: shopSettings.id, set: { ...sale, updatedAt: new Date() } })
+  revalidateSettings()
+  return { ok: true }
 }
