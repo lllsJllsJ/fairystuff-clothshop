@@ -51,6 +51,9 @@ export const productVariantSchema = z.object({
 export type ProductVariantValues = z.input<typeof productVariantSchema>
 export type ProductVariantParsed = z.output<typeof productVariantSchema>
 
+/** Most colour x size rows one product may carry (form and import). */
+export const MAX_PRODUCT_VARIANTS = 300
+
 /** Case-insensitive (colour, size) key used to detect duplicate variant
  * rows in a single product's matrix. */
 function variantDedupeKey(v: { color: string; size: string }): string {
@@ -93,7 +96,7 @@ const productFormObject = z.object({
   discountEndsAt: z.preprocess((v) => v ?? null, bangkokDateTime),
   variants: z
     .array(productVariantSchema)
-    .max(120)
+    .max(MAX_PRODUCT_VARIANTS, "too_many_variants")
     .default([])
     .refine(
       (variants) =>
@@ -215,7 +218,7 @@ export const productImportRowSchema = z.object({
         isAvailable: z.boolean(),
       })
     )
-    .max(120)
+    .max(MAX_PRODUCT_VARIANTS, "too_many_variants")
     .refine(
       (variants) => new Set(variants.map(variantDedupeKey)).size === variants.length,
       "duplicate_variant"

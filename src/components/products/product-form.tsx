@@ -11,6 +11,7 @@ import { useRouter } from "@/i18n/navigation"
 import { formatBaht } from "@/lib/format"
 import type { ProductAudience, ProductKind } from "@/lib/product-taxonomy"
 import {
+  MAX_PRODUCT_VARIANTS,
   productFormSchema,
   type ProductFormValues,
   type ProductVariantValues,
@@ -434,7 +435,13 @@ export function ProductForm({
           onChange={(next) => setValue("variants", next, { shouldValidate: true })}
         />
         {errors.variants?.message && (
-          <p className="mt-2 text-body text-destructive">{t("errors.duplicateVariant")}</p>
+          <p className="mt-2 text-body text-destructive">
+            {errors.variants.message === "too_many_variants"
+              ? t("errors.tooManyVariants", { max: MAX_PRODUCT_VARIANTS })
+              : errors.variants.message === "duplicate_variant"
+                ? t("errors.duplicateVariant")
+                : t("errors.invalid")}
+          </p>
         )}
       </div>
 

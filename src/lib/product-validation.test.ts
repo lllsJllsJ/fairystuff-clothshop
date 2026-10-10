@@ -3,6 +3,7 @@ import test from "node:test"
 
 import { MAX_POPULAR_PRODUCTS } from "./product-taxonomy"
 import {
+  MAX_PRODUCT_VARIANTS,
   popularProductIdsSchema,
   productOrderIdsSchema,
   productFormSchema,
@@ -108,4 +109,23 @@ test("discount validation: needs a value when on, percent 1-90, end after start"
     false
   )
   assert.equal(productFormSchema.safeParse({ ...base, discountValue: "10" }).success, true)
+})
+
+test("a 25-colour x 5-size matrix (125 variants) is accepted", () => {
+  const sizes = ["XS", "S", "M", "L", "XL"]
+  const variants = Array.from({ length: 25 }, (_, c) =>
+    sizes.map((size) => ({ color: `Colour ${c}`, size, isAvailable: true }))
+  ).flat()
+  assert.equal(productFormSchema.safeParse({ ...validProduct(), variants }).success, true)
+})
+
+test("too many variants reports too_many_variants, not duplicate_variant", () => {
+  const variants = Array.from({ length: MAX_PRODUCT_VARIANTS + 1 }, (_, i) => ({
+    color: `Colour ${i}`,
+    size: "M",
+    isAvailable: true,
+  }))
+  const result = productFormSchema.safeParse({ ...validProduct(), variants })
+  assert.equal(result.success, false)
+  assert.equal(result.error?.issues[0]?.message, "too_many_variants")
 })

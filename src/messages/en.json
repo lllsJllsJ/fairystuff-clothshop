@@ -730,6 +730,7 @@
     "notFound": "Not found",
     "duplicateCode": "Duplicate product code",
     "duplicateVariant": "This color/size already exists",
+    "tooManyVariants": "Too many color/size combinations (max {max}). Remove some colors or sizes.",
     "generic": "Something went wrong. Please try again."
   },
   "track": {
