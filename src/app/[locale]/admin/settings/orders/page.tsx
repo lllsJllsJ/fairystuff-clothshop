@@ -6,6 +6,9 @@ import {
   getOrderStatusLabels,
 } from "@/db/queries/settings"
 import { OrderWorkflowSettings } from "@/components/settings/workflow-settings"
+import { titleMetadata } from "@/lib/page-metadata"
+
+export const generateMetadata = titleMetadata(["settings.title", "settings.navOrders"])
 
 export default async function OrderSettingsPage({
   params,

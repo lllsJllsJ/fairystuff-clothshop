@@ -4,6 +4,9 @@ import { getProductTypes } from "@/db/queries/product-types"
 import { getCharacters } from "@/db/queries/characters"
 import { getProductColors } from "@/db/queries/product-colors"
 import { ProductForm } from "@/components/products/product-form"
+import { titleMetadata } from "@/lib/page-metadata"
+
+export const generateMetadata = titleMetadata("product.newProduct")
 
 export default async function NewProductPage() {
   const t = await getTranslations()

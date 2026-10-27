@@ -1,4 +1,3 @@
-import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { getLocale, getTranslations } from "next-intl/server"
 import { CheckCircle2 } from "lucide-react"
@@ -19,6 +18,7 @@ import { ContactAdminButton } from "@/components/track/contact-admin-button"
 import { ACTIVE_STAGES, StatusStepper, STAGE_BODY_KEY, STAGE_TITLE_KEY } from "@/components/track/status-stepper"
 import { OrderTimeline } from "@/components/track/order-timeline"
 import { ParcelCard } from "@/components/track/parcel-card"
+import { NO_INDEX, titleMetadata } from "@/lib/page-metadata"
 
 /**
  * `force-dynamic` is the single most important line in this file.
@@ -34,15 +34,7 @@ export const dynamic = "force-dynamic"
 // order, not public content. See src/app/robots.ts's matching disallow rule.
 // For the same reason the title never carries the code: it would leak into
 // browser history, bookmarks and screenshots.
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ locale: string }>
-}): Promise<Metadata> {
-  const { locale } = await params
-  const t = await getTranslations({ locale, namespace: "track" })
-  return { title: t("title"), robots: { index: false, follow: false } }
-}
+export const generateMetadata = titleMetadata("track.title", NO_INDEX)
 
 export default async function TrackOrderPage({
   params,

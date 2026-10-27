@@ -1,23 +1,15 @@
-import type { Metadata } from "next"
 import { getTranslations, setRequestLocale } from "next-intl/server"
 
 import { TrackLookupForm } from "@/components/track/track-lookup-form"
 import { prerenderLocaleParams } from "@/lib/static-params"
+import { NO_INDEX, titleMetadata } from "@/lib/page-metadata"
 
 export const revalidate = 300
 
 // Static — this page has no per-request data, unlike `/track/[code]`. It is
 // the entry point when a customer has lost the URL but still has the code
 // sitting in their LINE chat, which is exactly where the design puts it.
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ locale: string }>
-}): Promise<Metadata> {
-  const { locale } = await params
-  const t = await getTranslations({ locale, namespace: "track" })
-  return { title: t("lookupTitle"), robots: { index: false, follow: false } }
-}
+export const generateMetadata = titleMetadata("track.lookupTitle", NO_INDEX)
 
 // Empty when the database is unreachable at build time — see lib/static-params.ts.
 export const generateStaticParams = prerenderLocaleParams

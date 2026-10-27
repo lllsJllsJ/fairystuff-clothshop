@@ -3,6 +3,9 @@ import { setRequestLocale } from "next-intl/server"
 import { getReportsData, type ReportsParams } from "@/db/queries/reports"
 import { getOrderStatusLabels } from "@/db/queries/settings"
 import { ReportView, type ReportTab } from "@/components/reports/report-view"
+import { titleMetadata } from "@/lib/page-metadata"
+
+export const generateMetadata = titleMetadata("reports.title")
 
 const REPORT_TABS: ReportTab[] = ["monthly", "annual", "profitByProduct", "inventory"]
 

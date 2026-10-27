@@ -4,15 +4,21 @@ import { NextIntlClientProvider, hasLocale } from "next-intl";
 import { getMessages, setRequestLocale } from "next-intl/server";
 
 import { routing } from "@/i18n/routing";
+import { getShopSettings, resolvedBrandName } from "@/db/queries/settings";
 import { fontVariables } from "@/lib/fonts";
 import { prerenderLocaleParams } from "@/lib/static-params";
 import { Providers } from "@/components/providers";
 import { Toaster } from "@/components/ui/sonner";
 
-export const metadata: Metadata = {
-  title: "clothshop",
-  description: "เสื้อผ้าแฟชั่นสำหรับคุณ • A personal clothing label",
-};
+// The title every page falls back to when it sets none of its own (pages
+// set theirs via lib/page-metadata.ts) — the owner's brand name, never a
+// hardcoded placeholder.
+export async function generateMetadata(): Promise<Metadata> {
+  return {
+    title: resolvedBrandName(await getShopSettings()),
+    description: "เสื้อผ้าแฟชั่นสำหรับคุณ • A personal clothing label",
+  };
+}
 
 /**
  * Namespaces the public storefront actually renders. Anything not listed

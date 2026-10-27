@@ -11,6 +11,9 @@ import { OrderFulfillment } from "@/components/orders/order-fulfillment"
 import { BackLink } from "@/components/layout/back-link"
 import { getOrderItemStatuses, getOrderStatusLabels } from "@/db/queries/settings"
 import { DEFAULT_ADMIN_STATUS_LABELS } from "@/lib/order-status"
+import { titleMetadata } from "@/lib/page-metadata"
+
+export const generateMetadata = titleMetadata("order.detail")
 
 /**
  * Detail + edit + print, all on one route (task spec). `OrderForm` in edit

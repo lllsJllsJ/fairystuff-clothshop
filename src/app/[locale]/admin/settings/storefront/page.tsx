@@ -6,6 +6,9 @@ import { BrandSettings } from "@/components/settings/brand-settings"
 import { HeroSettings } from "@/components/settings/hero-settings"
 import { PopularSettings } from "@/components/settings/popular-settings"
 import { ShopContactsSettings } from "@/components/settings/workflow-settings"
+import { titleMetadata } from "@/lib/page-metadata"
+
+export const generateMetadata = titleMetadata(["settings.title", "settings.navStorefront"])
 
 export default async function StorefrontSettingsPage({
   params,

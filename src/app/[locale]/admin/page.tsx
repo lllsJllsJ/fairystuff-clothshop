@@ -17,6 +17,9 @@ import { formatBaht, formatNumber } from "@/lib/format"
 import { KpiCard } from "@/components/dashboard/kpi-card"
 import { DashboardCharts } from "@/components/dashboard/charts"
 import { AlertsPanel } from "@/components/dashboard/alerts-panel"
+import { titleMetadata } from "@/lib/page-metadata"
+
+export const generateMetadata = titleMetadata("dashboard.title")
 
 /**
  * Real dashboard, driven entirely by `getDashboardData()` (Phase 6 —

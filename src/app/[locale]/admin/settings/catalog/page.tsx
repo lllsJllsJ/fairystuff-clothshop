@@ -6,6 +6,9 @@ import { getProductColors } from "@/db/queries/product-colors"
 import { ProductTypeManager } from "@/components/settings/product-type-manager"
 import { CharacterSettings } from "@/components/settings/workflow-settings"
 import { ColorSettings } from "@/components/settings/color-settings"
+import { titleMetadata } from "@/lib/page-metadata"
+
+export const generateMetadata = titleMetadata(["settings.title", "settings.navCatalog"])
 
 export default async function CatalogSettingsPage({
   params,

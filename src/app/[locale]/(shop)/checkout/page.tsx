@@ -1,19 +1,11 @@
-import type { Metadata } from "next"
 import { getTranslations } from "next-intl/server"
 
 import { getShopSettings } from "@/db/queries/settings"
 import { CheckoutForm } from "@/components/checkout/checkout-form"
+import { NO_INDEX, titleMetadata } from "@/lib/page-metadata"
 
 export const dynamic = "force-dynamic"
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ locale: string }>
-}): Promise<Metadata> {
-  const { locale } = await params
-  const t = await getTranslations({ locale, namespace: "checkout" })
-  return { title: t("title"), robots: { index: false, follow: false } }
-}
+export const generateMetadata = titleMetadata("checkout.title", NO_INDEX)
 
 export default async function CheckoutPage() {
   const [settings, t] = await Promise.all([getShopSettings(), getTranslations("checkout")])

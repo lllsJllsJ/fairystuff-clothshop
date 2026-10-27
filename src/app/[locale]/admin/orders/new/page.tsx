@@ -3,6 +3,9 @@ import { getTranslations } from "next-intl/server"
 import { getProductTypes } from "@/db/queries/product-types"
 import { OrderForm } from "@/components/orders/order-form"
 import { getOrderStatusLabels } from "@/db/queries/settings"
+import { titleMetadata } from "@/lib/page-metadata"
+
+export const generateMetadata = titleMetadata("order.newOrder")
 
 export default async function NewOrderPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params

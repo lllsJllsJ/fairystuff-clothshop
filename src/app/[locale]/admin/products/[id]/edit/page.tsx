@@ -7,6 +7,9 @@ import { getCharacters } from "@/db/queries/characters"
 import { getProductColors } from "@/db/queries/product-colors"
 import { ProductForm } from "@/components/products/product-form"
 import { BackLink } from "@/components/layout/back-link"
+import { titleMetadata } from "@/lib/page-metadata"
+
+export const generateMetadata = titleMetadata("product.editProduct")
 
 export default async function EditProductPage({
   params,

@@ -2,6 +2,9 @@ import { getTranslations } from "next-intl/server"
 
 import { getProductImportIndex } from "@/db/queries/products"
 import { ProductImport } from "@/components/products/product-import"
+import { titleMetadata } from "@/lib/page-metadata"
+
+export const generateMetadata = titleMetadata("import.title")
 
 export default async function ImportProductsPage() {
   const t = await getTranslations()

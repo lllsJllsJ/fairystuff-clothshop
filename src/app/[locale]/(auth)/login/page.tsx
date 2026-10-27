@@ -5,6 +5,9 @@ import { Shirt } from "lucide-react"
 import { LoginForm } from "@/components/auth/login-form"
 import { LocaleToggle } from "@/components/layout/locale-toggle"
 import { emailEnabled } from "@/lib/email"
+import { titleMetadata } from "@/lib/page-metadata"
+
+export const generateMetadata = titleMetadata("auth.signIn")
 
 export default async function LoginPage({
   params,

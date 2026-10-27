@@ -3,6 +3,9 @@ import { getTranslations } from "next-intl/server"
 import { getProductsForArrange } from "@/db/queries/products"
 import { BackLink } from "@/components/layout/back-link"
 import { ProductArranger } from "@/components/products/product-arranger"
+import { titleMetadata } from "@/lib/page-metadata"
+
+export const generateMetadata = titleMetadata("product.arrangeTitle")
 
 export default async function ArrangeProductsPage() {
   const t = await getTranslations()

@@ -3,6 +3,9 @@ import { Suspense } from "react"
 import { getCurrentUser } from "@/lib/auth-helpers"
 import { emailEnabled } from "@/lib/email"
 import { UserList } from "@/components/users/user-list"
+import { titleMetadata } from "@/lib/page-metadata"
+
+export const generateMetadata = titleMetadata("nav.users")
 
 /**
  * `/admin/users`. `requireOwner()` in the admin layout already gated this

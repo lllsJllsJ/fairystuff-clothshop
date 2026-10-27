@@ -2,6 +2,9 @@ import { setRequestLocale } from "next-intl/server"
 
 import { getShopSettings } from "@/db/queries/settings"
 import { SaleSettings } from "@/components/settings/sale-settings"
+import { titleMetadata } from "@/lib/page-metadata"
+
+export const generateMetadata = titleMetadata(["settings.title", "settings.navDiscount"])
 
 export default async function DiscountSettingsPage({
   params,

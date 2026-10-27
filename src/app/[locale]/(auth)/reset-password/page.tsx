@@ -2,6 +2,9 @@ import { getTranslations } from "next-intl/server"
 import { emailEnabled } from "@/lib/email"
 import { AuthShell } from "@/components/auth/auth-shell"
 import { ResetPasswordForm } from "@/components/auth/account-forms"
+import { titleMetadata } from "@/lib/page-metadata"
+
+export const generateMetadata = titleMetadata("auth.resetPassword")
 
 export const dynamic = "force-dynamic"
 

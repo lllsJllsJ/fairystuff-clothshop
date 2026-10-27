@@ -2,6 +2,9 @@ import { Suspense } from "react"
 
 import { OrderList } from "@/components/orders/order-list"
 import { getOrderStatusLabels } from "@/db/queries/settings"
+import { titleMetadata } from "@/lib/page-metadata"
+
+export const generateMetadata = titleMetadata("nav.orders")
 
 export default async function AdminOrdersPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params
