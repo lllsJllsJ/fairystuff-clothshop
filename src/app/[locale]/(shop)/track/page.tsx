@@ -9,7 +9,15 @@ export const revalidate = 300
 // Static — this page has no per-request data, unlike `/track/[code]`. It is
 // the entry point when a customer has lost the URL but still has the code
 // sitting in their LINE chat, which is exactly where the design puts it.
-export const metadata: Metadata = { robots: { index: false, follow: false } }
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>
+}): Promise<Metadata> {
+  const { locale } = await params
+  const t = await getTranslations({ locale, namespace: "track" })
+  return { title: t("lookupTitle"), robots: { index: false, follow: false } }
+}
 
 // Empty when the database is unreachable at build time — see lib/static-params.ts.
 export const generateStaticParams = prerenderLocaleParams

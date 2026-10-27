@@ -32,7 +32,17 @@ export const dynamic = "force-dynamic"
 
 // Never indexed: a preorder code is a bearer credential for reading one
 // order, not public content. See src/app/robots.ts's matching disallow rule.
-export const metadata: Metadata = { robots: { index: false, follow: false } }
+// For the same reason the title never carries the code: it would leak into
+// browser history, bookmarks and screenshots.
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>
+}): Promise<Metadata> {
+  const { locale } = await params
+  const t = await getTranslations({ locale, namespace: "track" })
+  return { title: t("title"), robots: { index: false, follow: false } }
+}
 
 export default async function TrackOrderPage({
   params,

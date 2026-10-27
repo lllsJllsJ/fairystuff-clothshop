@@ -5,7 +5,15 @@ import { getShopSettings } from "@/db/queries/settings"
 import { CheckoutForm } from "@/components/checkout/checkout-form"
 
 export const dynamic = "force-dynamic"
-export const metadata: Metadata = { robots: { index: false, follow: false } }
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>
+}): Promise<Metadata> {
+  const { locale } = await params
+  const t = await getTranslations({ locale, namespace: "checkout" })
+  return { title: t("title"), robots: { index: false, follow: false } }
+}
 
 export default async function CheckoutPage() {
   const [settings, t] = await Promise.all([getShopSettings(), getTranslations("checkout")])
