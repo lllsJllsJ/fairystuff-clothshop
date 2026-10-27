@@ -18,7 +18,11 @@ export function CartPage() {
     0
   )
 
-  if (!cart.hydrated) return <div className="mx-auto max-w-4xl px-4 py-12 text-muted-foreground">{t("loading")}</div>
+  // The server HTML is this loading state, so it carries the page's <h1> too.
+  if (!cart.hydrated) return <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
+    <h1 className="mb-6 text-h2 font-bold">{t("title")}</h1>
+    <p className="text-muted-foreground">{t("loading")}</p>
+  </div>
   if (cart.items.length === 0) return <div className="mx-auto max-w-2xl px-4 py-21 text-center">
     <h1 className="text-h2 font-bold">{t("title")}</h1>
     <p className="mt-3 text-body text-muted-foreground">{t("empty")}</p>
