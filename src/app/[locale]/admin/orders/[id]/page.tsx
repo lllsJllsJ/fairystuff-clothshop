@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation"
 import { getTranslations } from "next-intl/server"
 
-import { getOrderById } from "@/db/queries/orders"
+import { getOrderById, getOrderItemSourcing } from "@/db/queries/orders"
 import { getProductTypes } from "@/db/queries/product-types"
 import { OrderForm } from "@/components/orders/order-form"
 import { OrderReceipt } from "@/components/orders/order-receipt"
@@ -40,6 +40,7 @@ export default async function OrderDetailPage({
     getOrderStatusLabels(),
   ])
   if (!order) notFound()
+  const sourcing = await getOrderItemSourcing(order.items)
   const customStatus = statusLabels.find((item) => item.status === order.status)
   const statusLabel =
     locale === "en"
@@ -78,6 +79,7 @@ export default async function OrderDetailPage({
           orderStatus={order.status}
           orderStatusLabel={statusLabel}
           items={order.items}
+          sourcing={sourcing}
           statuses={itemStatuses}
           shipments={order.shipments}
           customerShippingCost={Number(order.shippingCost)}

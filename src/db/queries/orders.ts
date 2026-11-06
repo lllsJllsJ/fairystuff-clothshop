@@ -1,10 +1,10 @@
 import "server-only"
 
 import type { Column } from "drizzle-orm"
-import { and, asc, count, desc, eq, gte, ilike, lte, or, sql } from "drizzle-orm"
+import { and, asc, count, desc, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm"
 
 import { db } from "@/db"
-import { orderItems, orderStatus, orders, preorderShipments } from "@/db/schema"
+import { orderItems, orderStatus, orders, preorderShipments, productImages, products } from "@/db/schema"
 
 /**
  * Admin order reads. Read-only — creating/editing an order writes to both
@@ -174,4 +174,53 @@ export async function getOrderById(id: string): Promise<OrderWithItems | null> {
   ])
 
   return { ...order, items, shipments }
+}
+
+/** What the owner needs to re-buy a line from the supplier: a photo and the
+ * product's private source link. Admin-only — `sourceLink` is a private
+ * column and must never reach a public page. */
+export type OrderItemSourcing = {
+  imageUrl: string | null
+  sourceLink: string | null
+  buyingSource: string | null
+}
+
+/**
+ * Per-line sourcing info, keyed by order item id. Reads the LIVE product
+ * (lines whose product was deleted get nulls). The photo is the first image
+ * tagged with the line's colour, else the cover (lowest sortOrder).
+ */
+export async function getOrderItemSourcing(
+  items: Pick<OrderItemRow, "id" | "productId" | "color">[]
+): Promise<Record<string, OrderItemSourcing>> {
+  const productIds = [...new Set(items.map((item) => item.productId).filter((id): id is string => !!id))]
+  if (productIds.length === 0) return {}
+
+  const [productRows, imageRows] = await Promise.all([
+    db
+      .select({ id: products.id, sourceLink: products.sourceLink, buyingSource: products.buyingSource })
+      .from(products)
+      .where(inArray(products.id, productIds)),
+    db
+      .select({ productId: productImages.productId, url: productImages.url, color: productImages.color })
+      .from(productImages)
+      .where(inArray(productImages.productId, productIds))
+      .orderBy(asc(productImages.sortOrder), asc(productImages.createdAt)),
+  ])
+
+  const productById = new Map(productRows.map((row) => [row.id, row]))
+  const result: Record<string, OrderItemSourcing> = {}
+  for (const item of items) {
+    const product = item.productId ? productById.get(item.productId) : undefined
+    if (!product) continue
+    const images = imageRows.filter((image) => image.productId === product.id)
+    const color = item.color?.toLowerCase()
+    const match = color ? images.find((image) => image.color?.toLowerCase() === color) : undefined
+    result[item.id] = {
+      imageUrl: (match ?? images[0])?.url ?? null,
+      sourceLink: product.sourceLink,
+      buyingSource: product.buyingSource,
+    }
+  }
+  return result
 }

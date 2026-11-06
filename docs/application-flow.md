@@ -1176,6 +1176,24 @@ Failure: invalid input -> `invalid`; a shipment id that doesn't belong to
 the order -> `not_found`; negative cost rejected by zod and a DB check
 constraint. Inbound legs are admin-only — never shown on `/track`.
 
+Each line also shows a photo and a supplier link, so the owner can see
+what was sold and re-buy it in one click:
+
+```
+page.tsx ─▶ getOrderItemSourcing(order.items)   (queries/orders.ts, admin-only)
+              │ live products row by orderItems.productId
+              │   -> sourceLink, buyingSource   (PRIVATE columns)
+              │ product_images -> first image whose colour = line colour,
+              │   else the cover (lowest sortOrder)
+              ▼
+OrderFulfillment row:  [photo]  name / code · colour / size   [↗ supplier]
+                                                    opens sourceLink in a new tab
+```
+
+Fallbacks: a deleted product (`productId` null) or no images -> placeholder
+icon; no source link, or a link that isn't http(s) -> "No source link"
+text, never an `href`. This data is only ever passed to the admin page.
+
 ## Create Order
 
 `createOrder` Server Action, triggered by submitting `OrderForm` (new

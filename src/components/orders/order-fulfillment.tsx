@@ -1,13 +1,14 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
 import { useQueryClient } from "@tanstack/react-query"
 import { useTranslations } from "next-intl"
 import { toast } from "sonner"
 
-import { CircleDollarSign } from "lucide-react"
+import { ArrowUpRight, CircleDollarSign, ImageOff } from "lucide-react"
 
-import type { OrderStatusValue, PreorderShipmentRow } from "@/db/queries/orders"
+import type { OrderItemSourcing, OrderStatusValue, PreorderShipmentRow } from "@/db/queries/orders"
 import type { OrderItemStatusDefinition } from "@/db/queries/settings"
 import { setOrderItemStatus, setOrderStatus } from "@/app/[locale]/admin/orders/actions"
 import { useRouter } from "@/i18n/navigation"
@@ -26,11 +27,24 @@ type FulfillmentItem = {
   refundReason: string | null
 }
 
+/** Only http(s) links are rendered — sourceLink is free text from the
+ * editor/import, and a `javascript:` value must never become an href. */
+function safeHttpUrl(value: string | null | undefined): string | null {
+  if (!value) return null
+  try {
+    const url = new URL(value)
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null
+  } catch {
+    return null
+  }
+}
+
 export function OrderFulfillment({
   orderId,
   orderStatus,
   orderStatusLabel,
   items,
+  sourcing = {},
   statuses,
   shipments,
   customerShippingCost,
@@ -40,6 +54,8 @@ export function OrderFulfillment({
   orderStatus: OrderStatusValue
   orderStatusLabel: string
   items: FulfillmentItem[]
+  /** Admin-only photo + supplier link per line, keyed by item id. */
+  sourcing?: Record<string, OrderItemSourcing>
   statuses: OrderItemStatusDefinition[]
   shipments: PreorderShipmentRow[]
   customerShippingCost: number
@@ -135,14 +151,42 @@ export function OrderFulfillment({
       <div className="mt-4 divide-y divide-border">
         {items.map((item) => {
           const options = statuses.filter((status) => status.isActive || status.code === item.statusCode)
+          const source = sourcing[item.id]
+          const sourceHref = safeHttpUrl(source?.sourceLink)
           return (
             <div key={item.id} className="grid gap-3 py-3 sm:grid-cols-[1fr_240px] sm:items-center">
-              <div>
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="relative size-16 shrink-0 overflow-hidden border border-border bg-muted">
+                  {source?.imageUrl ? (
+                    <Image src={source.imageUrl} alt={item.productName} fill sizes="64px" className="object-cover" />
+                  ) : (
+                    <div className="flex size-full items-center justify-center text-muted-foreground" aria-label={t("noPhoto")}>
+                      <ImageOff className="size-5" aria-hidden />
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
                 <p className="font-medium">{item.productName}</p>
                 <p className="text-small text-muted-foreground">
                   {item.productCode}{[item.color, item.size].filter(Boolean).length ? ` · ${[item.color, item.size].filter(Boolean).join(" / ")}` : ""}
                 </p>
                 {item.refundReason && <p className="mt-1 text-small text-destructive">{t("refundReason")}: {item.refundReason}</p>}
+                </div>
+                {sourceHref ? (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0"
+                    render={<a href={sourceHref} target="_blank" rel="noopener noreferrer" />}
+                    nativeButton={false}
+                    aria-label={source?.buyingSource ? t("openSourceAt", { source: source.buyingSource }) : t("openSource")}
+                    title={source?.buyingSource ? t("openSourceAt", { source: source.buyingSource }) : t("openSource")}
+                  >
+                    <ArrowUpRight />
+                  </Button>
+                ) : (
+                  <span className="shrink-0 text-small text-muted-foreground">{t("noSourceLink")}</span>
+                )}
               </div>
               <SimpleSelect
                 value={item.statusCode}
